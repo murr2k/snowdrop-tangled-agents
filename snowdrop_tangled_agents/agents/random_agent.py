@@ -1,6 +1,5 @@
 import random
 import logging
-from typing import Tuple
 
 from snowdrop_tangled_game_engine import Game, GameAgentBase
 
@@ -35,7 +34,7 @@ class RandomRandyAgent(GameAgentBase):
     def __init__(self, player_id: str = None, **kwargs):
         super().__init__(player_id)
 
-    def make_move(self, game: Game) -> Tuple[int, int, int] | None:
+    def make_move(self, game: Game) -> tuple[int, int, int] | None:
         """Make a move in the game.
         game: Game: The game instance
 
