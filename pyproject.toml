@@ -13,9 +13,10 @@ documentation = "https://github.com/snowdropquantum/snowdrop-tangled-agents"
 "Bug Tracker" = "https://github.com/snowdropquantum/snowdrop-tangled-agents/issues"
 
 [tool.poetry.dependencies]
-python = "^3.11"
+python = ">=3.11,<3.14"
 snowdrop-tangled-game-engine = ">=1.0.2"
-snowdrop-adjudicators = ">=0.0.1"
+snowdrop-adjudicators = ">=0.0.3"
+snowdrop-tangled-alphazero = ">=0.0.1"
 coloredlogs = ">=15.0.1"
 
 [tool.poetry.group.dev.dependencies]
@@ -35,3 +36,6 @@ addopts = "--verbose --cov=snowdrop_tangled_agents --cov-report=html --cov-repor
 
 [tool.setuptools.packages.find]
 exclude = ["snowdrop_tangled_agents.tests*"]
+
+[tool.setuptools]
+include-package-data = true
