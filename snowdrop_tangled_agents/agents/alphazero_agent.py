@@ -5,15 +5,13 @@ import numpy as np
 
 from snowdrop_tangled_game_engine import Game, GameAgentBase
 
+from snowdrop_tangled_alphazero import TangledGame, AZ_MCTS, load_model_and_optimizer
+
 from snowdrop_tangled_agents.agents.mcts_utils.converters import (convert_to_az_board, convert_from_az_board,
                                         convert_erik_game_instance_to_tangled_game_state_instance,
                                         convert_tangled_move_to_erik_move)
 from snowdrop_tangled_agents.agents.mcts_utils.mcts_tangled import TangledMove
 from snowdrop_tangled_agents.agents.mcts_utils.infrastructure import hash_state_action
-
-from snowdrop_tangled_alphazero.game.TangledGame import TangledGame
-from snowdrop_tangled_alphazero.monte_carlo.AZMCTS import AZ_MCTS
-from snowdrop_tangled_alphazero.utilities.utilities import load_model_and_optimizer
 
 
 class AlphaZeroAgent(GameAgentBase):
@@ -31,10 +29,10 @@ class AlphaZeroAgent(GameAgentBase):
 
         self.vertex_count = self.g.graph_properties["num_nodes"]
 
-        # todo the reason why we can't load two different NNs is that NeuralNetWrapper calls TangledNeuralNet which has a NN architecture -- we'd need to have different files if we want two different NNs to fight
+        # currently can't load two different NNs; we'd need to have different files if we want two different NNs to fight
         self.nn = load_model_and_optimizer(board_size=self.g.getBoardSize(), action_size=self.g.getActionSize(),
                                            graph_number=graph_args["graph_number"],
-                                         filepath=os.path.join(kwargs['neural_net_dir_path'], kwargs['neural_net_file_name']))
+                                           filepath=os.path.join(kwargs['neural_net_dir_path'], kwargs['neural_net_file_name']))
 
         self.mcts1 = AZ_MCTS(self.g, self.nn, self.args1)
         self.n1p = lambda x: np.argmax(self.mcts1.get_action_prob(x, temp=0, add_dirichlet_noise=False))
