@@ -1,10 +1,8 @@
 """ runs a round-robin tournament of Tangled agents, and returns WLD results and final Elo estimates """
-
 import os
 import time
 import cProfile
 import pstats
-# import torch
 import math
 import logging
 import coloredlogs
@@ -12,11 +10,11 @@ import coloredlogs
 import multiprocessing as mp
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
-from snowdrop_tangled_agents.utils.utilities import import_agent
 from snowdrop_tangled_game_engine import GraphProperties, GamePlayerBase, LocalGamePlayer, Game, GameAgentBase
+
 from snowdrop_adjudicators import LookupTableAdjudicator, QuantumAnnealingAdjudicator, SimulatedAnnealingAdjudicator
 
-# from elo_scores import process_tournament_results_per_game
+from snowdrop_tangled_agents.utils.utilities import import_agent
 
 
 def compute_equilibrium_elo(results):
@@ -172,7 +170,7 @@ def main():
 
     graph_properties = GraphProperties()
 
-    for graph_number in graph_properties.allowed_graphs:
+    for graph_number in [2, 11, 12, 18, 19, 20]:
         print('-------------------------------------------------------------')
         print('Tournament for graph number', graph_number, 'starting now ...')
         graph_index = graph_properties.allowed_graphs.index(graph_number)
@@ -190,20 +188,16 @@ def main():
                 'terminal_state_adjudicator': 'lookup_table',
                 'terminal_state_adjudicator_kwargs': {'epsilon': graph_properties.epsilon_values[graph_index],
                                                       'graph_number': graph_number},
-                'number_of_games_per_matchup': 50000,
-                'num_workers': 4,
+                'number_of_games_per_matchup': 500,
+                'num_workers': 10,
                 'vertex_count': graph_properties.graph_database[graph_number]['num_nodes'],
                 'edge_list': graph_properties.graph_database[graph_number]['edge_list'],
                 'vertex_ownership': (graph_properties.graph_database[graph_number]['player1_node'],
                                      graph_properties.graph_database[graph_number]['player2_node'])}
 
-        # sa_nn_path = 'graph_' + str(args['graph_number']) + '_neural_net_simulated_annealing.pth'
-        # qa_nn_path = 'graph_' + str(args['graph_number']) + '_neural_net_quantum_annealing.pth'
-
-        # competitor 0 is baseline Elo of 1000 by definition
         competitors = {
             0: {
-                'name': 'Random_2',
+                'name': 'Random_0',
                 'agent_type': 'snowdrop_tangled_agents.RandomRandyAgent',
                 'kwargs': {
                     'rollout_adjudicator': None,
@@ -215,17 +209,45 @@ def main():
                     'neural_net_file_name': None,
                 }
             },
+            # 1: {
+            #     'name': 'Random_1',
+            #     'agent_type': 'snowdrop_tangled_agents.RandomRandyAgent',
+            #     'kwargs': {
+            #         'rollout_adjudicator': None,
+            #         'rollout_adjudicator_args': None,
+            #         'mcts_rollouts': None,
+            #         'Elo': 1000,
+            #         'WLD': [0, 0, 0],
+            #         'neural_net_dir_path': None,
+            #         'neural_net_file_name': None,
+            #     }
+            # },
             1: {
-                'name': 'Random_1',
-                'agent_type': 'snowdrop_tangled_agents.RandomRandyAgent',
+                'name': 'MCTS_10',
+                'agent_type': 'snowdrop_tangled_agents.MCTSAgent',
                 'kwargs': {
-                    'rollout_adjudicator': None,
-                    'rollout_adjudicator_args': None,
-                    'mcts_rollouts': None,
+                    'rollout_adjudicator': 'lookup_table',
+                    'rollout_adjudicator_args': {'epsilon': graph_properties.epsilon_values[graph_index],
+                                                 'graph_number': graph_number},
+                    'mcts_rollouts': 10,
                     'Elo': 1000,
                     'WLD': [0, 0, 0],
                     'neural_net_dir_path': None,
                     'neural_net_file_name': None,
+                }
+            },
+            2: {
+                'name': 'AlphaZero_10',
+                'agent_type': 'snowdrop_tangled_agents.AlphaZeroAgent',
+                'kwargs': {
+                    'rollout_adjudicator': 'lookup_table',
+                    'rollout_adjudicator_args': {'epsilon': graph_properties.epsilon_values[graph_index],
+                                                 'graph_number': graph_number},
+                    'mcts_rollouts': 10,
+                    'Elo': 1000,
+                    'WLD': [0, 0, 0],
+                    'neural_net_dir_path': os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data'),
+                    'neural_net_file_name': "alphazero_nn_graph_" + str(graph_number) + ".pth",
                 }
             }
         }
@@ -395,11 +417,6 @@ def main():
                    p2_wins_playing_red+p2_wins_playing_blue,
                    p1_draws_playing_red+p1_draws_playing_blue))
 
-            # competitors[k[0]]['kwargs']['Elo'] = (competitors[k[1]]['kwargs']['Elo'] -
-            #                                        400*math.log10(2*args.number_of_games_per_matchup/
-            #                                                       (p1_wins_playing_red+p1_wins_playing_blue +
-            #                                                        0.5*(p1_draws_playing_red+p1_draws_playing_blue)) - 1))
-
             results[(k[1], k[0])] = [p2_wins_playing_red+p2_wins_playing_blue,
                                      p1_wins_playing_red+p1_wins_playing_blue,
                                      p1_draws_playing_red+p1_draws_playing_blue]
@@ -418,7 +435,8 @@ def main():
 
         for idx in range(len(competitors)):
             print(competitors[idx]['name'], ': W/L/D of', competitors[idx]['kwargs']['WLD'])
-            print(competitors[idx]['name'], ': W/L/D % tage of', [competitors[idx]['kwargs']['WLD'][k]/(2*args['number_of_games_per_matchup']) for k in range(3)])
+            num_games = sum(competitors[idx]['kwargs']['WLD'])
+            print(competitors[idx]['name'], ': W/L/D % tage of', [competitors[idx]['kwargs']['WLD'][k]/num_games for k in range(3)])
             print(competitors[idx]['name'], ': expected random W/L/D % tage of', [round(expected_random_wld[graph_number][k], 5) for k in range(3)])
 
         print()
