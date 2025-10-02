@@ -13,10 +13,8 @@ class MCTSAgent(GameAgentBase):
 
     def __init__(self, player_id: str = None, **kwargs):
         super().__init__(player_id)
-        print('kwargs', kwargs)
         self.mcts_rollouts = kwargs['mcts_rollouts']
         self.rollout_adjudicator = kwargs['rollout_adjudicator']
-        print('rollout adj:', self.rollout_adjudicator)
 
     def make_move(self, game: Game) -> tuple[int, int, int] | None:
         """Make a move in the game.
@@ -29,7 +27,6 @@ class MCTSAgent(GameAgentBase):
         initial_tangled_game_state = convert_erik_game_instance_to_tangled_game_state_instance(game, rollout_adjudicator=self.rollout_adjudicator)
 
         # My agents eat a TangledGameState instance and return a TangledMove instance.
-        print('in mcts, using rollouts', self.mcts_rollouts)
         tangled_move = mcts_agent(initial_tangled_game_state, simulations_number=self.mcts_rollouts)
 
         legal_moves = game.get_legal_moves(self.id)
