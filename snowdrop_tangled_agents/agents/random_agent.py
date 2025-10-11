@@ -6,7 +6,7 @@ from snowdrop_tangled_game_engine import Game, GameAgentBase
 
 class RandomRandyAgent(GameAgentBase):
     """
-    This is an example of a simple RandomRandyAgent that makes random moves.
+    This is an example of a Tangled agent. It makes random moves.
 
     Use this template to build your own agents. Here are the basic steps:
 
@@ -17,8 +17,8 @@ class RandomRandyAgent(GameAgentBase):
         but generally you'll have access to the full state of the game (the vertices and edges and their states)
         and some helpful methods for interacting with the game (get_legal_moves, etc.)
     3. Create a new class that inherits from GameAgentBase and implement the make_move method.
-        The make_move method should take a Game object as an argument and return a tuple of the move type,
-        move index, and move state.
+        The make_move method should take a Game object as an argument and return a tuple (move type,
+        move index, move state).
         move_type is Game.MoveType IntEnum, and has values of NONE, EDGE, or QUIT.
         move_index is the index of the edge to change the state of, where the edges (i, j) i < j are in lexical order.
         move_state is the state to change the edge to.
@@ -38,7 +38,7 @@ class RandomRandyAgent(GameAgentBase):
         """Make a move in the game.
         game: Game: The game instance
 
-        Returns a tuple (move_type, move_index, move_state) or None if there are no legal moves.
+        Returns a tuple of integers (move_type, move_index, move_state) or None if there are no legal moves.
         """
 
         legal_moves = game.get_legal_moves(self.id)
