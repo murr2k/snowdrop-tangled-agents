@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "snowdrop-tangled-agents"
-version = "0.0.1"
+version = "0.0.2"
 description = "Agents for the Tangled game"
 authors = ["Geordie Rose <greatblueheron@users.noreply.github.com>"]
 license = "MIT"
@@ -14,9 +14,9 @@ documentation = "https://github.com/snowdropquantum/snowdrop-tangled-agents"
 
 [tool.poetry.dependencies]
 python = ">=3.11,<3.14"
-snowdrop-tangled-game-engine = ">=1.0.2"
-snowdrop-adjudicators = ">=0.0.3"
-snowdrop-tangled-alphazero = ">=0.0.1"
+snowdrop-tangled-game-engine = ">=1.0.6"
+snowdrop-adjudicators = ">=0.0.7"
+scipy = ">=1.16.2"
 coloredlogs = ">=15.0.1"
 
 [tool.poetry.group.dev.dependencies]
@@ -36,6 +36,3 @@ addopts = "--verbose --cov=snowdrop_tangled_agents --cov-report=html --cov-repor
 
 [tool.setuptools.packages.find]
 exclude = ["snowdrop_tangled_agents.tests*"]
-
-[tool.setuptools]
-include-package-data = true
