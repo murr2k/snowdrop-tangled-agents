@@ -862,30 +862,30 @@ files = [
 
 [[package]]
 name = "snowdrop-adjudicators"
-version = "0.0.7"
+version = "0.0.8"
 description = "Two public adjudicators for the Tangled game"
 optional = false
 python-versions = "<3.14,>=3.11"
 groups = ["main"]
 files = [
-    {file = "snowdrop_adjudicators-0.0.7-py3-none-any.whl", hash = "sha256:55e39124048f6b2f937ccd82162ebe74ee9079271ae71036f591f13a30a4017f"},
-    {file = "snowdrop_adjudicators-0.0.7.tar.gz", hash = "sha256:02abf6d40f81936347b97c40e7dc100aa1e23868c29b5742ff556927741287dd"},
+    {file = "snowdrop_adjudicators-0.0.8-py3-none-any.whl", hash = "sha256:0f2b4b97e378511b1b6e83e5a1d96ce2758f08f8dab330020560fbae434ba378"},
+    {file = "snowdrop_adjudicators-0.0.8.tar.gz", hash = "sha256:1d0f597a00e6bf8f996333796eae0374fd87aee837d5d6224f69c87acd8885c0"},
 ]
 
 [package.dependencies]
 dwave-neal = ">=0.6.0"
-snowdrop-tangled-game-engine = ">=1.0.6"
+snowdrop-tangled-game-engine = ">=1.0.7"
 
 [[package]]
 name = "snowdrop-tangled-game-engine"
-version = "1.0.6"
+version = "1.0.7"
 description = "A package for the Tangled game engine and support classes."
 optional = false
 python-versions = "<3.14,>=3.11"
 groups = ["main"]
 files = [
-    {file = "snowdrop_tangled_game_engine-1.0.6-py3-none-any.whl", hash = "sha256:304c6ed9533bf0304d265a8daa52430294f7b678e780877a22ab3226a550f4ac"},
-    {file = "snowdrop_tangled_game_engine-1.0.6.tar.gz", hash = "sha256:c7e168fd4926e139d122fb69ff4d5094115787595c1c4846bdf5ea7d0bf83629"},
+    {file = "snowdrop_tangled_game_engine-1.0.7-py3-none-any.whl", hash = "sha256:7a7089a6e189dd69e076dd03c5bd7b20207579323710e4946a0042f243441742"},
+    {file = "snowdrop_tangled_game_engine-1.0.7.tar.gz", hash = "sha256:11910d5b0144b8d77f72486cd632623e383ac60d6f5bfabe567bd2f52a958ba8"},
 ]
 
 [package.dependencies]
@@ -943,4 +943,4 @@ zstd = ["zstandard (>=0.18.0)"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11,<3.14"
-content-hash = "ca6e7cccb0bfa5064a3eaa60bcc5a950fbc87729e2b32f97ab371123673b15cf"
+content-hash = "294021605c85831cd1d0f4c6b0176d37118752ec4d834fb1968ba535806a76a4"
