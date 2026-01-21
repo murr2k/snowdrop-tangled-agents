@@ -9,6 +9,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **MATLAB Toolbox Integration** (`snowdrop_tangled_agents/matlab/`)
+  - Deep Learning Toolbox integration for neural network position evaluation
+  - Statistics and ML Toolbox for opponent clustering and style classification
+  - Database Toolbox for direct MATLAB-SQLite access in training pipelines
+  - MATLAB Compiler SDK support for Python-callable compiled packages
+  - `unified_bridge.py`: Automatic backend selection with fallback chain
+    - Compiled packages (fastest, MATLAB Runtime only)
+    - MATLAB Engine API (full functionality, requires license)
+    - Pure Python heuristics (always available)
+  - `compiled_bridge.py`: Bridge to pre-compiled MATLAB packages
+  - `training.py`: Training orchestration from Python
+  - `matlab_strategy.py`: MCTS enhanced with neural network priors
+  - Value network architecture: 50-input features → FC(128-64-32) → tanh output
+  - Opponent modeling with 20-element feature vectors and K-means clustering
+  - CLI: `--strategy matlab --use-nn --adapt-opponent`
+
+- **Database Schema Migrations** (`snowdrop_tangled_agents/stats/migrations.py`)
+  - Automatic schema versioning and migration runner
+  - v2: `models` table for trained network metadata
+  - v3: `opponents` table for opponent profiles and clustering
+  - v4: `training_data` table for ML training samples
+  - v5: `opponent_history` table for move-level opponent tracking
+
+- **Compiled MATLAB Packages** (for deployment without MATLAB license)
+  - `tangled_value_network`: Neural network inference
+  - `tangled_opponent_model`: Opponent classification and prior adaptation
+  - `tangled_training`: Model training and opponent clustering
+  - Requires MATLAB Runtime R2026a (free download)
+
 - **Adjudicator Calibration System** (`snowdrop_tangled_agents/stats/`)
   - Compares our terminal state evaluation to actual tangled-game.com scores
   - New `calibration` table in SQLite database
@@ -92,12 +121,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Documentation**
   - `CLAUDE.md` - Project guidance for Claude Code
-  - `THEORY_OF_OPERATION.md` - Comprehensive system documentation
+  - `docs/THEORY_OF_OPERATION.md` - Comprehensive system documentation (moved from root)
     - Added Adjudicator Calibration section
     - Added Mermaid diagrams for data flow and gameplay transaction flow
+  - `docs/MATLAB_INTEGRATION.md` - Complete MATLAB integration guide
   - `docs/tangled-bot-v28.txt` - Reference JavaScript bot implementation
 
 ### Changed
+
+- Moved `THEORY_OF_OPERATION.md` from project root to `docs/` directory
+- Updated `README.md` with Development Progress section documenting all implementation steps
+- Extended `StatsCollector` with model and opponent management methods
+- Added migration support to stats collector initialization
 
 - Updated `snowdrop_tangled_agents/__init__.py` to export PetersenAgent
 - Updated `snowdrop_tangled_agents/agents/__init__.py` to include PetersenAgent

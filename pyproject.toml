@@ -21,6 +21,15 @@ coloredlogs = ">=15.0.1"
 playwright = ">=1.40.0"
 python-dotenv = ">=1.0.0"
 
+[tool.poetry.extras]
+matlab = ["matlabengine"]
+# Compiled MATLAB packages (optional, installed separately)
+# These are built using MATLAB Compiler SDK and installed via setup.py:
+#   - tangled_value_network: Neural network position evaluation
+#   - tangled_opponent_model: Opponent style classification
+#   - tangled_training: Model training orchestration
+# Install MATLAB Runtime from: https://www.mathworks.com/products/compiler/matlab-runtime.html
+
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.4.1"
 pytest-cov = "^7.0.0"

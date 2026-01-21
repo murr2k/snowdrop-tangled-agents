@@ -74,6 +74,18 @@ from snowdrop_tangled_agents.strategy.petersen_strategy import PetersenStrategy
 from snowdrop_tangled_agents.strategy.mcts_strategy import MCTSStrategy, HybridStrategy, evaluate_terminal_state
 from snowdrop_tangled_agents.stats import get_collector, queries as stats_queries
 
+# Optional MATLAB integration
+try:
+    from snowdrop_tangled_agents.matlab import (
+        MatlabEnhancedStrategy,
+        get_unified_bridge,
+        print_training_status,
+    )
+    MATLAB_AVAILABLE = True
+except ImportError:
+    MATLAB_AVAILABLE = False
+    print_training_status = None
+
 
 # Vertex coordinates - from working JS bot (tangled-bot-v28.txt)
 # These match the actual website SVG layout
@@ -118,13 +130,19 @@ class WebPlayer:
         slow_mo: int = 100,
         strategy_type: str = "heuristic",
         mcts_time: float = 2.0,
-        mcts_iterations: int = 5000
+        mcts_iterations: int = 5000,
+        use_nn: bool = True,
+        adapt_opponent: bool = True,
     ):
         self.username = os.getenv("TANGLED_USERNAME")
         self.password = os.getenv("TANGLED_PASSWORD")
         self.headless = headless
         self.slow_mo = slow_mo
         self.strategy_type = strategy_type
+
+        # Store options for MATLAB strategy
+        self._use_nn = use_nn
+        self._adapt_opponent = adapt_opponent
 
         self.playwright = None
         self.browser = None
@@ -146,6 +164,21 @@ class WebPlayer:
                 mcts_time_limit=mcts_time,
                 mcts_iterations=mcts_iterations
             )
+        elif strategy_type == "matlab":
+            if not MATLAB_AVAILABLE:
+                self.logger.warning("MATLAB strategy unavailable, falling back to hybrid")
+                self.strategy = HybridStrategy(
+                    mcts_time_limit=mcts_time,
+                    mcts_iterations=mcts_iterations
+                )
+            else:
+                self.strategy = MatlabEnhancedStrategy(
+                    mcts_time_limit=mcts_time,
+                    mcts_iterations=mcts_iterations,
+                    use_nn_priors=getattr(self, '_use_nn', True),
+                    use_opponent_adaptation=getattr(self, '_adapt_opponent', True),
+                )
+                # Note: initialize() called in play_game() with opponent name
         else:  # "heuristic" (default)
             self.strategy = PetersenStrategy(params_path=self.params_path)
 
@@ -765,6 +798,10 @@ class WebPlayer:
         """Play one complete game."""
         self.score_history = []
 
+        # Initialize MATLAB strategy with opponent model
+        if self.strategy_type == "matlab" and hasattr(self.strategy, 'initialize'):
+            self.strategy.initialize(opponent=opponent)
+
         # Start stats tracking for this game
         self.current_game_id = self.stats_collector.start_game(
             opponent=opponent,
@@ -940,8 +977,8 @@ def main():
     parser.add_argument("--debug", action="store_true")
     parser.add_argument("--keep-open", "-k", type=int, default=5,
                         help="Seconds to keep browser open after last game (0 to close immediately)")
-    parser.add_argument("--strategy", "-s", choices=["heuristic", "mcts", "hybrid"], default="heuristic",
-                        help="Strategy to use: heuristic (fast), mcts (Monte Carlo), hybrid (MCTS with opening)")
+    parser.add_argument("--strategy", "-s", choices=["heuristic", "mcts", "hybrid", "matlab"], default="heuristic",
+                        help="Strategy to use: heuristic (fast), mcts (Monte Carlo), hybrid (MCTS with opening), matlab (MATLAB-enhanced)")
     parser.add_argument("--mcts-time", type=float, default=2.0,
                         help="MCTS time limit per move in seconds")
     parser.add_argument("--mcts-iterations", type=int, default=5000,
@@ -950,6 +987,26 @@ def main():
                         help="Show statistics summary and exit (no games played)")
     parser.add_argument("--calibration", action="store_true",
                         help="Show adjudicator calibration report and exit (no games played)")
+
+    # MATLAB training commands
+    parser.add_argument("--training-status", action="store_true",
+                        help="Show MATLAB training system status and exit")
+    parser.add_argument("--train-value-network", action="store_true",
+                        help="Train value network from game history (requires MATLAB)")
+    parser.add_argument("--train-policy-network", action="store_true",
+                        help="Train policy network from game history (requires MATLAB)")
+    parser.add_argument("--cluster-opponents", action="store_true",
+                        help="Cluster opponents by play style (requires MATLAB)")
+    parser.add_argument("--epochs", type=int, default=100,
+                        help="Training epochs for neural networks (default: 100)")
+    parser.add_argument("--clusters", type=int, default=3,
+                        help="Number of opponent clusters (default: 3)")
+
+    # Neural network and opponent adaptation options
+    parser.add_argument("--use-nn", action="store_true",
+                        help="Use neural network priors with matlab strategy")
+    parser.add_argument("--adapt-opponent", action="store_true",
+                        help="Adapt play style to opponent with matlab strategy")
 
     args = parser.parse_args()
 
@@ -963,6 +1020,91 @@ def main():
         stats_queries.print_calibration_report()
         return
 
+    # If --training-status flag, show training system status and exit
+    if args.training_status:
+        if print_training_status:
+            print_training_status()
+        else:
+            print("MATLAB integration not available")
+        return
+
+    # If --train-value-network flag, train and exit
+    if args.train_value_network:
+        if not MATLAB_AVAILABLE:
+            print("MATLAB integration not available. Install with: poetry install -E matlab")
+            return
+
+        from snowdrop_tangled_agents.matlab.training import get_training_orchestrator
+        orchestrator = get_training_orchestrator()
+
+        if not orchestrator.is_available():
+            print("No training backend available. Install MATLAB or compiled packages.")
+            return
+
+        print(f"Training value network with {args.epochs} epochs...")
+        try:
+            metrics = orchestrator.train_value_network(epochs=args.epochs, verbose=True)
+            print(f"\nTraining complete!")
+            print(f"  Training samples: {metrics.get('training_samples', 0)}")
+            print(f"  Validation loss:  {metrics.get('validation_loss', 0):.4f}")
+            print(f"  Model saved to:   {metrics.get('model_path', 'N/A')}")
+        except Exception as e:
+            print(f"Training failed: {e}")
+        return
+
+    # If --train-policy-network flag, train and exit
+    if args.train_policy_network:
+        if not MATLAB_AVAILABLE:
+            print("MATLAB integration not available. Install with: poetry install -E matlab")
+            return
+
+        from snowdrop_tangled_agents.matlab.training import get_training_orchestrator
+        orchestrator = get_training_orchestrator()
+
+        if not orchestrator.is_available():
+            print("No training backend available. Install MATLAB or compiled packages.")
+            return
+
+        print(f"Training policy network with {args.epochs} epochs...")
+        try:
+            metrics = orchestrator.train_policy_network(epochs=args.epochs, verbose=True)
+            print(f"\nTraining complete!")
+            print(f"  Training samples:       {metrics.get('training_samples', 0)}")
+            print(f"  Validation accuracy:    {metrics.get('validation_accuracy', 0):.2%}")
+            print(f"  Model saved to:         {metrics.get('model_path', 'N/A')}")
+        except Exception as e:
+            print(f"Training failed: {e}")
+        return
+
+    # If --cluster-opponents flag, cluster and exit
+    if args.cluster_opponents:
+        if not MATLAB_AVAILABLE:
+            print("MATLAB integration not available. Install with: poetry install -E matlab")
+            return
+
+        from snowdrop_tangled_agents.matlab.training import get_training_orchestrator
+        orchestrator = get_training_orchestrator()
+
+        if not orchestrator.is_available():
+            print("No training backend available. Install MATLAB or compiled packages.")
+            return
+
+        print(f"Clustering opponents into {args.clusters} clusters...")
+        try:
+            result = orchestrator.cluster_opponents(k=args.clusters, verbose=True)
+            print(f"\nClustering complete!")
+            print(f"  Opponents:  {result.get('num_opponents', 0)}")
+            print(f"  Clusters:   {args.clusters}")
+
+            # Show cluster distribution
+            labels = result.get('labels', [])
+            for c in range(1, args.clusters + 1):
+                count = sum(1 for l in labels if l == c)
+                print(f"    Cluster {c}: {count} opponents")
+        except Exception as e:
+            print(f"Clustering failed: {e}")
+        return
+
     level = "DEBUG" if args.debug else "INFO"
     coloredlogs.install(level=level, fmt="%(asctime)s %(levelname)s %(message)s")
 
@@ -972,7 +1114,9 @@ def main():
         slow_mo=args.slow_mo,
         strategy_type=args.strategy,
         mcts_time=args.mcts_time,
-        mcts_iterations=args.mcts_iterations
+        mcts_iterations=args.mcts_iterations,
+        use_nn=args.use_nn,
+        adapt_opponent=args.adapt_opponent,
     ) as player:
         player.login()
 

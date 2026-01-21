@@ -232,7 +232,10 @@ class MCTSNode:
         The prior bonus decreases as visits increase, allowing MCTS to
         override the heuristic when data shows otherwise.
 
-        Formula: Q + c*sqrt(ln(N)/n) + prior_weight * prior / (n + 1)
+        Formula: Q/N + c*sqrt(ln(parent.N)/N) + w*(prior-0.5)/(N+1)
+
+        All values are stored from P1's perspective. When selecting at opponent
+        turn nodes, we negate exploitation to model opponent's minimizing choice.
         """
         if self.visits == 0:
             return float('inf')
@@ -243,9 +246,9 @@ class MCTSNode:
         # Progressive bias: prior influence decreases with visits
         prior_bonus = prior_weight * (self.prior - 0.5) / (self.visits + 1)
 
-        # If it's opponent's turn at this node, they're minimizing our value
-        # So from our parent's perspective (which is maximizing), we negate
-        if not self.is_our_turn:
+        # Negate when PARENT is opponent's turn (parent minimizes our value)
+        # Child's is_our_turn is opposite of parent's, so negate when child is OUR turn
+        if self.is_our_turn:
             return -exploitation + exploration_term + prior_bonus
         return exploitation + exploration_term + prior_bonus
 
@@ -278,7 +281,7 @@ class MCTSNode:
         return child
 
     def update(self, value: float):
-        """Backpropagate value up the tree."""
+        """Backpropagate value up the tree (P1 perspective throughout)."""
         self.visits += 1
         self.total_value += value
         if self.parent:
@@ -321,6 +324,24 @@ class MCTSStrategy:
         self.last_iterations = 0
         self.last_time = 0.0
 
+    def _compute_momentum(self, score_history: list, window: int = 4) -> float:
+        """Compute recent score trend. Positive = improving, negative = declining."""
+        if not score_history or len(score_history) < 2:
+            return 0.0
+        recent = score_history[-window:] if len(score_history) >= window else score_history
+        if len(recent) < 2:
+            return 0.0
+        # Extract scores (assuming format: (edge, color, score) or just scores)
+        scores = []
+        for item in recent:
+            if isinstance(item, (int, float)):
+                scores.append(float(item))
+            elif isinstance(item, (list, tuple)) and len(item) >= 3:
+                scores.append(float(item[2]))
+        if len(scores) < 2:
+            return 0.0
+        return (scores[-1] - scores[0]) / len(scores)
+
     def calculate_move(
         self,
         state: str,
@@ -332,14 +353,26 @@ class MCTSStrategy:
 
         Args:
             state: 15-char string, 'G'/'P'/'-' for each edge
-            score: Current game score (not used directly in MCTS)
-            score_history: Previous moves (not used directly in MCTS)
+            score: Current game score (used for adaptive exploration)
+            score_history: Previous moves (used for momentum-based exploration)
 
         Returns:
             (edge_index, color) or None if no moves available
         """
         if state.count('-') == 0:
             return None
+
+        # Adaptive exploration based on game state
+        # - When losing (negative momentum), explore more aggressively
+        # - When winning (positive momentum), exploit more
+        momentum = self._compute_momentum(score_history) if score_history else 0.0
+        adaptive_exploration = self.exploration
+        if momentum < -0.3:
+            # Losing - explore more to find comebacks
+            adaptive_exploration = min(2.0, self.exploration * 1.3)
+        elif momentum > 0.3:
+            # Winning - exploit more to secure lead
+            adaptive_exploration = max(1.0, self.exploration * 0.8)
 
         # Create root node
         root = MCTSNode(state=state, is_our_turn=True)
@@ -355,7 +388,7 @@ class MCTSStrategy:
             # Selection: traverse tree using UCB1 with Progressive Bias
             node = root
             while not node.is_terminal() and node.is_fully_expanded():
-                node = node.best_child(self.exploration, self.prior_weight)
+                node = node.best_child(adaptive_exploration, self.prior_weight)
 
             # Expansion: add a new child if not terminal
             if not node.is_terminal() and not node.is_fully_expanded():
@@ -418,53 +451,36 @@ class MCTSStrategy:
         is_our_turn: bool
     ) -> tuple[int, str]:
         """
-        Select action using heuristics for smarter rollouts.
+        Select action using weighted stochastic selection based on priors.
 
-        Uses domain knowledge about edge importance:
-        - MY_EDGES (9, 10, 11): Touch our vertex 5
-        - OPP_EDGES (5, 12, 13): Touch opponent vertex 7
-        - HUB_EDGES (2, 10, 12): Touch hub vertex 6
+        Uses domain knowledge about edge importance with randomization to
+        ensure diverse rollouts. Actions are selected with probability
+        proportional to their heuristic prior values.
 
-        Strategy:
-        - Our turn: Green on our edges, Purple on opponent edges
-        - Opponent turn: They do Green on their edges, Purple on ours
+        This prevents deterministic rollouts that can mislead MCTS.
         """
-        # Classify available edges using pre-computed lists
-        my_avail = [e for e in available if e in MY_EDGES]
-        opp_avail = [e for e in available if e in OPP_EDGES]
-        hub_avail = [e for e in available if e in HUB_EDGES]
+        # Build list of all possible actions with their weights
+        actions = []
+        weights = []
 
-        if is_our_turn:
-            # Priority 1: Secure our edges with Green
-            if my_avail:
-                edge = random.choice(my_avail)
-                return (edge, 'G')
-            # Priority 2: Attack opponent's edges with Purple
-            if opp_avail:
-                edge = random.choice(opp_avail)
-                return (edge, 'P')
-            # Priority 3: Control hub with Green
-            if hub_avail:
-                edge = random.choice(hub_avail)
-                return (edge, 'G')
-        else:
-            # Opponent's turn - simulate their strategy
-            # Priority 1: They secure their edges (OPP) with Green
-            if opp_avail:
-                edge = random.choice(opp_avail)
-                return (edge, 'G')
-            # Priority 2: They attack our edges with Purple
-            if my_avail:
-                edge = random.choice(my_avail)
-                return (edge, 'P')
-            # Priority 3: They control hub with Green
-            if hub_avail:
-                edge = random.choice(hub_avail)
-                return (edge, 'G')
+        for edge in available:
+            for color in ['G', 'P']:
+                prior = compute_action_prior(edge, color, is_our_turn)
+                actions.append((edge, color))
+                # Convert prior to weight (square to amplify differences)
+                weights.append(prior ** 2)
 
-        # Default: random with slight Green preference
+        # Weighted random selection
+        if actions and weights:
+            total = sum(weights)
+            if total > 0:
+                # Normalize weights and select
+                selected = random.choices(actions, weights=weights, k=1)[0]
+                return selected
+
+        # Fallback: uniform random (should rarely happen)
         edge = random.choice(available)
-        color = 'G' if random.random() < 0.55 else 'P'
+        color = random.choice(['G', 'P'])
         return (edge, color)
 
     def get_stats(self) -> dict:
