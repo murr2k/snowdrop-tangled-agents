@@ -856,11 +856,19 @@ class WebPlayer:
 
             edge, color = result
 
-            # Verify edge is available and not previously failed
-            if state[edge] != '-' or edge in failed_edges:
-                self.logger.warning(f"E{edge} not available or failed, picking from available: {available[:3]}...")
-                edge = available[0]
-                color = 'G'
+            # Re-read board state after MCTS calculation (opponent may have played)
+            current_state = self.read_board()
+            available = [i for i, c in enumerate(current_state) if c == '-' and i not in failed_edges]
+
+            # Verify edge is still available after calculation time
+            if current_state[edge] != '-' or edge in failed_edges:
+                if available:
+                    self.logger.warning(f"E{edge} no longer available (opponent played during calculation), picking from: {available[:3]}...")
+                    edge = available[0]
+                    color = 'G'
+                else:
+                    self.logger.warning("No available edges after rechecking")
+                    break
 
             self.logger.info(f"Move: E{edge} {'Green' if color == 'G' else 'Purple'}")
 
