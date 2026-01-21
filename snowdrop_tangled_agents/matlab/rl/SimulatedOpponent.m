@@ -1,0 +1,268 @@
+classdef SimulatedOpponent < handle
+%SIMULATEDOPPONENT Simulated opponent for RL training
+%
+%   This class simulates opponent behavior for self-play training.
+%   Multiple styles are available to create a curriculum of opponents.
+%
+%   Styles:
+%       'random'    - Uniform random move selection
+%       'heuristic' - Simple heuristic-based play
+%       'mcts'      - MCTS-style play (simulates MCTS Melissa)
+%       'defensive' - Prioritizes blocking our good edges
+%       'aggressive'- Prioritizes taking strategic edges
+%
+%   Example:
+%       opp = SimulatedOpponent('Style', 'mcts');
+%       move = opp.selectMove(state);
+
+    properties
+        Style char = 'mcts'
+
+        % MCTS-style parameters
+        Iterations int32 = 100
+        ExplorationConstant double = 1.41
+
+        % Heuristic weights (for non-random styles)
+        EdgeWeights (15,1) double
+    end
+
+    methods
+        function this = SimulatedOpponent(options)
+            %SIMULATEDOPPONENT Construct opponent
+            %
+            %   opp = SimulatedOpponent()
+            %   opp = SimulatedOpponent('Style', 'mcts')
+            %   opp = SimulatedOpponent('Style', 'random')
+
+            arguments
+                options.Style char = 'mcts'
+                options.Iterations int32 = 100
+            end
+
+            this.Style = options.Style;
+            this.Iterations = options.Iterations;
+
+            % Initialize edge weights based on Petersen graph analysis
+            % Higher weight = more likely to play
+            this.EdgeWeights = [
+                0.7;   % E0: Hub
+                0.5;   % E1
+                0.4;   % E2
+                0.7;   % E3: Hub
+                0.4;   % E4
+                0.8;   % E5: Strategic
+                0.7;   % E6: Hub
+                0.5;   % E7
+                0.5;   % E8
+                0.6;   % E9
+                0.6;   % E10
+                0.6;   % E11
+                0.8;   % E12: Strategic
+                0.8;   % E13: Strategic
+                0.5;   % E14
+            ];
+        end
+
+        function move = selectMove(this, state)
+            %SELECTMOVE Select a move given current state
+            %
+            %   move = selectMove(opp, state)
+            %
+            %   Inputs:
+            %       state - 15-character board state string
+            %
+            %   Outputs:
+            %       move - struct with fields:
+            %              .edge  - 0-indexed edge number
+            %              .color - 'G' or 'P'
+
+            switch this.Style
+                case 'random'
+                    move = this.randomMove(state);
+                case 'heuristic'
+                    move = this.heuristicMove(state);
+                case 'mcts'
+                    move = this.mctsMove(state);
+                case 'defensive'
+                    move = this.defensiveMove(state);
+                case 'aggressive'
+                    move = this.aggressiveMove(state);
+                otherwise
+                    move = this.randomMove(state);
+            end
+        end
+    end
+
+    methods (Access = private)
+        function move = randomMove(~, state)
+            %RANDOMMOVE Uniform random move selection
+
+            % Find grey edges
+            greyEdges = find(state == '-') - 1;  % 0-indexed
+
+            if isempty(greyEdges)
+                move = struct('edge', -1, 'color', '-');
+                return;
+            end
+
+            % Random edge and color
+            move.edge = greyEdges(randi(length(greyEdges)));
+            move.color = char('G' + (rand() > 0.5) * ('P' - 'G'));
+        end
+
+        function move = heuristicMove(this, state)
+            %HEURISTICMOVE Weighted random based on edge importance
+
+            greyEdges = find(state == '-');  % 1-indexed
+
+            if isempty(greyEdges)
+                move = struct('edge', -1, 'color', '-');
+                return;
+            end
+
+            % Weight by edge importance
+            weights = this.EdgeWeights(greyEdges);
+            weights = weights / sum(weights);
+
+            % Sample edge
+            cumWeights = cumsum(weights);
+            r = rand();
+            edgeIdx = find(cumWeights >= r, 1);
+            edge = greyEdges(edgeIdx) - 1;  % 0-indexed
+
+            % Choose color based on edge type
+            color = this.chooseColor(edge, state);
+
+            move = struct('edge', edge, 'color', color);
+        end
+
+        function move = mctsMove(this, state)
+            %MCTSMOVE MCTS-style move (simplified simulation)
+            %
+            %   This simulates MCTS Melissa's behavior without full MCTS.
+            %   Uses weighted selection with exploration noise.
+
+            greyEdges = find(state == '-');  % 1-indexed
+
+            if isempty(greyEdges)
+                move = struct('edge', -1, 'color', '-');
+                return;
+            end
+
+            % Compute scores for each possible move
+            scores = zeros(length(greyEdges), 2);  % [edge_idx, color_idx]
+
+            for i = 1:length(greyEdges)
+                edge = greyEdges(i);
+
+                % Base score from edge weight
+                baseScore = this.EdgeWeights(edge);
+
+                % Evaluate both colors
+                for c = 1:2
+                    color = char('G' + (c-1) * ('P' - 'G'));
+
+                    % Simulate move
+                    testState = state;
+                    testState(edge) = color;
+
+                    % Quick evaluation
+                    scores(i, c) = baseScore + this.quickEval(testState, color);
+
+                    % Add exploration noise
+                    scores(i, c) = scores(i, c) + 0.1 * randn();
+                end
+            end
+
+            % Select best move (with some randomness for variety)
+            [~, idx] = max(scores(:));
+            [edgeIdx, colorIdx] = ind2sub(size(scores), idx);
+
+            move.edge = greyEdges(edgeIdx) - 1;  % 0-indexed
+            move.color = char('G' + (colorIdx-1) * ('P' - 'G'));
+        end
+
+        function move = defensiveMove(this, state)
+            %DEFENSIVEMOVE Prioritize blocking opponent's good edges
+
+            % Opponent's good edges (our good edges from their perspective)
+            opponentGoodEdges = [10, 11, 12];  % E9, E10, E11 (1-indexed)
+
+            greyEdges = find(state == '-');
+
+            if isempty(greyEdges)
+                move = struct('edge', -1, 'color', '-');
+                return;
+            end
+
+            % Check if any opponent good edges are available
+            availableGood = intersect(greyEdges, opponentGoodEdges);
+
+            if ~isempty(availableGood)
+                % Block one of their good edges
+                edge = availableGood(randi(length(availableGood))) - 1;
+                move = struct('edge', edge, 'color', 'P');  % Purple to counter
+            else
+                % Fall back to heuristic
+                move = this.heuristicMove(state);
+            end
+        end
+
+        function move = aggressiveMove(this, state)
+            %AGGRESSIVEMOVE Prioritize strategic edges
+
+            % Strategic edges for opponent
+            strategicEdges = [6, 13, 14];  % E5, E12, E13 (1-indexed)
+
+            greyEdges = find(state == '-');
+
+            if isempty(greyEdges)
+                move = struct('edge', -1, 'color', '-');
+                return;
+            end
+
+            % Check if any strategic edges are available
+            availableStrategic = intersect(greyEdges, strategicEdges);
+
+            if ~isempty(availableStrategic)
+                edge = availableStrategic(randi(length(availableStrategic))) - 1;
+                move = struct('edge', edge, 'color', 'P');
+            else
+                move = this.heuristicMove(state);
+            end
+        end
+
+        function color = chooseColor(~, edge, ~)
+            %CHOOSECOLOR Choose color based on edge position
+            %
+            %   Opponent prefers:
+            %   - Purple on outer edges (counter our green strategy)
+            %   - Green on inner edges (control center)
+
+            % Outer edges: E9-E14 (0-indexed: 9-14)
+            if edge >= 9
+                color = 'P';  % Purple on outer
+            elseif edge <= 4
+                color = 'G';  % Green on inner
+            else
+                % Spoke edges - random
+                color = char('G' + (rand() > 0.5) * ('P' - 'G'));
+            end
+        end
+
+        function score = quickEval(~, state, lastColor)
+            %QUICKEVAL Quick position evaluation
+
+            greenCount = sum(state == 'G');
+            purpleCount = sum(state == 'P');
+
+            % Opponent wants balance or slight purple advantage
+            score = (purpleCount - greenCount) * 0.1;
+
+            % Bonus for last move color
+            if lastColor == 'P'
+                score = score + 0.05;
+            end
+        end
+    end
+end
