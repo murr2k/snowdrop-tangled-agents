@@ -1,5 +1,72 @@
 # snowdrop-tangled-agents
-A place to build and test agents for playing Tangled!
+
+A framework for building and testing agents for the Tangled quantum game. Includes strategy engines, web automation for playing on tangled-game.com, and statistical analysis tools.
+
+## Quick Start
+
+### Prerequisites
+
+- Python 3.11 - 3.13
+- Git
+
+### Installation
+
+**Automated Setup (Recommended)**
+
+```bash
+# Clone the repository
+git clone https://github.com/snowdropquantum/snowdrop-tangled-agents.git
+cd snowdrop-tangled-agents
+
+# Run the setup script
+# On Windows:
+setup.bat
+
+# On macOS/Linux:
+chmod +x setup.sh
+./setup.sh
+```
+
+**Manual Setup**
+
+```bash
+# Using Poetry (recommended)
+poetry install
+poetry run playwright install chromium
+
+# Using pip
+pip install -e .
+pip install snowdrop-tangled-game-engine snowdrop-adjudicators
+python -m playwright install chromium
+```
+
+### Configuration
+
+Copy `.env.example` to `.env` and add your tangled-game.com credentials:
+
+```bash
+cp .env.example .env
+# Edit .env with your credentials
+```
+
+### Play a Game
+
+```bash
+# Play against MCTS Melissa on tangled-game.com
+python play_tangled.py --games 1
+
+# Use different strategies
+python play_tangled.py --strategy mcts --mcts-time 5 --games 3
+python play_tangled.py --strategy hybrid --games 3
+
+# View game statistics
+python play_tangled.py --stats
+
+# View adjudicator calibration
+python play_tangled.py --calibration
+```
+
+---
 
 ## How to build your own agent
 This repo includes a random agent (see `RandomRandyAgent` in `random_agent.py`). To build your
