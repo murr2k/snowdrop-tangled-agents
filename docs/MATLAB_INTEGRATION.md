@@ -90,7 +90,35 @@ snowdrop_tangled_agents/
 
 ### MATLAB Source Files
 
-All MATLAB source files are located in `C:\Users\murr2\MATLAB Drive\tangled_strategies\`:
+#### Directory Setup (Required)
+
+MATLAB source files are stored in the repository under `snowdrop_tangled_agents/matlab/` but MATLAB IDE expects them in MATLAB Drive. To maintain a single source of truth, we use a **directory junction** (Windows) or **symlink** (macOS/Linux).
+
+**Windows Setup:**
+```powershell
+# Create junction from MATLAB Drive to repo (run in PowerShell)
+New-Item -ItemType Junction -Path "$env:USERPROFILE\MATLAB Drive\tangled_rl" `
+         -Target "C:\path\to\snowdrop-tangled-agents\snowdrop_tangled_agents\matlab\rl"
+
+New-Item -ItemType Junction -Path "$env:USERPROFILE\MATLAB Drive\tangled_strategies" `
+         -Target "C:\path\to\snowdrop-tangled-agents\snowdrop_tangled_agents\matlab"
+```
+
+**macOS/Linux Setup:**
+```bash
+# Create symlink from MATLAB Drive to repo
+ln -s /path/to/snowdrop-tangled-agents/snowdrop_tangled_agents/matlab/rl \
+      ~/MATLAB\ Drive/tangled_rl
+
+ln -s /path/to/snowdrop-tangled-agents/snowdrop_tangled_agents/matlab \
+      ~/MATLAB\ Drive/tangled_strategies
+```
+
+**Note:** Paths are platform-specific. Adjust `C:\path\to\` or `/path/to/` to match your local clone location.
+
+#### Strategy Files
+
+Located in `snowdrop_tangled_agents/matlab/` (symlinked to `MATLAB Drive/tangled_strategies/`):
 
 | File | Purpose |
 |------|---------|
@@ -109,6 +137,20 @@ All MATLAB source files are located in `C:\Users\murr2\MATLAB Drive\tangled_stra
 | `evaluate_position.m` | Heuristic position evaluation (non-NN) |
 | `sa_evaluate.m` | Simulated annealing evaluation helper |
 | `identify_opponent.m` | Opponent identification helper |
+
+#### Reinforcement Learning Files
+
+Located in `snowdrop_tangled_agents/matlab/rl/` (symlinked to `MATLAB Drive/tangled_rl/`):
+
+| File | Purpose |
+|------|---------|
+| `TangledEnvironment.m` | Custom RL environment class for RL Toolbox |
+| `getActionMask.m` | Valid action masking (30-action space) |
+| `buildRLFeatures.m` | 50-element observation vector builder |
+| `SimulatedOpponent.m` | Opponent models (random, heuristic, mcts, defensive, aggressive) |
+| `test_environment.m` | Unit tests for RL environment |
+
+These files implement Phase 2 of the Dynamic Learning plan (see `docs/DYNAMIC_LEARNING_PLAN.md`).
 
 ### Key Classes
 
