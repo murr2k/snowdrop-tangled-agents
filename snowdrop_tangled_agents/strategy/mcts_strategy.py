@@ -2,8 +2,8 @@
 Monte Carlo Tree Search Strategy for Tangled Game.
 
 Implements MCTS with UCB1 selection and Progressive Bias to compete against
-MCTS-based opponents like Melissa. Includes a built-in terminal state evaluator
-that approximates the quantum annealing adjudication.
+MCTS-based opponents like Melissa. Uses the official SimulatedAnnealingAdjudicator
+for terminal state evaluation to match tangled-game.com scores.
 
 Key improvements over basic MCTS:
 - Progressive Bias: adds heuristic prior to guide early exploration
@@ -16,6 +16,10 @@ import random
 import time
 from typing import Optional
 from dataclasses import dataclass, field
+from functools import lru_cache
+
+from snowdrop_adjudicators import SimulatedAnnealingAdjudicator
+from snowdrop_tangled_game_engine.game import Edge
 
 # Petersen graph structure (must match petersen_strategy.py)
 PETERSEN_EDGES = [
@@ -88,46 +92,50 @@ def compute_action_prior(edge: int, color: str, is_our_turn: bool) -> float:
     return prior
 
 
+@lru_cache(maxsize=1024)
 def evaluate_terminal_state(state: str) -> float:
     """
-    Evaluate a terminal state (all edges colored) and return the score.
+    Evaluate a terminal state (all edges colored) using the official adjudicator.
 
-    Uses brute-force enumeration of all 2^10 spin configurations to find
-    the optimal assignment, similar to what the quantum annealer does.
+    Uses SimulatedAnnealingAdjudicator to match tangled-game.com scoring exactly.
+    Results are cached to avoid repeated expensive adjudication calls.
 
     Args:
         state: 15-char string, all 'G' or 'P' (no grey edges)
 
     Returns:
         Score from Player 1's perspective (positive = P1 wins)
+        Typically in range [-5, +5] based on website observations.
     """
     if state.count('-') > 0:
         raise ValueError("Cannot evaluate non-terminal state")
 
-    best_score = float('-inf')
+    # Build edge list with colors for the adjudicator
+    edges = []
+    for i, (v1, v2) in enumerate(PETERSEN_EDGES):
+        color = state[i]
+        edge_state = Edge.State.FM.value if color == 'G' else Edge.State.AFM.value
+        edges.append((v1, v2, edge_state))
 
-    # Enumerate all 2^10 = 1024 spin configurations
-    for config in range(1 << NUM_VERTICES):
-        spins = [(config >> i) & 1 for i in range(NUM_VERTICES)]
-        # Convert 0/1 to -1/+1
-        spins = [2 * s - 1 for s in spins]
+    # Create game state dict for adjudicator
+    game_state = {
+        'num_nodes': NUM_VERTICES,
+        'edges': edges,
+        'graph_id': 11,  # Petersen graph
+        'player1_id': 'p1',
+        'player2_id': 'p2',
+        'turn_count': NUM_EDGES,
+        'current_player_index': 2,
+        'player1_node': MY_VERTEX,
+        'player2_node': OPP_VERTEX
+    }
 
-        score = 0.0
-        for edge_idx, (v1, v2) in enumerate(PETERSEN_EDGES):
-            color = state[edge_idx]
-            same_spin = (spins[v1] == spins[v2])
+    # Use simulated annealing adjudicator (matches website)
+    adj = SimulatedAnnealingAdjudicator()
+    adj.setup(epsilon=0.0)
+    result = adj.adjudicate(game_state)
 
-            if color == 'G':  # Green/Ferromagnetic
-                # Reward same spins
-                score += 1.0 if same_spin else -1.0
-            else:  # Purple/Antiferromagnetic
-                # Reward opposite spins
-                score += 1.0 if not same_spin else -1.0
-
-        best_score = max(best_score, score)
-
-    # Normalize to roughly [-1, 1] range
-    return best_score / NUM_EDGES
+    return float(result['score'])
 
 
 def quick_evaluate(state: str) -> float:
