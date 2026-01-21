@@ -15,7 +15,8 @@ and learning mechanisms.
 7. [Web Automation](#web-automation)
 8. [Learning System](#learning-system)
 9. [Statistics Collection](#statistics-collection)
-10. [Architecture](#architecture)
+10. [Adjudicator Calibration](#adjudicator-calibration)
+11. [Architecture](#architecture)
 
 ---
 
@@ -694,46 +695,228 @@ class WebPlayer:
 
 ---
 
+## Adjudicator Calibration
+
+Calibration compares our terminal state evaluation against actual game scores from
+tangled-game.com. This validates whether our scoring model matches the website's
+quantum adjudicator.
+
+### Why Calibration Matters
+
+If our `evaluate_terminal_state()` function produces different scores than the website:
+- MCTS optimizes for the wrong objective
+- Move selection is based on incorrect position evaluation
+- This could explain poor game performance despite sound strategy logic
+
+### Terminal State Evaluation
+
+Our evaluator uses brute-force enumeration of all 2^10 spin configurations:
+
+```python
+def evaluate_terminal_state(state: str) -> float:
+    """
+    Evaluate a terminal state (all 15 edges colored).
+
+    Enumerates all 1024 possible spin configurations to find
+    the one that maximizes the score.
+    """
+    best_score = float('-inf')
+
+    for config in range(1 << 10):  # 2^10 = 1024 configurations
+        spins = [2 * ((config >> i) & 1) - 1 for i in range(10)]
+
+        score = 0
+        for edge_idx, (v1, v2) in enumerate(PETERSEN_EDGES):
+            color = state[edge_idx]
+            same_spin = (spins[v1] == spins[v2])
+
+            if color == 'G':  # Green/Ferromagnetic
+                score += 1 if same_spin else -1
+            else:  # Purple/Antiferromagnetic
+                score += 1 if not same_spin else -1
+
+        best_score = max(best_score, score)
+
+    return best_score / 15  # Normalize to [-1, 1]
+```
+
+### Calibration Data Collection
+
+At game end, when all 15 edges are colored:
+
+```mermaid
+sequenceDiagram
+    participant WP as WebPlayer
+    participant Site as tangled-game.com
+    participant Eval as evaluate_terminal_state
+    participant DB as SQLite
+
+    WP->>Site: read_board()
+    Site-->>WP: terminal_state (15 chars, all G/P)
+    WP->>Site: read_score()
+    Site-->>WP: website_score
+    WP->>Eval: evaluate_terminal_state(state)
+    Eval-->>WP: predicted_score
+    WP->>DB: record_calibration(state, website, predicted)
+```
+
+### Database Schema
+
+```sql
+CREATE TABLE calibration (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    game_id TEXT REFERENCES games(id),
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    terminal_state TEXT NOT NULL,    -- 15-char final board
+    website_score REAL NOT NULL,     -- From tangled-game.com
+    predicted_score REAL NOT NULL,   -- Our evaluation
+    error REAL NOT NULL,             -- predicted - website
+    abs_error REAL NOT NULL          -- |error|
+);
+```
+
+### CLI Access
+
+```bash
+# View calibration report
+python play_tangled.py --calibration
+```
+
+### Calibration Report
+
+The report shows:
+
+- **Error Metrics**: Mean error (bias), mean absolute error, max error
+- **Error Distribution**: Percentage exact (<0.01), close (<0.1), moderate (<0.5), large (>=0.5)
+- **Worst Cases**: Terminal states with largest prediction errors
+- **Interpretation**: Whether calibration is excellent, good, moderate, or poor
+
+### Example Output
+
+```
+============================================================
+ADJUDICATOR CALIBRATION REPORT
+============================================================
+
+Total Calibrations: 25
+
+Error Metrics (predicted - website):
+  Mean Error:     +0.0234
+  Mean Abs Error: 0.0456
+  Max Abs Error:  0.1200
+  Error Range:    [-0.0800, +0.1200]
+
+Score Averages:
+  Website Avg:    -0.2456
+  Predicted Avg:  -0.2222
+
+Error Distribution:
+  < 0.01 (exact)      8 (32.0%) ################
+  < 0.10 (close)     15 (60.0%) ##############################
+  < 0.50 (moderate)   2 ( 8.0%) ####
+  >= 0.50 (large)     0 ( 0.0%)
+
+------------------------------------------------------------
+INTERPRETATION
+------------------------------------------------------------
+Good calibration - minor systematic differences.
+```
+
+### Potential Calibration Issues
+
+| Issue | Symptom | Resolution |
+|-------|---------|------------|
+| Score normalization | Large systematic bias | Adjust normalization factor |
+| Edge ordering | Random-looking errors | Verify PETERSEN_EDGES matches website |
+| Color mapping | Consistent sign flip | Check G/P color detection |
+| Quantum effects | Small systematic error | Website may use actual quantum solver |
+
+---
+
 ## Architecture
 
 ### Data Flow
 
+```mermaid
+flowchart TB
+    subgraph Website["tangled-game.com"]
+        SVG["SVG Graph"]
+        Lines["Lines (edges)"]
+        Colors["Colors G/P/-"]
+        SVG --> Lines --> Colors
+    end
+
+    subgraph WP["WebPlayer"]
+        VD["Vertex Discovery"]
+        EM["Edge Mapping"]
+        SS["State String"]
+        SR["Score Reading"]
+        VD --> EM --> SS
+        VD --> SR
+        SS --> SR
+    end
+
+    subgraph PS["PetersenStrategy"]
+        ES["Edge Scoring"]
+        CS["Color Selection"]
+        MO["Move Output"]
+        LU["Learning Update"]
+        ES --> CS --> MO
+        MO --> LU --> ES
+    end
+
+    Website -->|Playwright| WP
+    WP --> PS
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                     tangled-game.com                             │
-│  ┌─────────┐    ┌──────────┐    ┌─────────┐                     │
-│  │   SVG   │───→│  Lines   │───→│ Colors  │                     │
-│  │  Graph  │    │ (edges)  │    │ G/P/-   │                     │
-│  └─────────┘    └──────────┘    └─────────┘                     │
-└──────────────────────┬──────────────────────────────────────────┘
-                       │ Playwright
-                       ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                      WebPlayer                                   │
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐      │
-│  │   Vertex     │───→│    Edge      │───→│    State     │      │
-│  │  Discovery   │    │   Mapping    │    │   String     │      │
-│  └──────────────┘    └──────────────┘    └──────────────┘      │
-│         │                                       │                │
-│         │            ┌──────────────┐          │                │
-│         └───────────→│    Score     │←─────────┘                │
-│                      │   Reading    │                           │
-│                      └──────────────┘                           │
-└──────────────────────────────┬──────────────────────────────────┘
-                               │
-                               ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                   PetersenStrategy                               │
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐      │
-│  │    Edge      │───→│    Color     │───→│    Move      │      │
-│  │   Scoring    │    │  Selection   │    │   Output     │      │
-│  └──────────────┘    └──────────────┘    └──────────────┘      │
-│         ▲                                       │                │
-│         │            ┌──────────────┐          │                │
-│         └────────────│   Learning   │←─────────┘                │
-│                      │    Update    │                           │
-│                      └──────────────┘                           │
-└─────────────────────────────────────────────────────────────────┘
+
+### Gameplay Transaction Flow
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant WP as WebPlayer
+    participant Site as tangled-game.com
+    participant Strat as PetersenStrategy
+    participant Stats as StatsCollector
+    participant DB as SQLite
+
+    User->>WP: play_game(opponent)
+    WP->>Site: login()
+    Site-->>WP: session cookie
+    WP->>Site: select opponent
+    WP->>Stats: start_game(opponent)
+    Stats->>DB: INSERT games
+
+    loop Each Turn
+        WP->>Site: check is_our_turn()
+        alt Our Turn
+            WP->>Site: read SVG lines
+            Site-->>WP: edge colors, score
+            WP->>WP: discover_vertices()
+            WP->>WP: build state string
+            WP->>Strat: calculate_move(state, score)
+            Strat-->>WP: edge, color
+            WP->>Site: click edge
+            WP->>Site: select color button
+            Site-->>WP: updated score
+            WP->>Strat: record_move(edge, color, score)
+            WP->>Stats: record_move(...)
+            Stats->>DB: INSERT moves
+        else Opponent Turn
+            WP->>Site: wait for board change
+            Site-->>WP: opponent moved
+            WP->>Stats: record_move(opponent)
+            Stats->>DB: INSERT moves
+        end
+    end
+
+    WP->>Site: detect game over
+    Site-->>WP: final score, result
+    WP->>Strat: end_game(result, score)
+    Strat->>Strat: update parameters
+    WP->>Stats: end_game(result, score)
+    Stats->>DB: UPDATE games
+    WP-->>User: game result
 ```
 
 ### State Representation
@@ -778,6 +961,12 @@ python play_tangled.py --keep-open 10
 
 # Enable debug logging
 python play_tangled.py --debug
+
+# View game statistics summary
+python play_tangled.py --stats
+
+# View adjudicator calibration report
+python play_tangled.py --calibration
 ```
 
 ### Environment Setup
@@ -803,17 +992,17 @@ poetry run python snowdrop_tangled_agents/playing_games/run_local_parallel_tourn
 - ~~Monte Carlo Tree Search~~: Implemented with Progressive Bias (mcts_strategy.py)
 - ~~Opening Book~~: Heuristic opening sequence in HybridStrategy
 - ~~Statistics Database~~: SQLite-based game analytics (stats module)
+- ~~Adjudicator Calibration~~: Terminal state evaluation comparison (calibration table)
 
 ### In Progress
 
 - **Pattern Learning**: Use collected statistics to identify winning patterns
 - **Opening Book Refinement**: Analyze successful openings from database
 
-### Planned
+### Planned (by priority)
 
-1. **Neural Network Policy**: Train a neural net on game outcomes for move evaluation
-2. **Multi-Graph Support**: Extend strategy to other X-Prize graphs (2, 12, 18, 19, 20)
-3. **Advanced Opponent Modeling**: Build predictive models of Melissa's responses
-4. **Adjudicator Calibration**: Compare our terminal evaluation to actual game scores
+1. **Opening Response Table**: Pre-compute optimal responses to opponent's first moves
+2. **Advanced Opponent Modeling**: Build predictive models of Melissa's responses
+3. **Neural Network Policy**: Train a neural net on game outcomes for move evaluation
+4. **Multi-Graph Support**: Extend strategy to other X-Prize graphs (2, 12, 18, 19, 20)
 5. **Real-Time Dashboard**: Visualize statistics and game patterns
-6. **Opening Response Table**: Pre-compute optimal responses to opponent's first moves

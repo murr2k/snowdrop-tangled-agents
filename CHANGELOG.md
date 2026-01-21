@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Adjudicator Calibration System** (`snowdrop_tangled_agents/stats/`)
+  - Compares our terminal state evaluation to actual tangled-game.com scores
+  - New `calibration` table in SQLite database
+  - Automatic data collection at game end when all edges are colored
+  - `record_calibration()` method in StatsCollector
+  - Analysis queries: `get_calibration_summary()`, `get_calibration_details()`
+  - `print_calibration_report()` for detailed analysis output
+  - CLI access: `python play_tangled.py --calibration`
+  - Error distribution tracking (exact, close, moderate, large)
+  - Systematic bias detection and interpretation
+
 - **MCTS Strategy Engine** (`snowdrop_tangled_agents/strategy/mcts_strategy.py`)
   - Monte Carlo Tree Search with UCB1 selection for deep lookahead
   - Progressive Bias: heuristic priors guide early exploration, decay with visits
@@ -81,6 +92,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Documentation**
   - `CLAUDE.md` - Project guidance for Claude Code
   - `THEORY_OF_OPERATION.md` - Comprehensive system documentation
+    - Added Adjudicator Calibration section
+    - Added Mermaid diagrams for data flow and gameplay transaction flow
   - `docs/tangled-bot-v28.txt` - Reference JavaScript bot implementation
 
 ### Changed

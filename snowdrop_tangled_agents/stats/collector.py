@@ -99,6 +99,21 @@ class StatsCollector:
                     ON games(result);
                 CREATE INDEX IF NOT EXISTS idx_games_opponent
                     ON games(opponent);
+
+                -- Calibration data for adjudicator comparison
+                CREATE TABLE IF NOT EXISTS calibration (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    game_id TEXT REFERENCES games(id),
+                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    terminal_state TEXT NOT NULL,    -- 15-char final board state
+                    website_score REAL NOT NULL,     -- Score from tangled-game.com
+                    predicted_score REAL NOT NULL,   -- Our evaluate_terminal_state() result
+                    error REAL NOT NULL,             -- predicted - website
+                    abs_error REAL NOT NULL          -- |error|
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_calibration_game
+                    ON calibration(game_id);
             """)
             conn.commit()
 
@@ -209,6 +224,35 @@ class StatsCollector:
             conn.commit()
 
         logger.info(f"Game {game_id} ended: {result} ({final_score:+.3f})")
+
+    def record_calibration(
+        self,
+        game_id: str,
+        terminal_state: str,
+        website_score: float,
+        predicted_score: float
+    ):
+        """
+        Record calibration data comparing our prediction to website score.
+
+        Args:
+            game_id: Game ID from start_game()
+            terminal_state: Final 15-char board state (all G/P, no dashes)
+            website_score: Score displayed on tangled-game.com
+            predicted_score: Our evaluate_terminal_state() result
+        """
+        error = predicted_score - website_score
+        abs_error = abs(error)
+
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute("""
+                INSERT INTO calibration
+                (game_id, terminal_state, website_score, predicted_score, error, abs_error)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (game_id, terminal_state, website_score, predicted_score, error, abs_error))
+            conn.commit()
+
+        logger.info(f"Calibration: website={website_score:+.4f}, predicted={predicted_score:+.4f}, error={error:+.4f}")
 
     def get_game_count(self) -> dict:
         """Get count of games by result."""

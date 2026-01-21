@@ -71,7 +71,7 @@ signal.signal(signal.SIGTERM, _signal_handler)
 signal.signal(signal.SIGINT, _signal_handler)
 
 from snowdrop_tangled_agents.strategy.petersen_strategy import PetersenStrategy
-from snowdrop_tangled_agents.strategy.mcts_strategy import MCTSStrategy, HybridStrategy
+from snowdrop_tangled_agents.strategy.mcts_strategy import MCTSStrategy, HybridStrategy, evaluate_terminal_state
 from snowdrop_tangled_agents.stats import get_collector, queries as stats_queries
 
 
@@ -873,6 +873,7 @@ class WebPlayer:
         time.sleep(2)
         final_score = self.read_score()
         result = self.get_outcome()
+        terminal_state = self.read_board()
 
         # Record game end to stats database
         self.stats_collector.end_game(
@@ -880,6 +881,20 @@ class WebPlayer:
             result=result,
             final_score=final_score
         )
+
+        # Calibration: compare our terminal evaluation to website score
+        if terminal_state.count('-') == 0:  # All edges colored
+            try:
+                predicted_score = evaluate_terminal_state(terminal_state)
+                self.stats_collector.record_calibration(
+                    game_id=self.current_game_id,
+                    terminal_state=terminal_state,
+                    website_score=final_score,
+                    predicted_score=predicted_score
+                )
+                self.logger.info(f"Calibration: predicted={predicted_score:+.4f}, actual={final_score:+.4f}, error={predicted_score - final_score:+.4f}")
+            except Exception as e:
+                self.logger.warning(f"Calibration error: {e}")
 
         # Log detailed game summary
         self.logger.info(f"=" * 40)
@@ -933,12 +948,19 @@ def main():
                         help="Maximum MCTS iterations per move")
     parser.add_argument("--stats", action="store_true",
                         help="Show statistics summary and exit (no games played)")
+    parser.add_argument("--calibration", action="store_true",
+                        help="Show adjudicator calibration report and exit (no games played)")
 
     args = parser.parse_args()
 
     # If --stats flag, just show stats and exit
     if args.stats:
         stats_queries.print_summary()
+        return
+
+    # If --calibration flag, show calibration report and exit
+    if args.calibration:
+        stats_queries.print_calibration_report()
         return
 
     level = "DEBUG" if args.debug else "INFO"

@@ -404,6 +404,210 @@ def get_opponent_patterns(
     }
 
 
+def get_calibration_summary(db_path: Optional[Path] = None) -> dict:
+    """
+    Get summary statistics for adjudicator calibration.
+
+    Returns:
+        Dict with calibration metrics
+    """
+    db_path = db_path or DEFAULT_DB_PATH
+
+    with sqlite3.connect(db_path) as conn:
+        # Check if calibration table exists and has data
+        cursor = conn.execute("""
+            SELECT COUNT(*) FROM sqlite_master
+            WHERE type='table' AND name='calibration'
+        """)
+        if cursor.fetchone()[0] == 0:
+            return {'count': 0}
+
+        cursor = conn.execute("""
+            SELECT
+                COUNT(*) as count,
+                AVG(error) as mean_error,
+                AVG(abs_error) as mean_abs_error,
+                MAX(abs_error) as max_abs_error,
+                MIN(error) as min_error,
+                MAX(error) as max_error,
+                AVG(website_score) as avg_website_score,
+                AVG(predicted_score) as avg_predicted_score
+            FROM calibration
+        """)
+        row = cursor.fetchone()
+
+        if row[0] == 0:
+            return {'count': 0}
+
+        # Get error distribution
+        cursor = conn.execute("""
+            SELECT
+                CASE
+                    WHEN abs_error < 0.01 THEN 'exact'
+                    WHEN abs_error < 0.1 THEN 'close'
+                    WHEN abs_error < 0.5 THEN 'moderate'
+                    ELSE 'large'
+                END as error_category,
+                COUNT(*) as count
+            FROM calibration
+            GROUP BY error_category
+        """)
+        error_dist = {r[0]: r[1] for r in cursor.fetchall()}
+
+        return {
+            'count': row[0],
+            'mean_error': row[1] or 0,
+            'mean_abs_error': row[2] or 0,
+            'max_abs_error': row[3] or 0,
+            'min_error': row[4] or 0,
+            'max_error': row[5] or 0,
+            'avg_website_score': row[6] or 0,
+            'avg_predicted_score': row[7] or 0,
+            'error_distribution': error_dist
+        }
+
+
+def get_calibration_details(
+    db_path: Optional[Path] = None,
+    limit: int = 20
+) -> list[dict]:
+    """
+    Get detailed calibration records.
+
+    Args:
+        db_path: Path to database
+        limit: Maximum records to return
+
+    Returns:
+        List of calibration records sorted by error magnitude
+    """
+    db_path = db_path or DEFAULT_DB_PATH
+
+    with sqlite3.connect(db_path) as conn:
+        # Check if calibration table exists
+        cursor = conn.execute("""
+            SELECT COUNT(*) FROM sqlite_master
+            WHERE type='table' AND name='calibration'
+        """)
+        if cursor.fetchone()[0] == 0:
+            return []
+
+        cursor = conn.execute("""
+            SELECT
+                c.game_id,
+                c.terminal_state,
+                c.website_score,
+                c.predicted_score,
+                c.error,
+                c.abs_error,
+                g.result,
+                c.timestamp
+            FROM calibration c
+            LEFT JOIN games g ON c.game_id = g.id
+            ORDER BY c.abs_error DESC
+            LIMIT ?
+        """, (limit,))
+
+        return [
+            {
+                'game_id': row[0],
+                'terminal_state': row[1],
+                'website_score': row[2],
+                'predicted_score': row[3],
+                'error': row[4],
+                'abs_error': row[5],
+                'result': row[6],
+                'timestamp': row[7]
+            }
+            for row in cursor.fetchall()
+        ]
+
+
+def print_calibration_report(db_path: Optional[Path] = None):
+    """Print a detailed calibration analysis report."""
+    db_path = db_path or DEFAULT_DB_PATH
+
+    summary = get_calibration_summary(db_path)
+
+    print("\n" + "=" * 60)
+    print("ADJUDICATOR CALIBRATION REPORT")
+    print("=" * 60)
+
+    if summary['count'] == 0:
+        print("\nNo calibration data collected yet.")
+        print("Play games to collect terminal state comparisons.")
+        print("=" * 60)
+        return
+
+    print(f"\nTotal Calibrations: {summary['count']}")
+    print(f"\nError Metrics (predicted - website):")
+    print(f"  Mean Error:     {summary['mean_error']:+.4f}")
+    print(f"  Mean Abs Error: {summary['mean_abs_error']:.4f}")
+    print(f"  Max Abs Error:  {summary['max_abs_error']:.4f}")
+    print(f"  Error Range:    [{summary['min_error']:+.4f}, {summary['max_error']:+.4f}]")
+
+    print(f"\nScore Averages:")
+    print(f"  Website Avg:    {summary['avg_website_score']:+.4f}")
+    print(f"  Predicted Avg:  {summary['avg_predicted_score']:+.4f}")
+
+    dist = summary.get('error_distribution', {})
+    if dist:
+        total = sum(dist.values())
+        print(f"\nError Distribution:")
+        for cat, count in sorted(dist.items()):
+            pct = count / total * 100 if total > 0 else 0
+            bar = "#" * int(pct / 2)
+            label = {
+                'exact': '< 0.01 (exact)',
+                'close': '< 0.10 (close)',
+                'moderate': '< 0.50 (moderate)',
+                'large': '>= 0.50 (large)'
+            }.get(cat, cat)
+            print(f"  {label:20s} {count:3d} ({pct:5.1f}%) {bar}")
+
+    # Show worst calibrations
+    print("\n" + "-" * 60)
+    print("LARGEST CALIBRATION ERRORS")
+    print("-" * 60)
+
+    details = get_calibration_details(db_path, limit=10)
+    if details:
+        print(f"{'State':<17} {'Website':>8} {'Predict':>8} {'Error':>8} {'Result':>6}")
+        for d in details:
+            state = d['terminal_state'][:15] if d['terminal_state'] else '?'*15
+            result = (d['result'] or '?')[:6]
+            print(f"{state:<17} {d['website_score']:+8.4f} {d['predicted_score']:+8.4f} {d['error']:+8.4f} {result:>6}")
+
+    # Interpretation
+    print("\n" + "-" * 60)
+    print("INTERPRETATION")
+    print("-" * 60)
+
+    mean_abs = summary['mean_abs_error']
+    if mean_abs < 0.05:
+        print("Excellent calibration - predictions closely match website.")
+    elif mean_abs < 0.2:
+        print("Good calibration - minor systematic differences.")
+    elif mean_abs < 0.5:
+        print("Moderate calibration - noticeable prediction errors.")
+        print("Consider investigating large-error cases.")
+    else:
+        print("POOR CALIBRATION - significant prediction errors!")
+        print("Our terminal state evaluation may be fundamentally wrong.")
+        print("This could explain poor game performance.")
+
+    mean_err = summary['mean_error']
+    if abs(mean_err) > 0.1:
+        if mean_err > 0:
+            print(f"\nSystematic OVER-prediction by {mean_err:+.3f}")
+            print("We think positions are better than they are.")
+        else:
+            print(f"\nSystematic UNDER-prediction by {mean_err:+.3f}")
+            print("We think positions are worse than they are.")
+
+    print("\n" + "=" * 60)
+
+
 def print_summary(db_path: Optional[Path] = None):
     """Print a summary of collected statistics."""
     db_path = db_path or DEFAULT_DB_PATH
