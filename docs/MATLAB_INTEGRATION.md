@@ -88,6 +88,28 @@ snowdrop_tangled_agents/
     └── test_matlab_integration.py  # Regression test suite
 ```
 
+### MATLAB Source Files
+
+All MATLAB source files are located in `C:\Users\murr2\MATLAB Drive\tangled_strategies\`:
+
+| File | Purpose |
+|------|---------|
+| `db_utils.m` | Database connection utilities (connect, fetch, exec, close) |
+| `build_features.m` | 50-element feature vector construction for NN input |
+| `prepare_dataset.m` | Training data preparation with augmentation |
+| `train_value_network.m` | Value network training (FC 128→64→32→tanh) |
+| `train_policy_network.m` | Policy network training (FC 128→64→30 softmax) |
+| `evaluate_position_nn.m` | Neural network inference for position evaluation |
+| `extract_opponent_features.m` | 20-element opponent feature extraction |
+| `cluster_opponents.m` | K-means clustering with KNN classifier output |
+| `classify_opponent.m` | Opponent style classification using trained model |
+| `adapt_to_opponent.m` | Prior adaptation based on opponent style |
+| `build_packages.m` | Compiler SDK packaging script |
+| `build_remaining_packages.m` | Build opponent_model + training packages |
+| `evaluate_position.m` | Heuristic position evaluation (non-NN) |
+| `sa_evaluate.m` | Simulated annealing evaluation helper |
+| `identify_opponent.m` | Opponent identification helper |
+
 ### Key Classes
 
 #### UnifiedMatlabBridge (`unified_bridge.py`)
