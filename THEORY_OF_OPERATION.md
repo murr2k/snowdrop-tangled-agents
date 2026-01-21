@@ -10,9 +10,12 @@ and learning mechanisms.
 2. [The Tangled Game](#the-tangled-game)
 3. [Petersen Graph Structure](#petersen-graph-structure)
 4. [Strategy Engine](#strategy-engine)
-5. [Web Automation](#web-automation)
-6. [Learning System](#learning-system)
-7. [Architecture](#architecture)
+5. [MCTS Strategy](#mcts-strategy)
+6. [Hybrid Strategy](#hybrid-strategy)
+7. [Web Automation](#web-automation)
+8. [Learning System](#learning-system)
+9. [Statistics Collection](#statistics-collection)
+10. [Architecture](#architecture)
 
 ---
 
@@ -31,7 +34,11 @@ snowdrop-tangled-agents/
 │   │   ├── petersen_agent.py    # SDK-compatible agent wrapper
 │   │   └── random_randy.py      # Baseline random agent
 │   ├── strategy/
-│   │   └── petersen_strategy.py # Core strategy engine
+│   │   ├── petersen_strategy.py # Heuristic strategy engine
+│   │   └── mcts_strategy.py     # MCTS and Hybrid strategies
+│   ├── stats/
+│   │   ├── collector.py         # SQLite stats collection
+│   │   └── queries.py           # Analysis query functions
 │   └── playing_games/
 │       └── run_local_parallel_tournament.py
 ├── play_tangled.py              # Web automation for tangled-game.com
@@ -210,6 +217,148 @@ def choose_color(edge, score):
 
 ---
 
+## MCTS Strategy
+
+Located in `snowdrop_tangled_agents/strategy/mcts_strategy.py`
+
+### Overview
+
+Monte Carlo Tree Search (MCTS) provides deeper lookahead than heuristic-only approaches.
+This implementation uses UCB1 with Progressive Bias to compete against MCTS-based opponents
+like Melissa.
+
+### Key Features
+
+- **Progressive Bias**: Heuristic priors guide early exploration, decay with visits
+- **Action Prioritization**: Good moves expanded first based on domain knowledge
+- **Domain-Specific Rollouts**: Uses Tangled heuristics instead of random play
+- **Terminal State Evaluation**: Brute-force 2^10 spin enumeration for exact scores
+
+### UCB1 with Progressive Bias
+
+```
+UCB1(node) = Q/N + c*sqrt(ln(parent.N)/N) + w*(prior - 0.5)/(N + 1)
+
+Where:
+  Q = total value accumulated
+  N = visit count
+  c = exploration constant (√2 ≈ 1.414)
+  w = prior weight (decays with visits)
+  prior = heuristic action prior [0, 1]
+```
+
+### Action Priors
+
+```python
+def compute_action_prior(edge, color, is_our_turn):
+    if edge in MY_EDGES:
+        return 0.99 if color == 'G' else 0.01  # Always Green
+    elif edge in OPP_EDGES:
+        return 0.95 if color == 'P' else 0.05  # Always Purple
+    elif edge in GOOD_PURPLE_EDGES and color == 'P':
+        return 0.80  # Favor Purple on inner edges
+    elif edge in BAD_PURPLE_EDGES and color == 'P':
+        return 0.10  # Avoid Purple on problematic edges
+    # ... additional heuristics
+```
+
+### Edge Classifications (Empirically Derived)
+
+| Category | Edges | Strategy |
+|----------|-------|----------|
+| MY_EDGES | E9, E10, E11 | Always Green |
+| OPP_EDGES | E5, E12, E13 | Always Purple |
+| GOOD_PURPLE | E0, E1, E3 | Purple often works |
+| BAD_PURPLE | E2, E4, E6, E7, E8, E14 | Avoid Purple |
+
+### Terminal State Evaluation
+
+```python
+def evaluate_terminal_state(state: str) -> float:
+    """Enumerate all 2^10 spin configurations."""
+    best_score = float('-inf')
+    for config in range(1 << 10):
+        spins = [2 * ((config >> i) & 1) - 1 for i in range(10)]
+        score = sum(
+            (1 if spins[v1] == spins[v2] else -1) if color == 'G'
+            else (1 if spins[v1] != spins[v2] else -1)
+            for (v1, v2), color in zip(EDGES, state)
+        )
+        best_score = max(best_score, score)
+    return best_score / 15  # Normalize
+```
+
+---
+
+## Hybrid Strategy
+
+Combines MCTS with heuristic opening, exhaustive endgame, and learning.
+
+### Strategy Phases
+
+```
+Game Phase      Edges Left    Strategy
+─────────────────────────────────────────
+Opening         15-11         Heuristic sequence (E9→E10→E11→E5 Green/Purple)
+Midgame         10-3          MCTS with Progressive Bias
+Endgame         2-1           Exhaustive minimax search
+```
+
+### Opening Sequence
+
+```python
+opening_sequence = [
+    (9, 'G'),   # E9: Secure our spoke first
+    (10, 'G'),  # E10: Hub connection
+    (11, 'G'),  # E11: Complete vertex 5 protection
+    (5, 'P'),   # E5: Attack opponent's spoke
+    (12, 'P'),  # E12: Attack hub-to-opponent connection
+    (13, 'P'),  # E13: Complete attack on vertex 7
+]
+```
+
+### Endgame Minimax
+
+When ≤2 edges remain, exhaustive search replaces MCTS:
+
+```python
+def _exhaustive_endgame(state):
+    best_move, best_value = None, float('-inf')
+    for edge in available_edges:
+        for color in ['G', 'P']:
+            value = minimax(apply_move(state, edge, color),
+                           is_our_turn=False, depth=4)
+            if value > best_value:
+                best_value, best_move = value, (edge, color)
+    return best_move
+```
+
+### Adaptive Time Allocation
+
+```python
+if grey_count <= 4:
+    mcts.time_limit = base_time * 3  # More time for critical moves
+else:
+    mcts.time_limit = base_time
+```
+
+### Learning Integration
+
+The Hybrid strategy records moves and learns from outcomes:
+
+```python
+def record_move(edge, color, score_after):
+    self.move_history.append((edge, color, score_after))
+
+def end_game(result, final_score):
+    reward = compute_reward(result, final_score)
+    for i, (edge, color, _) in enumerate(self.move_history):
+        discount = 0.9 ** (len(history) - i - 1)
+        self.edge_adjustments[edge] += learning_rate * reward * discount
+```
+
+---
+
 ## Web Automation
 
 ### play_tangled.py
@@ -366,6 +515,185 @@ if os.path.exists(params_path):
 
 ---
 
+## Statistics Collection
+
+Located in `snowdrop_tangled_agents/stats/`
+
+### Overview
+
+SQLite-based statistics collection enables analysis of game patterns, edge effectiveness,
+and opponent behavior to guide strategy improvements.
+
+### Database Schema
+
+```sql
+-- Game metadata
+CREATE TABLE games (
+    id TEXT PRIMARY KEY,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    opponent TEXT NOT NULL,
+    graph TEXT DEFAULT 'petersen',
+    result TEXT,           -- 'win', 'loss', 'draw'
+    final_score REAL,
+    total_moves INTEGER,
+    strategy TEXT,         -- 'hybrid', 'mcts', 'heuristic'
+    mcts_time REAL
+);
+
+-- Move-by-move data
+CREATE TABLE moves (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    game_id TEXT REFERENCES games(id),
+    move_number INTEGER,
+    player TEXT,           -- 'us', 'opponent'
+    edge INTEGER,          -- 0-14
+    color TEXT,            -- 'G', 'P'
+    score_after REAL,
+    score_delta REAL,
+    state_after TEXT       -- 15-char board state
+);
+```
+
+### Database Location
+
+```
+~/.tangled/game_stats.db
+```
+
+### StatsCollector Class
+
+```python
+from snowdrop_tangled_agents.stats import get_collector
+
+collector = get_collector()
+
+# Start tracking a game
+game_id = collector.start_game(opponent="melissa", strategy="hybrid")
+
+# Record each move
+collector.record_move(
+    game_id=game_id,
+    move_number=1,
+    player="us",
+    edge=9,
+    color="G",
+    score_after=1.02,
+    score_before=0.0,
+    state_after="--------G------"
+)
+
+# End game
+collector.end_game(game_id, result="win", final_score=2.04)
+```
+
+### Analysis Queries
+
+```python
+from snowdrop_tangled_agents.stats import queries
+
+# Edge effectiveness (which edge/color combos work best)
+edges = queries.get_edge_effectiveness(min_games=3)
+for e in edges:
+    print(f"E{e.edge} {e.color}: delta={e.avg_delta:+.3f}, win_rate={e.win_rate:.1%}")
+
+# Score progression by result
+win_prog = queries.get_score_progression(result='win')
+loss_prog = queries.get_score_progression(result='loss')
+
+# Winning patterns at specific move
+patterns = queries.get_winning_patterns(move_number=4)
+
+# Opening sequence analysis
+openings = queries.get_opening_sequences(num_moves=4)
+
+# Critical positions (large score swings)
+critical = queries.get_critical_positions(score_swing_threshold=0.5)
+
+# Opponent behavior analysis
+opp = queries.get_opponent_patterns(opponent="melissa")
+```
+
+### CLI Access
+
+```bash
+# View statistics summary
+python play_tangled.py --stats
+
+# Stats are automatically shown after game sessions
+python play_tangled.py --games 10
+```
+
+### Example Output
+
+```
+============================================================
+GAME STATISTICS SUMMARY
+============================================================
+
+Total Games: 51
+  Wins:   2 (3.9%)
+  Losses: 42 (82.4%)
+  Draws:  7 (13.7%)
+
+------------------------------------------------------------
+TOP EDGE/COLOR COMBINATIONS (by avg score delta)
+------------------------------------------------------------
+Edge     Color    Avg Delta    Win Rate     Games
+E9       G        +0.982       3.9%         51
+E10      G        +0.043       3.9%         48
+E11      G        -0.015       4.2%         47
+E12      P        -0.456       3.8%         26
+
+------------------------------------------------------------
+SCORE PROGRESSION (Wins vs Losses)
+------------------------------------------------------------
+Move     Win Avg      Loss Avg
+1        +1.029       +0.994
+2        +1.487       +0.876
+3        +1.134       +0.654
+4        +0.690       +0.212
+5        +0.413       -0.098
+```
+
+### Integration with play_tangled.py
+
+Statistics are collected automatically during gameplay:
+
+```python
+class WebPlayer:
+    def __init__(self):
+        self.stats_collector = get_collector()
+
+    def play_game(self, opponent):
+        # Start game tracking
+        self.current_game_id = self.stats_collector.start_game(
+            opponent=opponent,
+            strategy=self.strategy_type
+        )
+
+        # ... gameplay loop ...
+
+        # Record each move
+        self.stats_collector.record_move(
+            game_id=self.current_game_id,
+            move_number=move_count,
+            player="us",
+            edge=edge,
+            color=color,
+            score_after=new_score,
+            score_before=prev_score
+        )
+
+        # End game
+        self.stats_collector.end_game(
+            game_id=self.current_game_id,
+            result=result,
+            final_score=final_score
+        )
+```
+
+---
+
 ## Architecture
 
 ### Data Flow
@@ -470,8 +798,22 @@ poetry run python snowdrop_tangled_agents/playing_games/run_local_parallel_tourn
 
 ## Future Improvements
 
-1. **Better Opening Book**: Analyze successful openings across many games
-2. **Monte Carlo Tree Search**: Implement MCTS for deeper lookahead
-3. **Neural Network Policy**: Train a neural net on game outcomes
-4. **Multi-Graph Support**: Extend strategy to other X-Prize graphs
-5. **Opponent Modeling**: Build models of specific opponents' tendencies
+### Completed
+
+- ~~Monte Carlo Tree Search~~: Implemented with Progressive Bias (mcts_strategy.py)
+- ~~Opening Book~~: Heuristic opening sequence in HybridStrategy
+- ~~Statistics Database~~: SQLite-based game analytics (stats module)
+
+### In Progress
+
+- **Pattern Learning**: Use collected statistics to identify winning patterns
+- **Opening Book Refinement**: Analyze successful openings from database
+
+### Planned
+
+1. **Neural Network Policy**: Train a neural net on game outcomes for move evaluation
+2. **Multi-Graph Support**: Extend strategy to other X-Prize graphs (2, 12, 18, 19, 20)
+3. **Advanced Opponent Modeling**: Build predictive models of Melissa's responses
+4. **Adjudicator Calibration**: Compare our terminal evaluation to actual game scores
+5. **Real-Time Dashboard**: Visualize statistics and game patterns
+6. **Opening Response Table**: Pre-compute optimal responses to opponent's first moves

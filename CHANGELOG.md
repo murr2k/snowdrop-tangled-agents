@@ -9,6 +9,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **MCTS Strategy Engine** (`snowdrop_tangled_agents/strategy/mcts_strategy.py`)
+  - Monte Carlo Tree Search with UCB1 selection for deep lookahead
+  - Progressive Bias: heuristic priors guide early exploration, decay with visits
+  - Action prioritization: good moves expanded first based on domain knowledge
+  - Domain-specific rollout policy using Tangled heuristics
+  - Terminal state evaluation via brute-force 2^10 spin enumeration
+  - Edge classifications derived from 50+ game empirical analysis:
+    - GOOD_PURPLE_EDGES: E0, E1, E3, E5, E12, E13
+    - BAD_PURPLE_EDGES: E2, E4, E6, E7, E8, E14
+
+- **Hybrid Strategy** (`snowdrop_tangled_agents/strategy/mcts_strategy.py`)
+  - Combines heuristic opening, MCTS midgame, and exhaustive endgame
+  - Opening sequence: E9→E10→E11 Green, E5→E12→E13 Purple
+  - Adaptive time allocation: 3x more time for critical late-game moves
+  - Exhaustive minimax for positions with ≤2 edges remaining
+  - REINFORCE-style learning from game outcomes
+  - Edge adjustment tracking across games
+
+- **SQLite Statistics Collection** (`snowdrop_tangled_agents/stats/`)
+  - `collector.py`: StatsCollector class for game/move recording
+  - `queries.py`: Analysis functions for pattern discovery
+  - Database schema: games table + moves table with full indexing
+  - Automatic integration with play_tangled.py
+  - CLI access: `python play_tangled.py --stats`
+  - Analysis queries:
+    - `get_edge_effectiveness()`: Edge/color performance ranking
+    - `get_winning_patterns()`: Move patterns leading to wins
+    - `get_score_progression()`: Score trajectory by game result
+    - `get_opening_sequences()`: Common openings and outcomes
+    - `get_critical_positions()`: Large score swing analysis
+    - `get_opponent_patterns()`: Opponent behavior analysis
+
+- **Strategy CLI Options** (`play_tangled.py`)
+  - `--strategy {heuristic,mcts,hybrid}`: Select strategy type
+  - `--mcts-time SECONDS`: MCTS time limit per move
+  - `--mcts-iterations N`: Maximum MCTS iterations
+  - `--stats`: Show statistics summary and exit
+
 - **Petersen Strategy Engine** (`snowdrop_tangled_agents/strategy/petersen_strategy.py`)
   - Parameterized strategy calculator for Petersen graph games
   - Edge priority scoring based on vertex ownership (MY_VERTEX=5, OPP_VERTEX=7, HUB_VERTEX=6)

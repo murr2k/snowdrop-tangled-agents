@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Play Tangled on tangled-game.com using PetersenStrategy.
+Play Tangled on tangled-game.com using configurable strategies.
 
 Port of the working browser JS bot (V28.2) to Python/Playwright.
 Uses the same robust DOM interaction patterns:
@@ -8,10 +8,17 @@ Uses the same robust DOM interaction patterns:
 - Direct MouseEvent dispatch
 - Text-based turn/game-over detection
 
+Strategies:
+- heuristic: Fast parameterized strategy with learning
+- mcts: Monte Carlo Tree Search (fight fire with fire!)
+- hybrid: MCTS with heuristic opening book
+
 Usage:
-    python play_tangled.py                    # Play 5 games vs Melissa
-    python play_tangled.py --opponent randy   # Play vs Randy
-    python play_tangled.py --games 10         # Play 10 games
+    python play_tangled.py                        # Play 5 games vs Melissa (heuristic)
+    python play_tangled.py --strategy mcts        # Use MCTS strategy
+    python play_tangled.py --strategy hybrid      # Use hybrid strategy
+    python play_tangled.py --opponent randy       # Play vs Randy
+    python play_tangled.py --games 10             # Play 10 games
 """
 
 import argparse
@@ -64,6 +71,8 @@ signal.signal(signal.SIGTERM, _signal_handler)
 signal.signal(signal.SIGINT, _signal_handler)
 
 from snowdrop_tangled_agents.strategy.petersen_strategy import PetersenStrategy
+from snowdrop_tangled_agents.strategy.mcts_strategy import MCTSStrategy, HybridStrategy
+from snowdrop_tangled_agents.stats import get_collector, queries as stats_queries
 
 
 # Vertex coordinates - from working JS bot (tangled-bot-v28.txt)
@@ -103,25 +112,51 @@ class WebPlayer:
         "melissa": "MCTS Melissa",
     }
 
-    def __init__(self, headless: bool = False, slow_mo: int = 100):
+    def __init__(
+        self,
+        headless: bool = False,
+        slow_mo: int = 100,
+        strategy_type: str = "heuristic",
+        mcts_time: float = 2.0,
+        mcts_iterations: int = 5000
+    ):
         self.username = os.getenv("TANGLED_USERNAME")
         self.password = os.getenv("TANGLED_PASSWORD")
         self.headless = headless
         self.slow_mo = slow_mo
+        self.strategy_type = strategy_type
 
         self.playwright = None
         self.browser = None
         self.context = None
         self.page = None
 
-        # Strategy
+        # Strategy initialization based on type
         params_path = Path.home() / ".tangled" / "petersen_params.json"
         params_path.parent.mkdir(parents=True, exist_ok=True)
         self.params_path = str(params_path)
-        self.strategy = PetersenStrategy(params_path=self.params_path)
+
+        if strategy_type == "mcts":
+            self.strategy = MCTSStrategy(
+                time_limit=mcts_time,
+                max_iterations=mcts_iterations
+            )
+        elif strategy_type == "hybrid":
+            self.strategy = HybridStrategy(
+                mcts_time_limit=mcts_time,
+                mcts_iterations=mcts_iterations
+            )
+        else:  # "heuristic" (default)
+            self.strategy = PetersenStrategy(params_path=self.params_path)
 
         self.score_history = []
         self.logger = logging.getLogger(__name__)
+        self.logger.info(f"Using strategy: {strategy_type}")
+
+        # Stats collection
+        self.stats_collector = get_collector()
+        self.current_game_id = None
+        self.mcts_time = mcts_time
 
     def start(self):
         global _active_player
@@ -730,6 +765,14 @@ class WebPlayer:
         """Play one complete game."""
         self.score_history = []
 
+        # Start stats tracking for this game
+        self.current_game_id = self.stats_collector.start_game(
+            opponent=opponent,
+            graph="petersen",
+            strategy=self.strategy_type,
+            mcts_time=self.mcts_time
+        )
+
         if not self.start_game(opponent):
             return {"result": None, "error": "Could not start game"}
 
@@ -800,7 +843,23 @@ class WebPlayer:
                 new_score = self.read_score()
                 self.score_history.append((edge, color, new_score))
                 self.logger.info(f"Move {move_count}: E{edge} {color} -> Score: {new_score:.4f}")
+
+                # Record move to stats database
+                self.stats_collector.record_move(
+                    game_id=self.current_game_id,
+                    move_number=move_count,
+                    player="us",
+                    edge=edge,
+                    color=color,
+                    score_after=new_score,
+                    score_before=prev_score,
+                    state_after=self.read_board()
+                )
                 prev_score = new_score
+
+                # Record move for learning (if strategy supports it)
+                if hasattr(self.strategy, 'record_move'):
+                    self.strategy.record_move(edge, color, new_score)
             else:
                 self.logger.error(f"Move E{edge} failed after {max_retries} attempts, marking as failed")
                 failed_edges.add(edge)
@@ -815,6 +874,13 @@ class WebPlayer:
         final_score = self.read_score()
         result = self.get_outcome()
 
+        # Record game end to stats database
+        self.stats_collector.end_game(
+            game_id=self.current_game_id,
+            result=result,
+            final_score=final_score
+        )
+
         # Log detailed game summary
         self.logger.info(f"=" * 40)
         self.logger.info(f"GAME OVER: {result.upper()}")
@@ -826,9 +892,22 @@ class WebPlayer:
             self.logger.info(f"  Move {i+1}: E{edge} {color_name} -> {score:.4f}")
         self.logger.info(f"=" * 40)
 
-        # Update strategy
-        self.strategy.update_from_trial(result, self.score_history, final_score)
-        self.strategy.save_params(self.params_path)
+        # Update strategy learning (for any strategy that supports it)
+        if self.strategy_type == "heuristic":
+            self.strategy.update_from_trial(result, self.score_history, final_score)
+            self.strategy.save_params(self.params_path)
+        elif hasattr(self.strategy, 'end_game'):
+            # HybridStrategy and others with learning support
+            self.strategy.end_game(result, final_score)
+
+        # Log MCTS stats if applicable
+        if hasattr(self.strategy, 'get_stats'):
+            stats = self.strategy.get_stats()
+            self.logger.info(f"MCTS Stats: {stats['iterations']} iterations in {stats['time']:.2f}s")
+            # Log game stats if available
+            if 'game_stats' in stats:
+                gs = stats['game_stats']
+                self.logger.info(f"Session Stats: {gs['wins']}W / {gs['losses']}L / {gs['draws']}D")
 
         return {
             "result": result,
@@ -846,14 +925,33 @@ def main():
     parser.add_argument("--debug", action="store_true")
     parser.add_argument("--keep-open", "-k", type=int, default=5,
                         help="Seconds to keep browser open after last game (0 to close immediately)")
+    parser.add_argument("--strategy", "-s", choices=["heuristic", "mcts", "hybrid"], default="heuristic",
+                        help="Strategy to use: heuristic (fast), mcts (Monte Carlo), hybrid (MCTS with opening)")
+    parser.add_argument("--mcts-time", type=float, default=2.0,
+                        help="MCTS time limit per move in seconds")
+    parser.add_argument("--mcts-iterations", type=int, default=5000,
+                        help="Maximum MCTS iterations per move")
+    parser.add_argument("--stats", action="store_true",
+                        help="Show statistics summary and exit (no games played)")
 
     args = parser.parse_args()
+
+    # If --stats flag, just show stats and exit
+    if args.stats:
+        stats_queries.print_summary()
+        return
 
     level = "DEBUG" if args.debug else "INFO"
     coloredlogs.install(level=level, fmt="%(asctime)s %(levelname)s %(message)s")
 
     # Use context manager for automatic cleanup on exit/kill/interrupt
-    with WebPlayer(headless=False, slow_mo=args.slow_mo) as player:
+    with WebPlayer(
+        headless=False,
+        slow_mo=args.slow_mo,
+        strategy_type=args.strategy,
+        mcts_time=args.mcts_time,
+        mcts_iterations=args.mcts_iterations
+    ) as player:
         player.login()
 
         results = []
@@ -889,6 +987,9 @@ def main():
         draws = sum(1 for r in results if r.get("result") == "draw")
         print(f"TOTAL: {wins}W / {losses}L / {draws}D")
         print("=" * 50)
+
+        # Show database statistics
+        stats_queries.print_summary()
 
         # Keep browser open to see results
         if args.keep_open > 0:
