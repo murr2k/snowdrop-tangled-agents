@@ -1,0 +1,285 @@
+EDGES = [
+    (0,2), (0,3), (0,6), (1,3), (1,4),
+    (1,7), (2,4), (2,8), (3,9), (4,5),
+    (5,6), (5,9), (6,7), (7,8), (8,9),
+]
+
+# =============================================================================
+# TUNABLE COEFFICIENTS - Updated from trial results
+# =============================================================================
+PARAMS = {
+    # Priority weights (higher = do first)
+    "w_my_edge": 10.0,          # Weight for securing my vertex edges
+    "w_opp_edge": 8.0,          # Weight for attacking opponent edges
+    "w_hub_edge": 5.0,          # Weight for hub (vertex 6) edges
+    "w_neutral": 1.0,           # Weight for neutral edges
+    
+    # Hub preference (0.0 = ignore hub, 1.0 = always prefer hub)
+    "hub_priority": 0.8,        # Prefer hub edges within category
+    
+    # Color decision thresholds
+    "green_threshold": 1.0,     # If score > this, play safe (Green)
+    "purple_threshold": -1.0,   # If score < this, play aggressive (Purple)
+    
+    # Adaptive factors
+    "momentum_weight": 0.5,     # How much recent score trend affects decisions
+    "opp_pattern_weight": 0.3,  # How much opponent's patterns affect targeting
+    
+    # Edge-specific value adjustments (learned from score swings)
+    "edge_values": [
+        0.0,  # E0  [0-2]
+        0.0,  # E1  [0-3]
+        0.5,  # E2  [0-6]  hub edge
+        0.0,  # E3  [1-3]
+        0.0,  # E4  [1-4]
+        0.7,  # E5  [1-7]  opponent edge
+        0.0,  # E6  [2-4]
+        0.0,  # E7  [2-8]
+        0.0,  # E8  [3-9]
+        0.8,  # E9  [4-5]  my edge
+        1.0,  # E10 [5-6]  my hub edge (highest)
+        0.8,  # E11 [5-9]  my edge
+        0.9,  # E12 [6-7]  opponent hub edge
+        0.7,  # E13 [7-8]  opponent edge
+        0.0,  # E14 [8-9]
+    ],
+    
+    # Strategy mode: "defensive", "aggressive", "adaptive"
+    "strategy_mode": "adaptive",
+    
+    # Opening sequence override (None = use algorithm)
+    # Format: [(edge, color), ...] for first N moves
+    "opening_sequence": None,
+}
+
+
+# After draw vs MCTS Melissa:
+PARAMS_v2 = {
+    "w_my_edge": 10.0,          # Keep - securing edges worked
+    "w_opp_edge": 8.0,          # Keep
+    "w_hub_edge": 5.0,          # Keep
+    "hub_priority": 0.8,        # Keep
+    "green_threshold": 1.0,     # Consider lowering - we were conservative
+    "purple_threshold": -1.0,   # Keep
+    
+    # Edge value adjustments based on game:
+    "edge_values": [
+        0.0,   # E0  
+        0.0,   # E1  (couldn't play - different grey)
+        0.6,   # E2  hub edge - played successfully
+        0.1,   # E3  
+        0.0,   # E4  (Melissa played purple)
+        0.8,   # E5  our purple attack worked
+        0.1,   # E6  final move
+        0.0,   # E7  
+        0.0,   # E8  
+        0.9,   # E9  my edge
+        1.0,   # E10 my hub edge (opening move)
+        0.9,   # E11 my edge
+        0.8,   # E12 opponent hub - she played it green
+        0.6,   # E13 opponent edge - she opened with green
+        0.0,   # E14
+    ],
+}
+
+
+# =============================================================================
+# HELPER FUNCTIONS
+# =============================================================================
+
+def edges_of_vertex(v):
+    """Return list of edge indices touching vertex v."""
+    return [i for i, (a, b) in enumerate(EDGES) if a == v or b == v]
+
+def compute_momentum(score_history, window=4):
+    """Compute recent score trend. Positive = improving, negative = declining."""
+    if len(score_history) < 2:
+        return 0.0
+    recent = score_history[-window:] if len(score_history) >= window else score_history
+    scores = [s for _, _, s in recent]
+    if len(scores) < 2:
+        return 0.0
+    return (scores[-1] - scores[0]) / len(scores)
+
+def opponent_edge_preference(score_history, opp_edges):
+    """Analyze which edges opponent seems to value (big negative swings after their moves)."""
+    # Identify opponent moves: score decreased (they gained)
+    opp_valued = {}
+    for i in range(1, len(score_history)):
+        prev_score = score_history[i-1][2] if i > 0 else 0
+        curr_edge, curr_color, curr_score = score_history[i]
+        delta = curr_score - prev_score
+        # Large negative delta on their turn = they valued that move
+        if delta < -0.3:
+            opp_valued[curr_edge] = opp_valued.get(curr_edge, 0) + abs(delta)
+    return opp_valued
+
+def score_edge(idx, state, score, score_history, my_edges, opp_edges, hub_edges, params):
+    """Score an edge for prioritization. Higher = play first."""
+    if state[idx] != '-':
+        return -999  # Already played
+    
+    base = params["edge_values"][idx]
+    
+    # Category bonuses
+    if idx in my_edges:
+        base += params["w_my_edge"]
+    elif idx in opp_edges:
+        base += params["w_opp_edge"]
+    elif idx in hub_edges:
+        base += params["w_hub_edge"]
+    else:
+        base += params["w_neutral"]
+    
+    # Hub preference within category
+    if idx in hub_edges:
+        base += params["hub_priority"]
+    
+    # Momentum adjustment
+    momentum = compute_momentum(score_history)
+    base += momentum * params["momentum_weight"]
+    
+    # Opponent pattern adjustment
+    opp_prefs = opponent_edge_preference(score_history, opp_edges)
+    if idx in opp_prefs:
+        base += opp_prefs[idx] * params["opp_pattern_weight"]
+    
+    return base
+
+def choose_color(idx, state, score, my_edges, opp_edges, params):
+    """Decide Green or Purple for the chosen edge."""
+    mode = params["strategy_mode"]
+    
+    # Fixed rules: my edges = Green, opponent edges = Purple
+    if idx in my_edges:
+        return 'G'
+    if idx in opp_edges:
+        return 'P'
+    
+    # Neutral edges: depends on mode and score
+    if mode == "defensive":
+        return 'G'
+    elif mode == "aggressive":
+        return 'P'
+    else:  # adaptive
+        if score > params["green_threshold"]:
+            return 'G'  # Winning: play safe
+        elif score < params["purple_threshold"]:
+            return 'P'  # Losing: play aggressive
+        else:
+            return 'G'  # Close game: default safe
+
+# =============================================================================
+# MAIN CALCULATOR
+# =============================================================================
+
+def calculate_move(state, score, score_history, my_vertex=5, opp_vertex=7, params=None):
+    """
+    Calculate optimal move given game state and tunable parameters.
+    
+    Args:
+        state: 15-char string, 'G'/'P'/'-' for each edge
+        score: Current game score (positive = Player 1 ahead)
+        score_history: List of (edge_index, color, score_after) tuples
+        my_vertex: Player 1's vertex (default 5)
+        opp_vertex: Player 2's vertex (default 7)
+        params: Parameter dict (uses PARAMS global if None)
+    
+    Returns:
+        (edge_index, color) or None if game over
+    """
+    if params is None:
+        params = PARAMS
+    
+    grey_indices = [i for i, c in enumerate(state) if c == '-']
+    if not grey_indices:
+        return None
+    
+    my_edges = edges_of_vertex(my_vertex)
+    opp_edges = edges_of_vertex(opp_vertex)
+    hub_edges = edges_of_vertex(6)
+    
+    # Check for opening sequence override
+    move_num = 15 - len(grey_indices)  # 0-indexed move number
+    if params["opening_sequence"] and move_num < len(params["opening_sequence"]):
+        forced = params["opening_sequence"][move_num]
+        if state[forced[0]] == '-':
+            return forced
+    
+    # Score all available edges
+    edge_scores = []
+    for idx in grey_indices:
+        s = score_edge(idx, state, score, score_history, my_edges, opp_edges, hub_edges, params)
+        edge_scores.append((s, idx))
+    
+    # Pick highest scoring edge
+    edge_scores.sort(reverse=True)
+    best_edge = edge_scores[0][1]
+    
+    # Choose color
+    color = choose_color(best_edge, state, score, my_edges, opp_edges, params)
+    
+    return (best_edge, color)
+
+# =============================================================================
+# TRIAL RESULTS UPDATER
+# =============================================================================
+
+def update_params_from_trial(params, game_result, score_history, final_score):
+    """
+    Update parameters based on trial outcome.
+    
+    Args:
+        params: Current parameter dict
+        game_result: 'win', 'loss', or 'draw'
+        score_history: Full game history
+        final_score: Final game score
+    
+    Returns:
+        Updated params dict
+    """
+    new_params = params.copy()
+    new_params["edge_values"] = params["edge_values"].copy()
+    
+    learning_rate = 0.1
+    
+    if game_result == 'win':
+        # Reinforce: increase weights on edges we played
+        for edge, color, _ in score_history:
+            if color in ('G', 'P'):  # Our moves
+                new_params["edge_values"][edge] += learning_rate
+    
+    elif game_result == 'loss':
+        # Analyze: which moves preceded big negative swings?
+        for i in range(1, len(score_history)):
+            prev = score_history[i-1][2] if i > 0 else 0
+            curr_edge, curr_color, curr_score = score_history[i]
+            delta = curr_score - prev
+            if delta < -0.5 and curr_color in ('G', 'P'):
+                # Our move caused a big loss - reduce its value
+                new_params["edge_values"][curr_edge] -= learning_rate
+        
+        # Adjust thresholds: if we lost while "winning", be more aggressive
+        if final_score < 0 and any(s > 1.0 for _, _, s in score_history):
+            new_params["green_threshold"] += 0.2
+    
+    # Clamp edge values to [0, 2]
+    new_params["edge_values"] = [max(0, min(2, v)) for v in new_params["edge_values"]]
+    
+    return new_params
+
+# =============================================================================
+# USAGE EXAMPLE
+# =============================================================================
+
+if __name__ == "__main__":
+    # Example mid-game state
+    state = "---G-----GG-G--"
+    score = 0.523
+    history = [(10, 'G', 0.98), (3, 'G', 0.45), (9, 'G', 0.72), (1, 'P', 0.52)]
+    
+    move = calculate_move(state, score, history)
+    print(f"Recommended: Edge {move[0]} with {'Green' if move[1] == 'G' else 'Purple'}")
+    
+    # After game ends, update params
+    # new_params = update_params_from_trial(PARAMS, 'loss', full_history, -2.5)

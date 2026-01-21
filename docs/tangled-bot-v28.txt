@@ -1,0 +1,1010 @@
+// ============================================================================
+// TANGLED BOT V28.2 - ADAPTIVE ANTI-DRAW ENGINE (PATCHED)
+// ============================================================================
+// Browser-only learning bot for Tangled (Petersen graph variant)
+// Targets draw-optimizing opponents (e.g., AlphaZero Amara)
+//
+// Key properties:
+//   - Pure JS simulator (no DOM dependency for logic)
+//   - Linear softmax policy over φ(s,a) features
+//   - Proper REINFORCE update: (R - baseline) * (φ_chosen - Eπ[φ])
+//   - Dense reward from intra-turn score deltas (scoreAfter - scoreBefore)
+//   - Controlled stochasticity (softmax over top-K)
+//   - Robust DOM bridge (nearest-vertex edge mapping, color normalization)
+//   - Correct outcome thresholds: win if score > +0.5, loss if score < -0.5
+//
+// Safety/Correctness patches vs earlier drafts:
+//   - Fix outcome inference thresholds (±0.5, not ±0.0005)
+//   - Score polling uses epsilon comparison (not strict !==)
+//   - Action identity uses edge one-hot features (no ordinal leakage)
+//   - Opponent-probe (if enabled) is DISABLED during training by default
+//
+// Usage:
+//   1) Paste script into browser console on tangled-game.com
+//   2) playGame()     -> play one game (learning data recorded)
+//   3) trainLoop(n)   -> play n games with learning
+//   4) analyze()      -> inspect current position and top moves
+//   5) saveBot()      -> persist weights/stats to localStorage
+//   6) exportWeights() -> print JSON for weights
+//
+// ============================================================================
+
+(function () {
+  "use strict";
+
+  // ==========================================================================
+  // MODULE 1: GRAPH TOPOLOGY
+  // ==========================================================================
+
+  const TangledGraph = {
+    NUM_VERTICES: 10,
+    NUM_EDGES: 15,
+
+    // Canonical Petersen edge list (v1 < v2)
+    EDGES: [
+      [0, 1],  // 0
+      [0, 6],  // 1  HUB
+      [1, 2],  // 2
+      [1, 7],  // 3  OPP
+      [2, 3],  // 4
+      [2, 9],  // 5
+      [3, 4],  // 6
+      [3, 8],  // 7
+      [4, 5],  // 8  OUR
+      [4, 9],  // 9
+      [5, 6],  // 10 OUR + HUB
+      [5, 9],  // 11 OUR
+      [6, 7],  // 12 OPP + HUB
+      [7, 8],  // 13 OPP
+      [8, 9],  // 14
+    ],
+
+    VERTEX_RED: 5,   // us
+    VERTEX_BLUE: 7,  // opponent
+    VERTEX_HUB: 6,   // critical hub
+
+    INCIDENT: null,      // INCIDENT[v] = [edgeIdx...]
+    EDGE_FLAGS: null,    // EDGE_FLAGS[e] = {our, opp, hub, neutral}
+    CYCLES: null,        // pentagons (edge indices arrays)
+
+    init: function () {
+      // incidence lists
+      this.INCIDENT = Array.from({ length: this.NUM_VERTICES }, () => []);
+      for (let e = 0; e < this.NUM_EDGES; e++) {
+        const [v1, v2] = this.EDGES[e];
+        this.INCIDENT[v1].push(e);
+        this.INCIDENT[v2].push(e);
+      }
+
+      // multi-label edge flags
+      this.EDGE_FLAGS = new Array(this.NUM_EDGES);
+      for (let e = 0; e < this.NUM_EDGES; e++) {
+        const [v1, v2] = this.EDGES[e];
+        const our = (v1 === this.VERTEX_RED || v2 === this.VERTEX_RED);
+        const opp = (v1 === this.VERTEX_BLUE || v2 === this.VERTEX_BLUE);
+        const hub = (v1 === this.VERTEX_HUB || v2 === this.VERTEX_HUB);
+        const neutral = !our && !opp && !hub;
+        this.EDGE_FLAGS[e] = { our, opp, hub, neutral };
+      }
+
+      // cycles (pentagons)
+      this.CYCLES = this._findPentagons();
+
+      console.log("[TangledGraph] Initialized:", {
+        edges: this.NUM_EDGES,
+        cycles: this.CYCLES.length,
+        flagsSample: this.EDGE_FLAGS.map((f, i) => (i === 10 || i === 12 || i === 1 ? { i, ...f } : null)).filter(Boolean),
+      });
+    },
+
+    isIncident: function (edgeIdx, vertex) {
+      const [v1, v2] = this.EDGES[edgeIdx];
+      return v1 === vertex || v2 === vertex;
+    },
+
+    getEdgeIndex: function (v1, v2) {
+      const a = Math.min(v1, v2);
+      const b = Math.max(v1, v2);
+      for (let e = 0; e < this.NUM_EDGES; e++) {
+        if (this.EDGES[e][0] === a && this.EDGES[e][1] === b) return e;
+      }
+      return -1;
+    },
+
+    _findPentagons: function () {
+      const adj = Array.from({ length: this.NUM_VERTICES }, () => []);
+      for (let e = 0; e < this.NUM_EDGES; e++) {
+        const [v1, v2] = this.EDGES[e];
+        adj[v1].push({ v: v2, e });
+        adj[v2].push({ v: v1, e });
+      }
+
+      const cycles = [];
+      const seen = new Set();
+
+      for (let start = 0; start < this.NUM_VERTICES; start++) {
+        this._dfs5(adj, start, [start], [], seen, cycles);
+      }
+      return cycles;
+    },
+
+    _dfs5: function (adj, start, pathV, pathE, seen, cycles) {
+      if (pathV.length === 5) {
+        const last = pathV[pathV.length - 1];
+        for (const { v, e } of adj[last]) {
+          if (v === start) {
+            const cycleEdges = [...pathE, e].slice().sort((a, b) => a - b);
+            const key = cycleEdges.join(",");
+            if (!seen.has(key)) {
+              seen.add(key);
+              cycles.push(cycleEdges);
+            }
+          }
+        }
+        return;
+      }
+
+      const curr = pathV[pathV.length - 1];
+      for (const { v, e } of adj[curr]) {
+        if (v !== start && !pathV.includes(v)) {
+          pathV.push(v);
+          pathE.push(e);
+          this._dfs5(adj, start, pathV, pathE, seen, cycles);
+          pathV.pop();
+          pathE.pop();
+        }
+      }
+    },
+  };
+
+  // ==========================================================================
+  // MODULE 2: SIMULATOR + FEATURES
+  // ==========================================================================
+
+  const TangledSim = {
+    GREY: 0,
+    GREEN: 1,     // J = +1
+    PURPLE: -1,   // J = -1
+
+    initialState: function () {
+      return {
+        turn: 0,
+        playerToMove: 1, // 1 = us (Red), 2 = them (Blue)
+        edges: new Int8Array(TangledGraph.NUM_EDGES),
+      };
+    },
+
+    clone: function (s) {
+      return { turn: s.turn, playerToMove: s.playerToMove, edges: new Int8Array(s.edges) };
+    },
+
+    legalMoves: function (s) {
+      const moves = [];
+      for (let e = 0; e < TangledGraph.NUM_EDGES; e++) {
+        if (s.edges[e] === this.GREY) {
+          moves.push({ edge: e, color: this.GREEN });
+          moves.push({ edge: e, color: this.PURPLE });
+        }
+      }
+      return moves;
+    },
+
+    applyMove: function (s, move) {
+      const n = this.clone(s);
+      n.edges[move.edge] = move.color;
+      n.turn++;
+      n.playerToMove = (n.playerToMove === 1) ? 2 : 1;
+      return n;
+    },
+
+    isTerminal: function (s) {
+      return s.turn >= TangledGraph.NUM_EDGES;
+    },
+
+    featurizeState: function (s) {
+      const f = {};
+
+      const keyVerts = [TangledGraph.VERTEX_RED, TangledGraph.VERTEX_HUB, TangledGraph.VERTEX_BLUE];
+      for (const v of keyVerts) {
+        let netJ = 0, degGrey = 0, degGreen = 0, degPurple = 0;
+        for (const e of TangledGraph.INCIDENT[v]) {
+          const c = s.edges[e];
+          if (c === this.GREY) degGrey++;
+          else if (c === this.GREEN) { degGreen++; netJ++; }
+          else { degPurple++; netJ--; }
+        }
+        f[`netJ_${v}`] = netJ;
+        f[`degGrey_${v}`] = degGrey;
+        f[`degGreen_${v}`] = degGreen;
+        f[`degPurple_${v}`] = degPurple;
+      }
+
+      // Multi-label category counts: our/opp/hub/neutral as independent flags
+      const cats = ["our", "opp", "hub", "neutral"];
+      for (const cat of cats) {
+        let grey = 0, green = 0, purple = 0;
+        for (let e = 0; e < TangledGraph.NUM_EDGES; e++) {
+          if (TangledGraph.EDGE_FLAGS[e][cat]) {
+            const c = s.edges[e];
+            if (c === this.GREY) grey++;
+            else if (c === this.GREEN) green++;
+            else purple++;
+          }
+        }
+        f[`cat_${cat}_grey`] = grey;
+        f[`cat_${cat}_green`] = green;
+        f[`cat_${cat}_purple`] = purple;
+      }
+
+      // frustration proxies
+      const fr = this._computeFrustration(s);
+      f.frustration_total = fr.total;
+      f.frustration_hub = fr.hub;
+      f.frustration_opp = fr.opp;
+
+      // mobility proxies
+      f.our_mobility = f[`degGrey_${TangledGraph.VERTEX_RED}`];
+      f.their_mobility = f[`degGrey_${TangledGraph.VERTEX_BLUE}`];
+      f.mobility_diff = f.our_mobility - f.their_mobility;
+
+      // asymmetry (signed + magnitude)
+      f.asymmetry_signed = f[`netJ_${TangledGraph.VERTEX_RED}`] - f[`netJ_${TangledGraph.VERTEX_BLUE}`];
+      f.asymmetry_abs = Math.abs(f.asymmetry_signed);
+
+      // turn
+      f.turn = s.turn;
+      f.turn_norm = s.turn / TangledGraph.NUM_EDGES;
+
+      return f;
+    },
+
+    _computeFrustration: function (s) {
+      let total = 0, hub = 0, opp = 0;
+      for (const cycle of TangledGraph.CYCLES) {
+        let product = 1;
+        let colored = 0;
+        let involvesHub = false;
+        let involvesOpp = false;
+
+        for (const e of cycle) {
+          const c = s.edges[e];
+          if (c !== this.GREY) {
+            product *= c;
+            colored++;
+          }
+          if (TangledGraph.isIncident(e, TangledGraph.VERTEX_HUB)) involvesHub = true;
+          if (TangledGraph.isIncident(e, TangledGraph.VERTEX_BLUE)) involvesOpp = true;
+        }
+
+        if (colored > 0 && product < 0) {
+          const weight = colored / cycle.length;
+          total += weight;
+          if (involvesHub) hub += weight;
+          if (involvesOpp) opp += weight;
+        }
+      }
+      return { total, hub, opp };
+    },
+
+    // φ(s,a): includes state, action flags, deltas
+    featurizeAction: function (s, move) {
+      const before = this.featurizeState(s);
+      const s2 = this.applyMove(s, move);
+      const after = this.featurizeState(s2);
+
+      const f = { ...before };
+
+      // action flags (multi-label)
+      const flags = TangledGraph.EDGE_FLAGS[move.edge];
+      f.action_is_green = (move.color === this.GREEN) ? 1 : 0;
+      f.action_is_purple = (move.color === this.PURPLE) ? 1 : 0;
+
+      f.action_is_our = flags.our ? 1 : 0;
+      f.action_is_opp = flags.opp ? 1 : 0;
+      f.action_is_hub = flags.hub ? 1 : 0;
+      f.action_is_neutral = flags.neutral ? 1 : 0;
+
+      // action edge identity as one-hot (PATCH)
+      for (let i = 0; i < TangledGraph.NUM_EDGES; i++) {
+        f[`action_edge_${i}`] = (move.edge === i) ? 1 : 0;
+      }
+
+      // deltas for key verts
+      const keyVerts = [TangledGraph.VERTEX_RED, TangledGraph.VERTEX_HUB, TangledGraph.VERTEX_BLUE];
+      for (const v of keyVerts) {
+        f[`d_netJ_${v}`] = after[`netJ_${v}`] - before[`netJ_${v}`];
+        f[`d_degGrey_${v}`] = after[`degGrey_${v}`] - before[`degGrey_${v}`];
+      }
+
+      f.d_frust_total = after.frustration_total - before.frustration_total;
+      f.d_frust_hub = after.frustration_hub - before.frustration_hub;
+      f.d_frust_opp = after.frustration_opp - before.frustration_opp;
+
+      f.d_mobility_diff = after.mobility_diff - before.mobility_diff;
+      f.d_asym_signed = after.asymmetry_signed - before.asymmetry_signed;
+      f.d_asym_abs = after.asymmetry_abs - before.asymmetry_abs;
+
+      // heuristics (use flags; no undefined fields)
+      f.heur_green_on_our = (f.action_is_our && f.action_is_green) ? 1 : 0;
+      f.heur_purple_on_opp = (f.action_is_opp && f.action_is_purple) ? 1 : 0;
+      f.heur_green_on_opp = (f.action_is_opp && f.action_is_green) ? 1 : 0;     // "bad" feature; weight should go negative
+      f.heur_purple_on_our = (f.action_is_our && f.action_is_purple) ? 1 : 0;   // "bad" feature; weight should go negative
+
+      f.bias = 1;
+
+      return f;
+    },
+
+    featureKeys: function () {
+      if (this._keys) return this._keys;
+
+      const keys = [];
+
+      // state key verts
+      keys.push(
+        "netJ_5", "netJ_6", "netJ_7",
+        "degGrey_5", "degGrey_6", "degGrey_7",
+        "degGreen_5", "degGreen_6", "degGreen_7",
+        "degPurple_5", "degPurple_6", "degPurple_7"
+      );
+
+      // category counts (multi-label)
+      for (const cat of ["our", "opp", "hub", "neutral"]) {
+        keys.push(`cat_${cat}_grey`, `cat_${cat}_green`, `cat_${cat}_purple`);
+      }
+
+      // frustration
+      keys.push("frustration_total", "frustration_hub", "frustration_opp");
+
+      // mobility, asymmetry, turn
+      keys.push("our_mobility", "their_mobility", "mobility_diff");
+      keys.push("asymmetry_signed", "asymmetry_abs");
+      keys.push("turn", "turn_norm");
+
+      // action flags
+      keys.push("action_is_green", "action_is_purple");
+      keys.push("action_is_our", "action_is_opp", "action_is_hub", "action_is_neutral");
+
+      // action edge one-hots (PATCH)
+      for (let i = 0; i < TangledGraph.NUM_EDGES; i++) keys.push(`action_edge_${i}`);
+
+      // deltas
+      keys.push(
+        "d_netJ_5", "d_netJ_6", "d_netJ_7",
+        "d_degGrey_5", "d_degGrey_6", "d_degGrey_7",
+        "d_frust_total", "d_frust_hub", "d_frust_opp",
+        "d_mobility_diff", "d_asym_signed", "d_asym_abs"
+      );
+
+      // heuristics
+      keys.push("heur_green_on_our", "heur_purple_on_opp", "heur_green_on_opp", "heur_purple_on_our");
+
+      // bias
+      keys.push("bias");
+
+      this._keys = keys;
+      return keys;
+    },
+
+    featureVector: function (featObj) {
+      const keys = this.featureKeys();
+      const v = new Float32Array(keys.length);
+      for (let i = 0; i < keys.length; i++) {
+        const x = featObj[keys[i]];
+        v[i] = (typeof x === "number") ? x : (x ? 1 : 0);
+      }
+      return v;
+    },
+
+    numFeatures: function () {
+      return this.featureKeys().length;
+    }
+  };
+
+  // ==========================================================================
+  // MODULE 3: POLICY (Linear Softmax over top-K)
+  // ==========================================================================
+
+  const TangledPolicy = {
+    weights: null,
+    temperature: 1.0,
+    topK: 5,
+
+    init: function (numFeatures) {
+      this.weights = new Float32Array(numFeatures);
+
+      // small random init
+      for (let i = 0; i < numFeatures; i++) {
+        this.weights[i] = (Math.random() - 0.5) * 0.02;
+      }
+
+      // seed a few sensible priors (optional)
+      const keys = TangledSim.featureKeys();
+      const setW = (k, val) => {
+        const idx = keys.indexOf(k);
+        if (idx >= 0) this.weights[idx] = val;
+      };
+
+      setW("heur_green_on_our", 1.5);
+      setW("heur_purple_on_opp", 1.0);
+      setW("heur_green_on_opp", -1.5);
+      setW("heur_purple_on_our", -1.5);
+      setW("d_mobility_diff", 0.2);
+      setW("d_frust_opp", 0.1);
+      setW("d_asym_abs", 0.1);
+
+      console.log("[TangledPolicy] Initialized:", { numFeatures, topK: this.topK, temperature: this.temperature });
+    },
+
+    dot: function (w, x) {
+      let s = 0;
+      for (let i = 0; i < x.length; i++) s += w[i] * x[i];
+      return s;
+    },
+
+    scoreWithFv: function (fv) {
+      return this.dot(this.weights, fv);
+    },
+
+    // Returns decision record: { chosenMove, chosenIndex, topMoves: [{move, fv, logit, p}, ...], expectedFv }
+    selectAction: function (state, moves) {
+      if (!moves || moves.length === 0) return null;
+      if (moves.length === 1) {
+        const fv = TangledSim.featureVector(TangledSim.featurizeAction(state, moves[0]));
+        return {
+          chosenMove: moves[0],
+          chosenIndex: 0,
+          topMoves: [{ move: moves[0], fv, logit: 0, p: 1 }],
+          expectedFv: fv
+        };
+      }
+
+      // compute logits
+      const scored = moves.map((m) => {
+        const fv = TangledSim.featureVector(TangledSim.featurizeAction(state, m));
+        const logit = this.scoreWithFv(fv);
+        return { move: m, fv, logit };
+      });
+
+      // sort
+      scored.sort((a, b) => b.logit - a.logit);
+
+      // top-K
+      const top = scored.slice(0, Math.min(this.topK, scored.length));
+
+      // softmax with temperature
+      const maxLogit = top[0].logit;
+      const exps = top.map((x) => Math.exp((x.logit - maxLogit) / Math.max(1e-6, this.temperature)));
+      const Z = exps.reduce((a, b) => a + b, 0);
+      const probs = exps.map((e) => e / Z);
+
+      // expected feature vector under π (top-K truncated)
+      const expectedFv = new Float32Array(top[0].fv.length);
+      for (let i = 0; i < top.length; i++) {
+        top[i].p = probs[i];
+        const p = probs[i];
+        const fv = top[i].fv;
+        for (let j = 0; j < fv.length; j++) expectedFv[j] += p * fv[j];
+      }
+
+      // sample
+      const r = Math.random();
+      let cum = 0;
+      let chosenIndex = top.length - 1;
+      for (let i = 0; i < probs.length; i++) {
+        cum += probs[i];
+        if (r < cum) { chosenIndex = i; break; }
+      }
+
+      return {
+        chosenMove: top[chosenIndex].move,
+        chosenIndex,
+        topMoves: top,
+        expectedFv
+      };
+    },
+
+    exportWeights: function () {
+      return {
+        weights: Array.from(this.weights),
+        temperature: this.temperature,
+        topK: this.topK,
+        featureKeys: TangledSim.featureKeys()
+      };
+    },
+
+    importWeights: function (data) {
+      this.weights = new Float32Array(data.weights);
+      this.temperature = data.temperature ?? 1.0;
+      this.topK = data.topK ?? 5;
+      console.log("[TangledPolicy] Imported weights");
+    }
+  };
+
+  // ==========================================================================
+  // MODULE 4: TRAINER (REINFORCE with baseline, dense rewards)
+  // ==========================================================================
+
+  const TangledTrainer = {
+    // store minimal episode data to reduce localStorage pressure
+    buffer: [],
+    maxBufferSize: 200,
+
+    learningRate: 0.01,
+    gamma: 0.98,
+    batchSize: 24,
+    stepsPerUpdate: 10,
+
+    // running baseline for returns (simple scalar)
+    baseline: 0,
+    baselineBeta: 0.05, // EMA rate
+
+    stats: {
+      gamesPlayed: 0,
+      wins: 0,
+      draws: 0,
+      losses: 0
+    },
+
+    recordEpisode: function (ep) {
+      this.buffer.push(ep);
+      if (this.buffer.length > this.maxBufferSize) this.buffer.shift();
+
+      this.stats.gamesPlayed++;
+      if (ep.outcome > 0) this.stats.wins++;
+      else if (ep.outcome < 0) this.stats.losses++;
+      else this.stats.draws++;
+
+      // update baseline with episode mean return (EMA)
+      if (ep.returns && ep.returns.length > 0) {
+        const meanRet = ep.returns.reduce((a, b) => a + b, 0) / ep.returns.length;
+        this.baseline = (1 - this.baselineBeta) * this.baseline + this.baselineBeta * meanRet;
+      }
+
+      console.log("[Trainer] Recorded episode:", {
+        outcome: ep.outcome,
+        finalScore: ep.finalScore,
+        steps: ep.steps.length,
+        buffer: this.buffer.length,
+        baseline: this.baseline.toFixed(4)
+      });
+    },
+
+    // REINFORCE:
+    // grad += (G_t - baseline) * (fv_chosen - expectedFv)
+    update: function (numSteps) {
+      if (this.buffer.length < this.batchSize) {
+        console.log("[Trainer] Not enough data to train:", this.buffer.length, "/", this.batchSize);
+        return;
+      }
+      numSteps = numSteps ?? this.stepsPerUpdate;
+
+      const W = TangledPolicy.weights;
+      const dW = new Float32Array(W.length);
+
+      for (let step = 0; step < numSteps; step++) {
+        dW.fill(0);
+
+        for (let i = 0; i < this.batchSize; i++) {
+          const ep = this.buffer[(Math.random() * this.buffer.length) | 0];
+          if (!ep || !ep.steps || ep.steps.length === 0) continue;
+
+          for (let t = 0; t < ep.steps.length; t++) {
+            const st = ep.steps[t];
+            const Gt = ep.returns[t];
+            const adv = (Gt - this.baseline);
+
+            const fvChosen = st.fvChosen;
+            const expectedFv = st.expectedFv;
+
+            for (let j = 0; j < W.length; j++) {
+              dW[j] += adv * (fvChosen[j] - expectedFv[j]);
+            }
+          }
+        }
+
+        // normalize and apply
+        const scale = this.learningRate / Math.max(1, this.batchSize);
+        for (let j = 0; j < W.length; j++) W[j] += scale * dW[j];
+      }
+
+      console.log("[Trainer] Policy updated:", { numSteps, lr: this.learningRate });
+    },
+
+    save: function () {
+      // Save weights + stats + baseline only (not entire buffer)
+      const data = {
+        stats: this.stats,
+        baseline: this.baseline,
+        policy: TangledPolicy.exportWeights()
+      };
+      localStorage.setItem("tangled_v28_2", JSON.stringify(data));
+      console.log("[Trainer] Saved weights/stats to localStorage key tangled_v28_2");
+    },
+
+    load: function () {
+      const raw = localStorage.getItem("tangled_v28_2");
+      if (!raw) return false;
+      try {
+        const data = JSON.parse(raw);
+        if (data.policy) TangledPolicy.importWeights(data.policy);
+        this.stats = data.stats ?? this.stats;
+        this.baseline = data.baseline ?? 0;
+        console.log("[Trainer] Loaded weights/stats:", { games: this.stats.gamesPlayed, baseline: this.baseline });
+        return true;
+      } catch (e) {
+        console.warn("[Trainer] Failed to load:", e);
+        return false;
+      }
+    },
+
+    printStats: function () {
+      const g = this.stats.gamesPlayed || 1;
+      console.log("=== Training Stats ===");
+      console.log("Games:", this.stats.gamesPlayed);
+      console.log("Wins:", this.stats.wins, `(${(100 * this.stats.wins / g).toFixed(1)}%)`);
+      console.log("Draws:", this.stats.draws);
+      console.log("Losses:", this.stats.losses);
+      console.log("Baseline:", this.baseline.toFixed(4));
+      console.log("Buffer episodes in memory:", this.buffer.length);
+    }
+  };
+
+  // ==========================================================================
+  // MODULE 5: DOM BRIDGE (robust board reading + execution + score polling)
+  // ==========================================================================
+
+  const TangledDOM = {
+    // You may need to adjust these if the site changes.
+    // However, edge matching uses nearest vertices, so minor shifts are OK.
+    VERTEX_COORDS: {
+      0: { x: 451, y: 416 },
+      1: { x: 163, y: 80 },
+      2: { x: 19,  y: 304 },
+      3: { x: 307, y: 500 },
+      4: { x: 595, y: 500 },
+      5: { x: 80,  y: 248 }, // us
+      6: { x: 451, y: 80 },  // hub
+      7: { x: 820, y: 248 }, // opponent
+      8: { x: 739, y: 80 },
+      9: { x: 883, y: 304 }
+    },
+
+    // color normalization: returns "green"|"purple"|"grey"|null
+    normalizeStroke: function (stroke, el) {
+      if (!stroke && el) stroke = getComputedStyle(el).stroke;
+
+      if (!stroke) return null;
+
+      const s = String(stroke).trim().toLowerCase();
+
+      // common grey variants
+      if (s === "grey" || s === "gray" || s === "#808080" || s === "#e5e7eb") return "grey";
+
+      // site-specific hex (from earlier drafts)
+      if (s === "#10b981") return "green";
+      if (s === "#a855f7") return "purple";
+
+      // rgb formats (robust)
+      if (s.startsWith("rgb(")) {
+        // crude nearest: check dominant channels
+        // green ~ (16,185,129) ; purple ~ (168,85,247)
+        const m = s.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+        if (m) {
+          const r = parseInt(m[1], 10), g = parseInt(m[2], 10), b = parseInt(m[3], 10);
+          // distance to reference colors
+          const dGreen = (r - 16) ** 2 + (g - 185) ** 2 + (b - 129) ** 2;
+          const dPurple = (r - 168) ** 2 + (g - 85) ** 2 + (b - 247) ** 2;
+          const dGrey = (r - 229) ** 2 + (g - 231) ** 2 + (b - 235) ** 2;
+          const min = Math.min(dGreen, dPurple, dGrey);
+          if (min === dGreen) return "green";
+          if (min === dPurple) return "purple";
+          return "grey";
+        }
+      }
+
+      if (s.includes("green")) return "green";
+      if (s.includes("purple")) return "purple";
+      if (s.includes("gray") || s.includes("grey")) return "grey";
+
+      return null;
+    },
+
+    // nearest vertex by euclidean distance
+    nearestVertex: function (x, y, maxDist = 30) {
+      let best = -1;
+      let bestD2 = Infinity;
+      for (const [vidStr, c] of Object.entries(this.VERTEX_COORDS)) {
+        const vid = parseInt(vidStr, 10);
+        const dx = x - c.x;
+        const dy = y - c.y;
+        const d2 = dx * dx + dy * dy;
+        if (d2 < bestD2) {
+          bestD2 = d2;
+          best = vid;
+        }
+      }
+      return (bestD2 <= maxDist * maxDist) ? best : -1;
+    },
+
+    matchEdgeFromLine: function (lineEl) {
+      const x1 = parseFloat(lineEl.getAttribute("x1"));
+      const y1 = parseFloat(lineEl.getAttribute("y1"));
+      const x2 = parseFloat(lineEl.getAttribute("x2"));
+      const y2 = parseFloat(lineEl.getAttribute("y2"));
+
+      const v1 = this.nearestVertex(x1, y1);
+      const v2 = this.nearestVertex(x2, y2);
+      if (v1 < 0 || v2 < 0 || v1 === v2) return -1;
+
+      return TangledGraph.getEdgeIndex(v1, v2);
+    },
+
+    readBoard: function () {
+      const s = TangledSim.initialState();
+      const lines = document.querySelectorAll("line");
+
+      for (const line of lines) {
+        const edgeIdx = this.matchEdgeFromLine(line);
+        if (edgeIdx < 0) continue;
+
+        const stroke = line.getAttribute("stroke");
+        const col = this.normalizeStroke(stroke, line);
+
+        if (col === "green") s.edges[edgeIdx] = TangledSim.GREEN;
+        else if (col === "purple") s.edges[edgeIdx] = TangledSim.PURPLE;
+      }
+
+      // infer turn + playerToMove from colored edges count
+      let colored = 0;
+      for (let e = 0; e < TangledGraph.NUM_EDGES; e++) {
+        if (s.edges[e] !== TangledSim.GREY) colored++;
+      }
+      s.turn = colored;
+      s.playerToMove = (colored % 2 === 0) ? 1 : 2;
+      return s;
+    },
+
+    readScore: function () {
+      const text = document.body.innerText || "";
+      const m = text.match(/current score:\s*([-\d.]+)/i);
+      if (!m) return null;
+      const val = parseFloat(m[1]);
+      return Number.isFinite(val) ? val : null;
+    },
+
+    isOurTurn: function () {
+      const text = document.body.innerText || "";
+      return /your turn/i.test(text);
+    },
+
+    isGameOver: function () {
+      const text = document.body.innerText || "";
+      return /game over/i.test(text) || /winner:/i.test(text) || /\bdraw\b/i.test(text);
+    },
+
+    getOutcome: function () {
+      const text = document.body.innerText || "";
+      if (/winner:\s*player\s*1/i.test(text) || /winner:\s*player\s*1\s*\(red\)/i.test(text)) return 1;
+      if (/winner:\s*player\s*2/i.test(text) || /winner:\s*player\s*2\s*\(blue\)/i.test(text)) return -1;
+      if (/\bdraw\b/i.test(text)) return 0;
+
+      // last-resort inference (PATCH: correct thresholds)
+      const sc = this.readScore();
+      if (sc === null) return 0;
+      if (sc > 0.5) return 1;
+      if (sc < -0.5) return -1;
+      return 0;
+    },
+
+    // Poll until score changes by epsilon or timeout
+    pollScoreChange: async function (prevScore, timeoutMs = 1500, eps = 1e-4) {
+      const start = Date.now();
+      while (Date.now() - start < timeoutMs) {
+        const cur = this.readScore();
+        if (cur !== null && prevScore !== null && Math.abs(cur - prevScore) > eps) return cur;
+        await this.sleep(50);
+      }
+      // return latest even if unchanged
+      return this.readScore();
+    },
+
+    executeMove: async function (move) {
+      // find target line among grey lines
+      const lines = document.querySelectorAll("line");
+      let target = null;
+
+      for (const line of lines) {
+        const edgeIdx = this.matchEdgeFromLine(line);
+        if (edgeIdx !== move.edge) continue;
+
+        const col = this.normalizeStroke(line.getAttribute("stroke"), line);
+        if (col !== "grey") continue;
+
+        target = line;
+        break;
+      }
+
+      if (!target) {
+        console.error("[DOM] Could not find grey edge for", move);
+        return false;
+      }
+
+      const rect = target.getBoundingClientRect();
+      target.dispatchEvent(new MouseEvent("click", {
+        bubbles: true,
+        cancelable: true,
+        view: window,
+        clientX: rect.left + rect.width / 2,
+        clientY: rect.top + rect.height / 2
+      }));
+
+      await this.sleep(250);
+
+      const want = (move.color === TangledSim.GREEN) ? "green" : "purple";
+      const buttons = document.querySelectorAll("button");
+      let clicked = false;
+      for (const btn of buttons) {
+        const t = (btn.textContent || "").trim().toLowerCase();
+        if (t.includes(want)) {
+          btn.click();
+          clicked = true;
+          break;
+        }
+      }
+
+      if (!clicked) {
+        console.warn("[DOM] Color button not found for", want);
+        return false;
+      }
+
+      await this.sleep(250);
+      return true;
+    },
+
+    waitForTurn: async function (timeoutMs = 30000) {
+      const start = Date.now();
+      while (Date.now() - start < timeoutMs) {
+        if (this.isOurTurn() || this.isGameOver()) return true;
+        await this.sleep(250);
+      }
+      console.warn("[DOM] Timeout waiting for turn");
+      return false;
+    },
+
+    sleep: function (ms) {
+      return new Promise((resolve) => setTimeout(resolve, ms));
+    }
+  };
+
+  // ==========================================================================
+  // MODULE 6: RUNNER
+  // ==========================================================================
+
+  const TangledRunner = {
+    // Opponent probe toggle (kept for experimentation)
+    // IMPORTANT: training disables this by default (PATCH)
+    useOpponentProbe: false,
+
+    // small terminal shaping
+    terminalBonus: 5.0,
+
+    // Plays a single game; returns an episode:
+    // ep.steps[t] = { fvChosen, expectedFv, reward }
+    playGame: async function (verbose = true, allowProbe = false) {
+      if (verbose) console.log("[Runner] Waiting for game ready...");
+
+      // wait until turn or game over
+      let waited = 0;
+      while (!TangledDOM.isOurTurn() && !TangledDOM.isGameOver()) {
+        await TangledDOM.sleep(250);
+        waited += 250;
+        if (waited > 30000) {
+          console.error("[Runner] Timeout waiting for game start");
+          return null;
+        }
+      }
+
+      const ep = {
+        steps: [],
+        rewards: [],
+        returns: [],
+        outcome: 0,
+        finalScore: null
+      };
+
+      while (!TangledDOM.isGameOver()) {
+        if (!TangledDOM.isOurTurn()) {
+          const ok = await TangledDOM.waitForTurn();
+          if (!ok) break;
+          continue;
+        }
+
+        const state = TangledDOM.readBoard();
+        const moves = TangledSim.legalMoves(state);
+        if (moves.length === 0) break;
+
+        const scoreBefore = TangledDOM.readScore();
+
+        // select action and capture policy stats
+        const decision = TangledPolicy.selectAction(state, moves);
+        if (!decision) break;
+
+        let chosenMove = decision.chosenMove;
+
+        // Optional probe (not recommended during training unless you adjust gradients)
+        const probeEnabled = allowProbe && this.useOpponentProbe;
+        if (probeEnabled) {
+          // Simple probe: pick greedy among topMoves by logit (no opponent modeling)
+          // (kept minimal; if you do deeper probes, update learning accordingly)
+          chosenMove = decision.topMoves[0].move;
+        }
+
+        if (verbose) {
+          const [v1, v2] = TangledGraph.EDGES[chosenMove.edge];
+          console.log(`[Runner] Turn ${state.turn} | score=${scoreBefore} | play ${v1}-${v2} ${(chosenMove.color === 1) ? "GREEN" : "PURPLE"}`);
+        }
+
+        // Execute
+        const ok = await TangledDOM.executeMove(chosenMove);
+        if (!ok) break;
+
+        // poll score after our move registers
+        const scoreAfter = await TangledDOM.pollScoreChange(scoreBefore, 2000, 1e-4);
+
+        // dense reward
+        let r = 0;
+        if (scoreBefore !== null && scoreAfter !== null) r = (scoreAfter - scoreBefore);
+
+        // store step info using the ORIGINAL sampled policy stats
+        // NOTE: if probeEnabled changes chosenMove, training becomes off-policy; avoid during training.
+        const fvChosen = TangledSim.featureVector(TangledSim.featurizeAction(state, chosenMove));
+        ep.steps.push({
+          fvChosen,
+          expectedFv: decision.expectedFv,
+          reward: r
+        });
+        ep.rewards.push(r);
+
+        await TangledDOM.sleep(350);
+      }
+
+      // terminal
+      ep.finalScore = TangledDOM.readScore();
+      ep.outcome = TangledDOM.getOutcome();
+
+      // terminal shaping
+      const terminal = this.terminalBonus * ep.outcome;
+      if (ep.rewards.length > 0) ep.rewards[ep.rewards.length - 1] += terminal;
+
+      // discounted returns
+      ep.returns = new Array(ep.rewards.length);
+      let G = 0;
+      for (let t = ep.rewards.length - 1; t >= 0; t--) {
+        G = ep.rewards[t] + TangledTrainer.gamma * G;
+        ep.returns[t] = G;
+      }
+
+      if (verbose) {
+        const out = ep.outcome > 0 ? "WIN" : (ep.outcome < 0 ? "LOSS" : "DRAW");
+        console.log(`[Runner] Game over: ${out} | finalScore=${ep.finalScore} | steps=${ep.steps.length}`);
+      }
+
+      return ep;
+    },
+
+    // Training loop: plays N games and trains each game.
+    // PATCH: probe disabled during training (allowProbe=false).
+    trainLoop: async function (numGames = 10, verbose = true) {
+      console.log(`[Runner] Training loop: ${numGames} games`);
+      for (let g = 0; g < numGames; g++) {
+        console.log(`\n=== Game ${g + 1}/${numGames} ===`);
+
+        const ep = await this.playGame(verbose, /*allowProbe=*/false);
+        if (ep && ep.steps.length > 0) {
+          TangledTrainer.recordEpisode(ep);
+          TangledTrainer.update();
+          if ((g + 1) % 5 === 0) TangledTrainer.save();
+          if ((g + 1) % 10 === 0) TangledTrainer.printStats();
+        } else {
+          console.warn("[Runner] Episode empty or null; skipping update.");

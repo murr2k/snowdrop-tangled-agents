@@ -18,6 +18,8 @@ snowdrop-tangled-game-engine = ">=1.1.0"
 snowdrop-adjudicators = ">=0.1.0"
 scipy = ">=1.16.2"
 coloredlogs = ">=15.0.1"
+playwright = ">=1.40.0"
+python-dotenv = ">=1.0.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.4.1"
@@ -28,7 +30,7 @@ requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.pytest.ini_options]
-testpaths = ["ssnowdrop-tangled-agents/tests"]
+testpaths = ["snowdrop_tangled_agents/tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]

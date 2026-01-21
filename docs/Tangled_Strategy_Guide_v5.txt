@@ -1,0 +1,247 @@
+================================================================================
+
+TANGLED STRATEGY GUIDE - PETERSEN GRAPH (Manual Play)
+
+================================================================================
+
+Version: 5.0
+Last Updated: After extensive testing vs multiple opponents
+Overall Record: vs Amara 4D/4L | vs Randy 4W/0L | vs Melissa 0W/2L/3D
+
+GRAPH TOPOLOGY
+--------------
+- 10 vertices, 15 edges
+- Player 1 (Red): Vertex 5
+- Player 2 (Blue): Vertex 7  
+- Hub: Vertex 6 (critical shared vertex)
+
+EDGE INDEX MAP (for DOM-based play)
+-----------------------------------
+E0=[0-2]  E1=[0-3]  E2=[0-6]*  E3=[1-3]   E4=[1-4]
+E5=[1-7]° E6=[2-4]  E7=[2-8]   E8=[3-9]   E9=[4-5]#
+E10=[5-6]*# E11=[5-9]# E12=[6-7]*° E13=[7-8]° E14=[8-9]
+
+Legend: # = my edge (vertex 5), ° = opponent edge (vertex 7), * = hub edge (vertex 6)
+
+KEY EDGES
+---------
+- MY edges (vertex 5): E9=[4-5], E10=[5-6]*, E11=[5-9]
+- OPPONENT edges (vertex 7): E5=[1-7], E12=[6-7]*, E13=[7-8]
+- HUB edges (vertex 6): E2=[0-6], E10=[5-6], E12=[6-7]
+
+================================================================================
+PROVEN STRATEGIES
+================================================================================
+
+STRATEGY v1: E10-FIRST (Original)
+---------------------------------
+1. E10 Green (hub edge)
+2. E9 Green, E11 Green (complete vertex 5)
+3. E5 Purple, E12 Purple, E13 Purple (attack vertex 7)
+4. Fill remaining with Green
+
+Results:
+- vs AlphaZero Amara: Consistent DRAWS
+- vs Random Randy: Consistent WINS
+- vs MCTS Melissa: VULNERABLE - she may attack E9 with Purple first
+
+STRATEGY v3: E9-FIRST (Improved)
+--------------------------------
+1. E9 Green (secure vulnerable edge FIRST)
+2. E10 Green (hub edge)
+3. E11 Green (complete vertex 5)
+4. E5 Purple, E12 Purple, E13 Purple (attack vertex 7)
+5. Fill remaining with Green
+
+Results:
+- vs MCTS Melissa: ~60% Draws, ~40% Narrow Losses
+- Prevents Melissa's aggressive E9-Purple counter
+
+WHY E9 FIRST MATTERS:
+When opening E10, MCTS Melissa sometimes responds with E9 Purple,
+directly attacking our vertex. This disrupts our control and leads
+to losses. Opening E9 first denies her this aggressive option.
+
+================================================================================
+OPPONENT ANALYSIS
+================================================================================
+
+RANDOM RANDY
+------------
+- No strategic intelligence
+- Makes random valid moves
+- Our strategy dominates completely
+- Record: 4W-0L
+
+ALPHAZERO AMARA (Neural Network + MCTS)
+---------------------------------------
+- Reactive/equalizing, not proactive
+- Values hub edges equally (symmetric evaluation)
+- Responds to threats rather than creating them
+- Late-game swings reveal cycle awareness
+- Never blunders - full lookahead or well-trained value function
+- Record: 0W-4D-4L (draws achievable with standard strategy)
+
+MCTS MELISSA (Monte Carlo Tree Search)
+--------------------------------------
+- Strongest opponent tested
+- Exploits predictable openings
+- Variable responses - sometimes aggressive, sometimes defensive
+- First recorded draw achieved with E9-first strategy
+- Record: 0W-2L-3D
+
+Melissa's Opening Patterns:
+- If we play E10 first: May attack E9 with Purple (aggressive)
+- If we play E9 first: Falls back to E13 Green/Purple (defensive)
+
+================================================================================
+DOM-BASED PLAY METHOD
+================================================================================
+
+Helper object (paste at game start):
+
+window.T = {
+  svg: function() { 
+    var svgs = document.querySelectorAll('svg'); 
+    for (var i = 0; i < svgs.length; i++) { 
+      if (svgs[i].querySelectorAll('line').length > 5) return svgs[i]; 
+    } 
+    return null; 
+  },
+  score: function() { 
+    var m = document.body.innerText.match(/Score: ([-0-9.]+)/); 
+    return m ? parseFloat(m[1]) : 0; 
+  },
+  click: function(idx) { 
+    var s = this.svg(); 
+    if (!s) return false; 
+    var line = s.querySelectorAll('line')[idx]; 
+    if (line) { 
+      line.dispatchEvent(new MouseEvent('click', 
+        {bubbles:true, cancelable:true, view:window})); 
+      return true; 
+    } 
+    return false; 
+  },
+  over: function() { return document.body.innerText.indexOf('Game Over') > -1; },
+  grey: function() { 
+    var s = this.svg(); 
+    var lines = s.querySelectorAll('line'); 
+    var g = []; 
+    for (var i = 0; i < lines.length; i++) { 
+      if (getComputedStyle(lines[i]).stroke.indexOf('229, 231, 235') > -1) g.push(i); 
+    } 
+    return g; 
+  }
+};
+
+Usage:
+  T.score()      → current score
+  T.click(9)     → click edge 9
+  T.grey()       → list of unplayed edge indices
+  T.over()       → check if game ended
+  
+Color clicks: Screen position (76,72) for Green, (76,100) for Purple
+
+================================================================================
+PARAMETERIZED MOVE CALCULATOR (Python)
+================================================================================
+
+PARAMS = {
+    "w_my_edge": 10.0,        # Priority for securing my vertex edges
+    "w_opp_edge": 8.0,        # Priority for attacking opponent edges
+    "w_hub_edge": 5.0,        # Priority for hub (vertex 6) edges
+    "hub_priority": 0.8,      # Prefer hub edges within category
+    "green_threshold": 1.0,   # If score > this, play safe (Green)
+    "purple_threshold": -1.0, # If score < this, play aggressive (Purple)
+    
+    "edge_values": [
+        0.0,   # E0  [0-2]
+        0.0,   # E1  [0-3]
+        0.6,   # E2  [0-6]  hub edge
+        0.1,   # E3  [1-3]
+        0.0,   # E4  [1-4]
+        0.9,   # E5  [1-7]  opponent - high priority attack
+        0.1,   # E6  [2-4]
+        0.0,   # E7  [2-8]
+        0.0,   # E8  [3-9]
+        1.1,   # E9  [4-5]  CRITICAL - secure first vs Melissa
+        1.0,   # E10 [5-6]  my hub edge
+        1.1,   # E11 [5-9]  my edge - secure early
+        0.9,   # E12 [6-7]  opponent hub
+        0.7,   # E13 [7-8]  opponent edge
+        0.0,   # E14 [8-9]
+    ],
+    
+    "opening_sequence": [(9,'G'), (10,'G'), (11,'G')],  # E9-first opening
+}
+
+Calculator Logic:
+1. Check opening sequence override
+2. Score all available edges: base_value + category_weight + hub_bonus
+3. Pick highest scoring edge
+4. Color: Green for my edges, Purple for opponent edges
+5. Neutrals: Green if winning, Purple if losing badly, else Green
+
+================================================================================
+GAME HISTORY
+================================================================================
+
+vs AlphaZero Amara (E10-first strategy):
+  Game 1 (Draw, +0.014): Original strategy discovery
+  Game 2 (Loss, -3.716): Context disruption mid-game
+  Game 3 (Loss, -3.044): Wrong opening (E0 instead of E10)
+  Game 4 (Draw, +0.005): Strategy validated via DOM play
+  Game 5 (Loss, -0.114): Aggressive Purple on neutrals backfired
+  Game 6 (Loss, -0.143): Purple on opponent hub first - punished
+  Game 7 (Draw, -0.004): Standard opening + selective Purple
+  Game 8 (Draw, -0.005): Proven strategy confirmed
+
+vs Random Randy (E10-first strategy):
+  Games 1-4: All wins (scores +3 to +8)
+
+vs MCTS Melissa (with calculator):
+  Game 1 (Draw, +0.020): E10-first, Melissa played E13 Green - FIRST RECORDED DRAW
+  Game 2 (Loss, +0.008): E10-first, Melissa attacked E9 Purple - score positive but loss?
+  Game 3 (Draw, -0.015): E9-first, prevented aggressive counter
+  Game 4 (Draw, -0.218): E9-first, large negative but still draw
+  Game 5 (Loss, -0.004): E9-first, narrow loss
+
+================================================================================
+STRATEGIC INSIGHTS
+================================================================================
+
+1. OPENING EDGE MATTERS
+   - E10-first works vs passive opponents (Amara, Randy)
+   - E9-first required vs aggressive opponents (Melissa)
+
+2. DRAW THRESHOLD IS WIDER THAN DISPLAYED
+   - Game says ±0.0005 but scores like -0.218 can be draws
+   - Actual threshold may be ±0.25 or determined differently
+
+3. MCTS VS NEURAL NETWORK BEHAVIOR
+   - Amara (AlphaZero): Mirrors/equalizes, predictable
+   - Melissa (MCTS): More variable, exploits patterns
+
+4. COLOR STRATEGY
+   - GREEN on my edges: Always (defensive, secures vertex)
+   - PURPLE on opponent edges: Usually (offensive, disrupts their vertex)
+   - GREEN on neutrals: Default (stable)
+   - PURPLE on neutrals: Only when significantly losing
+
+5. TOKEN EFFICIENCY
+   - Python calculator reduces reasoning overhead ~20-30%
+   - DOM manipulation more efficient than screenshot analysis
+   - Pre-computed edge values eliminate repeated analysis
+
+================================================================================
+FUTURE EXPERIMENTS
+================================================================================
+
+- Test Purple-first opening (attack before securing)
+- Explore edge-order variations within the opening
+- Test Player 2 (Blue) to study second-mover dynamics
+- Probe for MCTS horizon effects with complex late-game positions
+- Investigate score calculation to understand draw threshold
+
+================================================================================
