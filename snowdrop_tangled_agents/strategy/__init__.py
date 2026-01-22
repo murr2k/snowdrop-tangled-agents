@@ -12,7 +12,8 @@ except ImportError:
 
 # Optional RL strategy (requires MATLAB)
 try:
-    from snowdrop_tangled_agents.strategy.rl_strategy import RLStrategy
+    from snowdrop_tangled_agents.strategy.rl_strategy import RLStrategy, EnsembleStrategy
     __all__.append('RLStrategy')
+    __all__.append('EnsembleStrategy')
 except ImportError:
     pass

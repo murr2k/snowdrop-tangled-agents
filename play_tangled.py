@@ -88,10 +88,11 @@ except ImportError:
 
 # Optional RL strategy
 try:
-    from snowdrop_tangled_agents.strategy.rl_strategy import RLStrategy
+    from snowdrop_tangled_agents.strategy.rl_strategy import RLStrategy, EnsembleStrategy
     RL_AVAILABLE = True
 except ImportError:
     RL_AVAILABLE = False
+    EnsembleStrategy = None
 
 
 # Vertex coordinates - from working JS bot (tangled-bot-v28.txt)
@@ -192,6 +193,16 @@ class WebPlayer:
                 self.strategy = PetersenStrategy(params_path=self.params_path)
             else:
                 self.strategy = RLStrategy()
+        elif strategy_type == "ensemble":
+            if not RL_AVAILABLE or EnsembleStrategy is None:
+                self.logger.warning("Ensemble strategy unavailable, falling back to petersen")
+                self.strategy = PetersenStrategy(params_path=self.params_path)
+            else:
+                self.strategy = EnsembleStrategy(
+                    num_workers=22,
+                    rollouts_per_action=50,
+                    top_k=5,
+                )
         else:  # "heuristic" (default)
             self.strategy = PetersenStrategy(params_path=self.params_path)
 
@@ -1028,8 +1039,8 @@ def main():
     parser.add_argument("--debug", action="store_true")
     parser.add_argument("--keep-open", "-k", type=int, default=5,
                         help="Seconds to keep browser open after last game (0 to close immediately)")
-    parser.add_argument("--strategy", "-s", choices=["heuristic", "mcts", "hybrid", "matlab", "rl"], default="heuristic",
-                        help="Strategy to use: heuristic (fast), mcts (Monte Carlo), hybrid (MCTS with opening), matlab (MATLAB-enhanced), rl (trained PPO model)")
+    parser.add_argument("--strategy", "-s", choices=["heuristic", "mcts", "hybrid", "matlab", "rl", "ensemble"], default="heuristic",
+                        help="Strategy to use: heuristic (fast), mcts (Monte Carlo), hybrid (MCTS with opening), matlab (MATLAB-enhanced), rl (trained PPO), ensemble (RL + MC rollouts)")
     parser.add_argument("--mcts-time", type=float, default=2.0,
                         help="MCTS time limit per move in seconds")
     parser.add_argument("--mcts-iterations", type=int, default=5000,

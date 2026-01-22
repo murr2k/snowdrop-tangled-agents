@@ -8,6 +8,13 @@ classdef TangledEnvironment < rl.env.MATLABEnvironment
 %   Observation: 50-element feature vector
 %   Action: Discrete 1-30 (15 edges x 2 colors)
 %
+%   Reward Shaping (v2):
+%   - Bonus for securing MY_EDGES (E9, E10, E11) with Green
+%   - Bonus for attacking OPP_EDGES (E5, E12, E13) with Purple
+%   - Urgency bonus for early strategic moves
+%   - Penalty for invalid actions
+%   - Terminal reward based on final score
+%
 %   Example:
 %       env = TangledEnvironment();
 %       obs = reset(env);
@@ -21,19 +28,28 @@ classdef TangledEnvironment < rl.env.MATLABEnvironment
         Score double = 0                  % Current position score
         MoveCount int32 = 0               % Moves made this game
         MaxMoves int32 = 15               % Petersen graph has 15 edges
+        OurMoveCount int32 = 0            % Our moves only
 
         % Components
         Opponent                          % Opponent policy (SimulatedOpponent)
 
         % Configuration
         UseShapingReward logical = true   % Use intermediate rewards
-        InvalidActionPenalty double = -1.0
-        AutoCorrectInvalidActions logical = true  % Remap invalid to valid
+        InvalidActionPenalty double = -0.5  % Penalty for invalid action
+        AutoCorrectInvalidActions logical = false  % Don't auto-correct - teach valid moves
+
+        % Strategic edge sets (1-indexed for MATLAB)
+        MyEdges = [10, 11, 12]    % E9, E10, E11 - edges connected to our vertex
+        OppEdges = [6, 13, 14]    % E5, E12, E13 - edges connected to opponent vertex
+        HubEdges = [3, 11, 13]    % E2, E10, E12 - high-connectivity edges
     end
 
     properties (Access = private)
         % Cache for adjudicator (expensive to create)
         AdjudicatorCache
+
+        % Track previous state for opponent move detection
+        PrevState char
     end
 
     methods
@@ -45,6 +61,7 @@ classdef TangledEnvironment < rl.env.MATLABEnvironment
 
             arguments
                 options.Opponent = []
+                options.AutoCorrect logical = false
             end
 
             % Define observation specification
@@ -70,6 +87,8 @@ classdef TangledEnvironment < rl.env.MATLABEnvironment
             else
                 this.Opponent = options.Opponent;
             end
+
+            this.AutoCorrectInvalidActions = options.AutoCorrect;
         end
 
         function [observation, reward, isDone, info] = step(this, action)
@@ -83,6 +102,11 @@ classdef TangledEnvironment < rl.env.MATLABEnvironment
 
             info = struct();
             info.InvalidAction = false;
+            info.ShapingReward = 0;
+            reward = 0;
+
+            % Store previous state
+            this.PrevState = this.State;
 
             % Decode action to edge and color
             if action <= 15
@@ -106,12 +130,9 @@ classdef TangledEnvironment < rl.env.MATLABEnvironment
                         return;
                     end
                     edge = greyEdges(randi(length(greyEdges)));
-                    % Keep original color choice
                     info.RemappedAction = true;
-                    info.OriginalEdge = action;
-                    info.NewEdge = edge;
                 else
-                    % Invalid action - edge already colored
+                    % Invalid action - penalize and return
                     reward = this.InvalidActionPenalty;
                     observation = this.getObservation();
                     isDone = false;
@@ -124,6 +145,14 @@ classdef TangledEnvironment < rl.env.MATLABEnvironment
             % Apply our move
             this.State(edge) = color;
             this.MoveCount = this.MoveCount + 1;
+            this.OurMoveCount = this.OurMoveCount + 1;
+
+            % Calculate shaping reward for our move
+            if this.UseShapingReward
+                shapingReward = this.calculateShapingReward(edge, color);
+                info.ShapingReward = shapingReward;
+                reward = reward + shapingReward;
+            end
 
             % Check if game over (all edges colored)
             greyCount = sum(this.State == '-');
@@ -131,15 +160,28 @@ classdef TangledEnvironment < rl.env.MATLABEnvironment
             if greyCount == 0
                 % Terminal state - evaluate final score
                 finalScore = this.evaluateTerminal();
-                reward = tanh(finalScore / 3);  % Normalize to [-1, 1]
+                terminalReward = this.calculateTerminalReward(finalScore);
+                reward = reward + terminalReward;
                 isDone = true;
                 info.FinalScore = finalScore;
+                info.TerminalReward = terminalReward;
                 info.Result = this.getResult(finalScore);
             else
                 % Opponent's turn
                 oppMove = this.Opponent.selectMove(this.State);
-                this.State(oppMove.edge + 1) = oppMove.color;  % Convert 0-indexed to 1-indexed
-                this.MoveCount = this.MoveCount + 1;
+
+                if oppMove.edge >= 0 && oppMove.edge < 15
+                    oppEdge = oppMove.edge + 1;  % Convert 0-indexed to 1-indexed
+                    if this.State(oppEdge) == '-'
+                        this.State(oppEdge) = oppMove.color;
+                        this.MoveCount = this.MoveCount + 1;
+
+                        % Penalty if opponent took one of our strategic edges
+                        oppPenalty = this.calculateOpponentPenalty(oppEdge, oppMove.color);
+                        reward = reward + oppPenalty;
+                        info.OpponentPenalty = oppPenalty;
+                    end
+                end
 
                 % Check again for terminal
                 greyCount = sum(this.State == '-');
@@ -147,19 +189,13 @@ classdef TangledEnvironment < rl.env.MATLABEnvironment
                 if greyCount == 0
                     % Terminal after opponent move
                     finalScore = this.evaluateTerminal();
-                    reward = tanh(finalScore / 3);
+                    terminalReward = this.calculateTerminalReward(finalScore);
+                    reward = reward + terminalReward;
                     isDone = true;
                     info.FinalScore = finalScore;
+                    info.TerminalReward = terminalReward;
                     info.Result = this.getResult(finalScore);
                 else
-                    % Game continues - compute shaping reward
-                    if this.UseShapingReward
-                        newScore = this.evaluatePosition();
-                        reward = (newScore - this.Score) * 0.1;
-                        this.Score = newScore;
-                    else
-                        reward = 0;
-                    end
                     isDone = false;
                 end
             end
@@ -167,6 +203,7 @@ classdef TangledEnvironment < rl.env.MATLABEnvironment
             observation = this.getObservation();
             info.State = this.State;
             info.MoveCount = this.MoveCount;
+            info.OurMoveCount = this.OurMoveCount;
         end
 
         function observation = reset(this)
@@ -175,8 +212,10 @@ classdef TangledEnvironment < rl.env.MATLABEnvironment
             %   obs = reset(env)
 
             this.State = repmat('-', 1, 15);
+            this.PrevState = this.State;
             this.Score = 0;
             this.MoveCount = 0;
+            this.OurMoveCount = 0;
             observation = this.getObservation();
         end
 
@@ -197,15 +236,93 @@ classdef TangledEnvironment < rl.env.MATLABEnvironment
     end
 
     methods (Access = private)
+        function reward = calculateShapingReward(this, edge, color)
+            %CALCULATESHAPINGREWARD Compute immediate reward for a move
+            %
+            %   Rewards strategic moves:
+            %   - Green on MY_EDGES: +0.15 (securing our territory)
+            %   - Purple on OPP_EDGES: +0.10 (attacking opponent)
+            %   - Green on HUB_EDGES: +0.05 (controlling connectivity)
+            %   - Urgency bonus for early strategic moves
+
+            reward = 0;
+
+            % Base strategic rewards
+            if color == 'G' && ismember(edge, this.MyEdges)
+                % Securing our edges with Green - most important
+                reward = reward + 0.15;
+
+                % Urgency bonus: higher reward for doing this early
+                if this.OurMoveCount <= 3
+                    reward = reward + 0.10;  % Extra bonus in first 3 moves
+                end
+
+            elseif color == 'P' && ismember(edge, this.OppEdges)
+                % Attacking opponent edges with Purple
+                reward = reward + 0.10;
+
+            elseif color == 'G' && ismember(edge, this.HubEdges)
+                % Controlling hub edges with Green
+                reward = reward + 0.05;
+            end
+
+            % Small penalty for playing Purple on our own edges (bad)
+            if color == 'P' && ismember(edge, this.MyEdges)
+                reward = reward - 0.10;
+            end
+
+            % Small penalty for playing Green on opponent edges (helps them)
+            if color == 'G' && ismember(edge, this.OppEdges)
+                reward = reward - 0.05;
+            end
+        end
+
+        function penalty = calculateOpponentPenalty(this, oppEdge, oppColor)
+            %CALCULATEOPPONENTPENALTY Penalty when opponent takes strategic edges
+            %
+            %   If opponent secures their edges or attacks ours, we get penalized
+
+            penalty = 0;
+
+            % Opponent took one of OUR edges before we could
+            if ismember(oppEdge, this.MyEdges)
+                if oppColor == 'P'
+                    % They attacked our edge with Purple - very bad
+                    penalty = -0.15;
+                else
+                    % They took our edge with Green - moderately bad
+                    penalty = -0.08;
+                end
+            end
+
+            % Opponent secured their own edges
+            if ismember(oppEdge, this.OppEdges) && oppColor == 'G'
+                penalty = penalty - 0.05;
+            end
+        end
+
+        function reward = calculateTerminalReward(~, finalScore)
+            %CALCULATETERMINALREWARD Convert final score to reward
+            %
+            %   Uses tanh scaling with bonus for decisive wins
+
+            % Base reward from score
+            reward = tanh(finalScore / 2);  % More sensitive than /3
+
+            % Bonus for decisive outcomes
+            if finalScore > 2
+                reward = reward + 0.2;  % Bonus for big win
+            elseif finalScore < -2
+                reward = reward - 0.2;  % Extra penalty for big loss
+            end
+        end
+
         function score = evaluateTerminal(this)
             %EVALUATETERMINAL Evaluate terminal state using adjudicator
 
             % Use simulated annealing adjudicator
-            % This matches the official tangled-game.com scoring
             try
                 if isempty(this.AdjudicatorCache)
-                    % Would need Python bridge or pure MATLAB implementation
-                    % For now, use heuristic approximation
                     score = this.heuristicEval();
                 else
                     score = this.AdjudicatorCache.evaluate(this.State);
@@ -215,48 +332,48 @@ classdef TangledEnvironment < rl.env.MATLABEnvironment
             end
         end
 
-        function score = evaluatePosition(this)
-            %EVALUATEPOSITION Quick position evaluation for shaping reward
-
-            score = this.heuristicEval();
-        end
-
         function score = heuristicEval(this)
             %HEURISTICEVAL Heuristic position evaluation
             %
-            %   Simple evaluation based on edge ownership patterns
-
-            % Count colors
-            greenCount = sum(this.State == 'G');
-            purpleCount = sum(this.State == 'P');
-
-            % Good edges for each color (from empirical analysis)
-            goodGreen = [10, 11, 12];  % E9, E10, E11 (1-indexed)
-            goodPurple = [6, 13, 14];  % E5, E12, E13 (1-indexed)
+            %   More sophisticated evaluation based on edge ownership
 
             score = 0;
 
-            % Bonus for good green edges
-            for e = goodGreen
+            % MY_EDGES scoring (E9, E10, E11)
+            for e = this.MyEdges
                 if this.State(e) == 'G'
-                    score = score + 0.3;
+                    score = score + 0.5;   % We secured it
                 elseif this.State(e) == 'P'
-                    score = score - 0.2;
+                    score = score - 0.4;   % Opponent attacked it
                 end
             end
 
-            % Bonus for good purple edges
-            for e = goodPurple
+            % OPP_EDGES scoring (E5, E12, E13)
+            for e = this.OppEdges
                 if this.State(e) == 'P'
-                    score = score + 0.3;
+                    score = score + 0.4;   % We attacked it
                 elseif this.State(e) == 'G'
-                    score = score - 0.2;
+                    score = score - 0.3;   % Opponent secured it
                 end
             end
 
-            % Slight penalty for color imbalance
-            imbalance = abs(greenCount - purpleCount);
-            score = score - imbalance * 0.05;
+            % HUB_EDGES scoring (E2, E10, E12)
+            for e = this.HubEdges
+                if this.State(e) == 'G'
+                    score = score + 0.2;
+                end
+            end
+
+            % Color balance consideration
+            greenCount = sum(this.State == 'G');
+            purpleCount = sum(this.State == 'P');
+            greyCount = sum(this.State == '-');
+
+            % In terminal state, slight preference for balanced colors
+            if greyCount == 0
+                imbalance = abs(greenCount - purpleCount);
+                score = score - imbalance * 0.03;
+            end
         end
 
         function result = getResult(~, score)
