@@ -9,6 +9,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **MATLAB MCTS Strategy** (`snowdrop_tangled_agents/strategy/matlab_mcts_strategy.py`)
+  - High-compute MCTS using MATLAB TangledMCTS engine (5000 iterations, 20s time limit)
+  - `MCTSParams` dataclass for tunable parameters with JSON persistence
+  - Opening book for first 3 moves (E9→E11→E10 Green sequence)
+  - Adaptive exploration based on score momentum (boost when losing, reduce when winning)
+  - Fallback chain: MATLAB MCTS → Python MCTS → heuristic
+  - Integration with stats collection for edge bonus learning
+  - CLI: `python play_tangled.py --strategy matlab_mcts`
+
+- **TangledMCTS MATLAB Engine** (`snowdrop_tangled_agents/matlab/rl/TangledMCTS.m`)
+  - Full MCTS with UCB1 selection and progressive bias
+  - Domain-specific heuristic rollout policy
+  - Calibrated terminal evaluation with priority system (MY_EDGES → OPP_EDGES → HUB_EDGES)
+  - Compute effort diagnostics using MATLAB's `cputime` and `memory` functions
+  - Session-level statistics tracking (total CPU time, total iterations)
+  - `getComputeEffort()` method for detailed performance metrics
+
+- **MCTSNode Class** (`snowdrop_tangled_agents/matlab/rl/MCTSNode.m`)
+  - Tree node implementation with containers.Map for children
+  - UCB1 selection with configurable exploration and prior weight
+  - Action masking for valid moves only
+  - Visit counting and value backpropagation
+
+- **MATLAB MCTS Documentation** (`docs/MATLAB_MCTS_STRATEGY.md`)
+  - Theory of operation for the MATLAB MCTS strategy
+  - Petersen graph edge classification (MY_EDGES, OPP_EDGES, HUB_EDGES)
+  - Terminal evaluation scoring values and priority system
+  - Critical discoveries: E12 G and E2 G cause score collapse
+  - Compute diagnostics and performance profiling guide
+  - Turn-based state reading analysis and fix
+  - Roadmap for future improvements
+
 - **MATLAB RL System** (`snowdrop_tangled_agents/matlab/rl/`)
   - `TangledEnvironment.m`: RL environment with 50-element observation space, 30 discrete actions
   - `createPPOAgent.m`: PPO agent with actor-critic networks (16K+ parameters each)
@@ -204,6 +236,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - MATLAB test reliability
   - Tests check for "PASSED" message in stdout instead of return code
   - Handles MATLAB prerelease shutdown crashes gracefully
+
+- **MATLAB MCTS Terminal Evaluation** (`TangledMCTS.m:evaluateTerminal`)
+  - Fixed E12 G scoring: Was +0.2 (OPP + HUB double-count), now -0.8 penalty
+    - E12 connects hub (V6) to opponent vertex (V7)
+    - Green/ferromagnetic coupling helps opponent in quantum adjudication
+  - Fixed E2 G scoring: Was +0.3 (hub control), now -0.5 penalty
+    - Game data showed E2 G at move 4 caused -2.6 point collapses
+  - Added priority system to avoid double-counting overlapping edge categories
+  - Updated rollout policy: Hub edges 25% green (was 70%)
+
+- **Turn-Based State Reading** (`play_tangled.py`)
+  - Fixed stale DOM state issue causing invalid move attempts
+  - Root cause: `is_our_turn()` returned True before DOM fully updated with opponent's move
+  - Added 0.5s delay after turn change detection before reading board state
+  - Clarified that game is strictly turn-based (no true race conditions)
 
 ## [0.0.5] - 2026-01-20
 

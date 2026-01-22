@@ -94,6 +94,15 @@ except ImportError:
     RL_AVAILABLE = False
     EnsembleStrategy = None
 
+# Optional MATLAB MCTS strategy
+try:
+    from snowdrop_tangled_agents.strategy.matlab_mcts_strategy import MatlabMCTSStrategy, MCTSParams
+    MATLAB_MCTS_AVAILABLE = True
+except ImportError:
+    MATLAB_MCTS_AVAILABLE = False
+    MatlabMCTSStrategy = None
+    MCTSParams = None
+
 
 # Vertex coordinates - from working JS bot (tangled-bot-v28.txt)
 # These match the actual website SVG layout
@@ -202,6 +211,17 @@ class WebPlayer:
                     num_workers=22,
                     rollouts_per_action=50,
                     top_k=5,
+                )
+        elif strategy_type == "matlab_mcts":
+            if not MATLAB_MCTS_AVAILABLE or MatlabMCTSStrategy is None:
+                self.logger.warning("MATLAB MCTS strategy unavailable, falling back to python mcts")
+                self.strategy = MCTSStrategy(time_limit=5.0, max_iterations=10000)
+            else:
+                # Create params with high compute (match Melissa's ~20-25s)
+                mcts_params_path = Path.home() / ".tangled" / "matlab_mcts_params.json"
+                self.strategy = MatlabMCTSStrategy(
+                    params_path=str(mcts_params_path),
+                    fallback_to_python=True,
                 )
         else:  # "heuristic" (default)
             self.strategy = PetersenStrategy(params_path=self.params_path)
@@ -869,6 +889,10 @@ class WebPlayer:
                 time.sleep(0.3)
                 continue
 
+            # Brief delay after turn change to ensure DOM is fully updated
+            # This prevents reading stale state from before opponent's move completed
+            time.sleep(0.5)
+
             # Only count iterations where it's actually our turn (move attempts)
             loop_iterations += 1
             if loop_iterations > max_iterations:
@@ -903,14 +927,32 @@ class WebPlayer:
 
             # Re-read board state after MCTS calculation (opponent may have played)
             current_state = self.read_board()
+            state = current_state  # Update state for next iteration
             available = [i for i, c in enumerate(current_state) if c == '-' and i not in failed_edges]
 
             # Verify edge is still available after calculation time
             if current_state[edge] != '-' or edge in failed_edges:
                 if available:
-                    self.logger.warning(f"E{edge} no longer available (opponent played during calculation), picking from: {available[:3]}...")
-                    edge = available[0]
-                    color = 'G'
+                    self.logger.warning(f"E{edge} no longer available (opponent played during calculation)")
+                    # Re-read board to ensure we have latest state
+                    time.sleep(0.5)  # Brief wait for DOM to stabilize
+                    fresh_state = self.read_board()
+                    fresh_available = [i for i, c in enumerate(fresh_state) if c == '-' and i not in failed_edges]
+                    self.logger.info(f"Fresh state: {sum(1 for c in fresh_state if c == '-')} grey edges")
+                    # Recalculate move with updated state instead of picking blindly
+                    recalc_result = self.strategy.calculate_move(fresh_state, score, self.score_history)
+                    if recalc_result is not None:
+                        edge, color = recalc_result
+                        # Verify recalculated edge is valid against fresh state
+                        if fresh_state[edge] != '-' or edge in failed_edges:
+                            # Strategy returned invalid edge, pick first available
+                            self.logger.warning(f"Recalculated E{edge} also unavailable, using fallback")
+                            edge = fresh_available[0] if fresh_available else available[0]
+                            # Use heuristic for color: Green on our edges, Purple on opponent's
+                            color = 'G' if edge in [9, 10, 11] else ('P' if edge in [5, 12, 13] else 'G')
+                    else:
+                        edge = fresh_available[0] if fresh_available else available[0]
+                        color = 'G' if edge in [9, 10, 11] else ('P' if edge in [5, 12, 13] else 'G')
                 else:
                     self.logger.warning("No available edges after rechecking")
                     break
@@ -1017,7 +1059,10 @@ class WebPlayer:
         # Log MCTS stats if applicable
         if hasattr(self.strategy, 'get_stats'):
             stats = self.strategy.get_stats()
-            self.logger.info(f"MCTS Stats: {stats['iterations']} iterations in {stats['time']:.2f}s")
+            if 'iterations' in stats and 'time' in stats:
+                self.logger.info(f"MCTS Stats: {stats['iterations']} iterations in {stats['time']:.2f}s")
+            elif 'games' in stats:
+                self.logger.info(f"Strategy Stats: {stats['games']} games, {stats.get('wins', 0)}W/{stats.get('losses', 0)}L/{stats.get('draws', 0)}D")
             # Log game stats if available
             if 'game_stats' in stats:
                 gs = stats['game_stats']
@@ -1039,8 +1084,8 @@ def main():
     parser.add_argument("--debug", action="store_true")
     parser.add_argument("--keep-open", "-k", type=int, default=5,
                         help="Seconds to keep browser open after last game (0 to close immediately)")
-    parser.add_argument("--strategy", "-s", choices=["heuristic", "mcts", "hybrid", "matlab", "rl", "ensemble"], default="heuristic",
-                        help="Strategy to use: heuristic (fast), mcts (Monte Carlo), hybrid (MCTS with opening), matlab (MATLAB-enhanced), rl (trained PPO), ensemble (RL + MC rollouts)")
+    parser.add_argument("--strategy", "-s", choices=["heuristic", "mcts", "hybrid", "matlab", "rl", "ensemble", "matlab_mcts"], default="heuristic",
+                        help="Strategy to use: heuristic (fast), mcts (Monte Carlo), hybrid (MCTS with opening), matlab (MATLAB-enhanced), rl (trained PPO), ensemble (RL + MC rollouts), matlab_mcts (MATLAB MCTS with high compute)")
     parser.add_argument("--mcts-time", type=float, default=2.0,
                         help="MCTS time limit per move in seconds")
     parser.add_argument("--mcts-iterations", type=int, default=5000,

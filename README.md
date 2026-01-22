@@ -1,6 +1,36 @@
-# snowdrop-tangled-agents
+# Snowdrop Tangled Agents
 
-A framework for building and testing agents for the Tangled quantum game. Includes strategy engines, web automation for playing on tangled-game.com, and statistical analysis tools.
+**AI agents that compete in the quantum game of Tangled**
+
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![MATLAB R2024a+](https://img.shields.io/badge/MATLAB-R2024a+-orange.svg)](https://www.mathworks.com/products/matlab.html)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Playwright](https://img.shields.io/badge/Playwright-automated-brightgreen.svg)](https://playwright.dev/)
+
+---
+
+A comprehensive framework for building intelligent agents that play [Tangled](https://tangled-game.com), a quantum game where players color edges on graph structures and outcomes are determined by quantum annealing. This project combines **Monte Carlo Tree Search**, **MATLAB-powered compute**, and **machine learning** to compete against the game's built-in AI opponents.
+
+### Tech Stack
+
+| Component | Technology |
+|-----------|------------|
+| **Core Language** | Python 3.11+ |
+| **High-Performance Compute** | MATLAB R2024a+ (Deep Learning, Statistics, Parallel Computing Toolboxes) |
+| **Web Automation** | Playwright (Chromium) |
+| **Database** | SQLite with automatic migrations |
+| **Game Engine** | [snowdrop-tangled-game-engine](https://github.com/snowdropquantum/snowdrop-tangled-game-engine) |
+| **Quantum Adjudication** | Simulated Annealing, Schrödinger Equation solvers |
+
+### Highlights
+
+- **MCTS Strategy Engine** - Monte Carlo Tree Search with 5000+ iterations per move
+- **MATLAB Integration** - High-compute search with parallel processing and neural network evaluation
+- **Live Web Play** - Automated gameplay on tangled-game.com via Playwright
+- **Statistical Analysis** - SQLite-backed game history with pattern discovery
+- **Calibrated Heuristics** - Terminal evaluation tuned from 140+ real games
+
+---
 
 ## Quick Start
 
@@ -8,6 +38,7 @@ A framework for building and testing agents for the Tangled quantum game. Includ
 
 - Python 3.11 - 3.13
 - Git
+- MATLAB R2024a+ (optional, for high-performance strategies)
 
 ### Installation
 
@@ -202,9 +233,40 @@ python play_tangled.py --training-status
 python play_tangled.py --strategy matlab --use-nn --adapt-opponent --games 5
 ```
 
+### 7. MATLAB MCTS Strategy (January 2026)
+
+High-compute MCTS implementation in MATLAB for live play against MCTS Melissa:
+
+**Key Features:**
+- 5000 iterations per move with 20s time limit
+- Domain-specific terminal evaluation calibrated from 140+ games
+- Opening book securing our vertex edges (E9, E10, E11 Green)
+- Adaptive exploration based on score momentum
+- Compute diagnostics using MATLAB's `cputime` and `memory` functions
+
+**Critical Discoveries:**
+- **E12 Green is catastrophic**: Connecting hub (V6) to opponent vertex (V7) with ferromagnetic coupling helps the opponent. Added -0.8 penalty.
+- **E2 Green causes score collapse**: Observed -2.6 point drops at move 4. Added -0.5 penalty.
+- **Turn-based timing**: Game is strictly turn-based; apparent "race conditions" were actually stale DOM state from reading board before browser fully updated.
+
+**Results:**
+- Before fixes: Score peaked at +2.95, collapsed to -2.6 at move 4
+- After fixes: Stable score progression, competitive games (draws and close losses)
+
+```bash
+# Play with MATLAB MCTS
+python play_tangled.py --strategy matlab_mcts --games 3
+
+# View game statistics
+python play_tangled.py --stats
+```
+
+See `docs/MATLAB_MCTS_STRATEGY.md` for complete theory of operation.
+
 ### Documentation
 
 - `docs/THEORY_OF_OPERATION.md` - Comprehensive system documentation
 - `docs/MATLAB_INTEGRATION.md` - Complete MATLAB integration guide
+- `docs/MATLAB_MCTS_STRATEGY.md` - MATLAB MCTS theory of operation and tuning guide
 - `docs/TEST_SUITE.md` - Regression test documentation
 - `docs/THE_MATHEMATICS_OF_TANGLED_GAME.md` - Game theory analysis
