@@ -344,6 +344,19 @@ class WebPlayer:
         """Check if it's our turn."""
         try:
             text = self.page.inner_text("body").lower()
+            # Debug: log turn detection occasionally
+            if hasattr(self, '_turn_check_count'):
+                self._turn_check_count += 1
+            else:
+                self._turn_check_count = 1
+            if self._turn_check_count % 50 == 1:
+                # Extract relevant portion for logging
+                turn_text = ""
+                for phrase in ["your turn", "opponent", "waiting", "game over", "winner"]:
+                    if phrase in text:
+                        turn_text += f"[{phrase}] "
+                if turn_text:
+                    self.logger.debug(f"Turn status: {turn_text.strip()}")
             # Explicit turn indicators
             if "your turn" in text:
                 return True
@@ -828,13 +841,15 @@ class WebPlayer:
         max_retries = 3  # Max retries per move attempt
 
         while not self.is_game_over():
-            loop_iterations += 1
-            if loop_iterations > max_iterations:
-                self.logger.error(f"Safety limit reached: {loop_iterations} iterations (likely infinite loop)")
-                break
             if not self.is_our_turn():
                 time.sleep(0.3)
                 continue
+
+            # Only count iterations where it's actually our turn (move attempts)
+            loop_iterations += 1
+            if loop_iterations > max_iterations:
+                self.logger.error(f"Safety limit reached: {loop_iterations} move attempts (likely infinite loop)")
+                break
 
             state = self.read_board()
             score = self.read_score()
