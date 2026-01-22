@@ -60,14 +60,14 @@ classdef SQLiteExperienceBuffer < handle
             %       nextState - Next state (50x1 vector)
             %       done      - Episode done flag (0 or 1)
 
-            % Serialize states to byte arrays
-            stateBlob = getByteStreamFromArray(state(:));
-            nextStateBlob = getByteStreamFromArray(nextState(:));
+            % Serialize states to base64 strings (more portable than raw bytes)
+            stateStr = matlab.net.base64encode(getByteStreamFromArray(state(:)));
+            nextStateStr = matlab.net.base64encode(getByteStreamFromArray(nextState(:)));
 
-            % Insert into database
+            % Insert into database using parameterized query for safety
             insert(this.Connection, 'experience', ...
                 {'state', 'action', 'reward', 'next_state', 'done'}, ...
-                {stateBlob, action, reward, nextStateBlob, double(done)});
+                {stateStr, action, reward, nextStateStr, double(done)});
 
             % Prune if over max size
             this.pruneOldest();
@@ -116,8 +116,11 @@ classdef SQLiteExperienceBuffer < handle
             nextStates = zeros(50, n);
 
             for i = 1:n
-                states(:, i) = getArrayFromByteStream(data.state{i});
-                nextStates(:, i) = getArrayFromByteStream(data.next_state{i});
+                % Decode from base64 strings
+                stateBytes = matlab.net.base64decode(data.state{i});
+                nextStateBytes = matlab.net.base64decode(data.next_state{i});
+                states(:, i) = getArrayFromByteStream(stateBytes);
+                nextStates(:, i) = getArrayFromByteStream(nextStateBytes);
             end
 
             batch = struct();
@@ -166,10 +169,10 @@ classdef SQLiteExperienceBuffer < handle
             exec(this.Connection, [...
                 'CREATE TABLE IF NOT EXISTS experience (' ...
                 '  id INTEGER PRIMARY KEY AUTOINCREMENT,' ...
-                '  state BLOB NOT NULL,' ...
+                '  state TEXT NOT NULL,' ...       % Base64-encoded state vector
                 '  action INTEGER NOT NULL,' ...
                 '  reward REAL NOT NULL,' ...
-                '  next_state BLOB NOT NULL,' ...
+                '  next_state TEXT NOT NULL,' ...  % Base64-encoded next state vector
                 '  done INTEGER NOT NULL,' ...
                 '  timestamp DATETIME DEFAULT CURRENT_TIMESTAMP' ...
                 ')']);

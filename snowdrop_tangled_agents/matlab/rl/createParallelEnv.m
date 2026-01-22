@@ -49,12 +49,12 @@ function vecEnv = createParallelEnv(numWorkers, options)
         % Configure opponent type
         switch options.OpponentType
             case 'heuristic'
-                envs{i}.OpponentPolicy = SimulatedOpponent('heuristic');
+                envs{i}.Opponent = SimulatedOpponent('Style', 'heuristic');
             case 'mcts'
-                envs{i}.OpponentPolicy = SimulatedOpponent('mcts');
+                envs{i}.Opponent = SimulatedOpponent('Style', 'mcts');
             case 'self'
                 % Self-play: opponent will use same agent (set later)
-                envs{i}.OpponentPolicy = [];
+                envs{i}.Opponent = [];
             otherwise
                 error('Unknown opponent type: %s', options.OpponentType);
         end

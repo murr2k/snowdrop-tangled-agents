@@ -124,9 +124,11 @@ function action = selectMaskedAction(agent, obs, mask)
 %SELECTMASKEDACTION Sample from masked policy distribution
 
     % Get action probabilities from agent
+    % Use forward() instead of predict() to avoid conflict with System ID Toolbox
     try
-        actorNet = getActor(agent);
-        probs = predict(actorNet, dlarray(obs, 'CB'));
+        actor = getActor(agent);
+        actorNet = getModel(actor);
+        probs = forward(actorNet, dlarray(obs, 'CB'));
         probs = extractdata(probs);
     catch
         % Fallback: uniform over valid actions
@@ -162,9 +164,11 @@ function action = selectGreedyMaskedAction(agent, obs, mask)
 %SELECTGREEDYMASKEDACTION Select highest probability valid action
 
     % Get action probabilities from agent
+    % Use forward() instead of predict() to avoid conflict with System ID Toolbox
     try
-        actorNet = getActor(agent);
-        probs = predict(actorNet, dlarray(obs, 'CB'));
+        actor = getActor(agent);
+        actorNet = getModel(actor);
+        probs = forward(actorNet, dlarray(obs, 'CB'));
         probs = extractdata(probs);
     catch
         % Fallback: uniform over valid actions

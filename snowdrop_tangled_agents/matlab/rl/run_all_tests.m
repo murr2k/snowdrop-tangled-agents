@@ -19,11 +19,25 @@ function results = run_all_tests(mode)
         mode = 'standard';
     end
 
-    %% Initialize
+    %% Initialize isolated test environment
+    % CRITICAL: All tests use isolated temp directory to protect production data
+    testDir = fullfile(tempdir, sprintf('tangled_test_%s', datestr(now, 'yyyymmdd_HHMMSS')));
+    mkdir(testDir);
+
+    % Store test directory for all test functions
+    setappdata(0, 'TangledTestDir', testDir);
+
+    % Safety check: Ensure we NEVER touch production database
+    prodDbPath = fullfile(getenv('USERPROFILE'), '.tangled', 'game_stats.db');
+    setappdata(0, 'TangledProdDbPath', prodDbPath);
+
     fprintf('\n');
     fprintf('╔════════════════════════════════════════════════════════════════╗\n');
     fprintf('║     TANGLED DYNAMIC LEARNING - TEST RUNNER                     ║\n');
     fprintf('║     Mode: %-53s║\n', upper(mode));
+    fprintf('╠════════════════════════════════════════════════════════════════╣\n');
+    fprintf('║  ISOLATED TEST DIR: %s\n', testDir);
+    fprintf('║  Production DB protected: %s\n', prodDbPath);
     fprintf('╚════════════════════════════════════════════════════════════════╝\n\n');
 
     results = struct();
@@ -310,7 +324,8 @@ end
 function test_env_action_space()
     env = TangledEnvironment();
     actInfo = getActionInfo(env);
-    numActions = actInfo.Dimension(1);
+    % For rlFiniteSetSpec, use Elements to get action count
+    numActions = numel(actInfo.Elements);
     assert(numActions == 30, sprintf('Expected 30 actions, got %d', numActions));
     delete(env);
 end
@@ -403,9 +418,11 @@ function test_actor_forward()
     % Get observation
     obs = reset(env);
 
-    % Forward pass through actor
+    % Forward pass through actor network
+    % Use forward() to avoid conflict with System Identification Toolbox's predict()
     actor = getActor(agent);
-    probs = predict(actor, dlarray(obs(:), 'CB'));
+    actorNet = getModel(actor);
+    probs = forward(actorNet, dlarray(obs(:), 'CB'));
     probs = extractdata(probs);
 
     assert(length(probs) == 30, sprintf('Expected 30 action probs, got %d', length(probs)));
@@ -421,9 +438,11 @@ function test_critic_forward()
     % Get observation
     obs = reset(env);
 
-    % Forward pass through critic
+    % Forward pass through critic network
+    % Use forward() to avoid conflict with System Identification Toolbox's predict()
     critic = getCritic(agent);
-    value = predict(critic, dlarray(obs(:), 'CB'));
+    criticNet = getModel(critic);
+    value = forward(criticNet, dlarray(obs(:), 'CB'));
     value = extractdata(value);
 
     assert(isscalar(value), 'Value should be scalar');
@@ -443,7 +462,7 @@ function test_masked_action()
 
     % Select multiple actions and verify all are valid
     for i = 1:10
-        action = selectMaskedAction(agent, obs, mask);
+        action = testSelectMaskedAction(agent, obs, mask);
         assert(any(action == [5, 10, 25]), ...
             sprintf('Action %d not in valid set [5, 10, 25]', action));
     end
@@ -451,10 +470,12 @@ function test_masked_action()
     delete(env);
 end
 
-function selectMaskedAction(agent, obs, mask)
-    % Local implementation for testing
+function action = testSelectMaskedAction(agent, obs, mask)
+    % Local implementation for testing (returns action)
     actor = getActor(agent);
-    probs = predict(actor, dlarray(obs(:), 'CB'));
+    actorNet = getModel(actor);
+    % Use forward() to avoid conflict with System Identification Toolbox
+    probs = forward(actorNet, dlarray(obs(:), 'CB'));
     probs = extractdata(probs);
 
     % Apply mask
@@ -471,11 +492,23 @@ function selectMaskedAction(agent, obs, mask)
     % Sample
     cumProbs = cumsum(probs);
     action = find(cumProbs >= rand(), 1);
+
+    % Safety fallback
+    if isempty(action)
+        validIdx = find(mask);
+        action = validIdx(randi(length(validIdx)));
+    end
 end
 
 function test_experience_buffer()
-    % Create temporary database
-    dbPath = fullfile(tempdir, 'test_buffer.db');
+    % Use isolated test directory
+    testDir = getappdata(0, 'TangledTestDir');
+    dbPath = fullfile(testDir, 'test_buffer.db');
+
+    % Safety: Verify we're not touching production
+    prodPath = getappdata(0, 'TangledProdDbPath');
+    assert(~strcmp(dbPath, prodPath), 'SAFETY: Attempted to use production database!');
+
     if exist(dbPath, 'file')
         delete(dbPath);
     end
@@ -496,7 +529,7 @@ function test_experience_buffer()
     batch = buffer.sample(5);
 
     assert(length(batch.actions) == 5, 'Should sample 5 experiences');
-    assert(length(batch.states) == 5, 'Should have 5 states');
+    assert(size(batch.states, 2) == 5, 'Should have 5 states (50x5 matrix)');
 
     % Cleanup
     buffer.close();
@@ -571,7 +604,9 @@ function test_gpu_enable()
     % Agent should still work
     obs = reset(env);
     actor = getActor(agent);
-    probs = predict(actor, dlarray(obs(:), 'CB'));
+    actorNet = getModel(actor);
+    % Use forward() to avoid conflict with System Identification Toolbox
+    probs = forward(actorNet, dlarray(obs(:), 'CB'));
 
     assert(~isempty(probs), 'Agent should still produce output after GPU enable');
 
@@ -582,9 +617,14 @@ function test_parallel_training()
     env = TangledEnvironment();
     agent = createPPOAgent(env);
 
-    % Very short training run
-    dbPath = fullfile(tempdir, 'test_parallel_train.db');
-    savePath = fullfile(tempdir, 'test_parallel_checkpoints');
+    % Use isolated test directory
+    testDir = getappdata(0, 'TangledTestDir');
+    dbPath = fullfile(testDir, 'test_parallel_train.db');
+    savePath = fullfile(testDir, 'test_parallel_checkpoints');
+
+    % Safety: Verify we're not touching production
+    prodPath = getappdata(0, 'TangledProdDbPath');
+    assert(~contains(dbPath, '.tangled'), 'SAFETY: Path contains .tangled!');
 
     [trainedAgent, stats] = trainParallel(agent, ...
         'NumWorkers', 1, ...
@@ -608,26 +648,28 @@ end
 
 %% Cleanup
 function cleanupTestArtifacts()
-    % Remove any test databases or checkpoints
-    testFiles = {
-        fullfile(tempdir, 'test_buffer.db'),
-        fullfile(tempdir, 'test_parallel_train.db'),
-        fullfile(tempdir, 'test_parallel_exp.db')
-    };
+    % Get isolated test directory
+    testDir = getappdata(0, 'TangledTestDir');
 
-    for i = 1:length(testFiles)
-        if exist(testFiles{i}, 'file')
-            delete(testFiles{i});
+    if ~isempty(testDir) && exist(testDir, 'dir')
+        % Safety: Double-check we're not deleting anything important
+        if contains(testDir, 'tangled_test_') && contains(testDir, tempdir)
+            fprintf('Cleaning up test directory: %s\n', testDir);
+            try
+                rmdir(testDir, 's');
+            catch ME
+                warning('Could not fully clean test directory: %s', ME.message);
+            end
+        else
+            warning('Skipping cleanup - unexpected test directory path: %s', testDir);
         end
     end
 
-    testDirs = {
-        fullfile(tempdir, 'test_parallel_checkpoints')
-    };
-
-    for i = 1:length(testDirs)
-        if exist(testDirs{i}, 'dir')
-            rmdir(testDirs{i}, 's');
-        end
+    % Clear app data
+    if isappdata(0, 'TangledTestDir')
+        rmappdata(0, 'TangledTestDir');
+    end
+    if isappdata(0, 'TangledProdDbPath')
+        rmappdata(0, 'TangledProdDbPath');
     end
 end
