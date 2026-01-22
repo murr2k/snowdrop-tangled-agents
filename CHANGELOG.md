@@ -9,6 +9,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **MATLAB RL System** (`snowdrop_tangled_agents/matlab/rl/`)
+  - `TangledEnvironment.m`: RL environment with 50-element observation space, 30 discrete actions
+  - `createPPOAgent.m`: PPO agent with actor-critic networks (16K+ parameters each)
+  - `trainParallel.m`: Parallel self-play training with worker pools
+  - `collectEpisode.m`: Experience collection with action masking
+  - `SQLiteExperienceBuffer.m`: Persistent replay buffer with base64 serialization
+  - `SimulatedOpponent.m`: Configurable opponent for self-play (random, heuristic, copy)
+  - `getActionMask.m`: Valid action filtering (15 edges × 2 colors)
+
+- **Phase 5: Continuous Deployment Pipeline** (`snowdrop_tangled_agents/matlab/rl/`)
+  - `ModelRegistry.m`: SQLite-backed model version management
+  - `tangled_agent_inference.m`: Compiled inference with hot-reload (60s refresh)
+  - `autoDeploy.m`: Automatic deployment when win rate improves
+  - `build_rl_package.m`: MATLAB Compiler SDK build script
+  - `rl_bridge.py`: Python bridge with fallback chain (compiled → engine → heuristic)
+
+- **CI/CD Integration** (`.github/workflows/test.yml`)
+  - GitHub Actions workflow for Python tests (3.11, 3.12, 3.13)
+  - Self-hosted runner support for MATLAB tests
+  - Manual trigger option for MATLAB test suite
+  - pytest markers: `matlab` (requires MATLAB), `slow` (training tests)
+
+- **MATLAB Test Suite** (`snowdrop_tangled_agents/matlab/rl/run_all_tests.m`)
+  - 23 regression tests covering Phases 0-4
+  - Isolated test directories to protect production database
+  - GPU detection with graceful CPU fallback
+  - pytest wrapper: `snowdrop_tangled_agents/tests/test_matlab_rl.py`
+
 - **MATLAB Toolbox Integration** (`snowdrop_tangled_agents/matlab/`)
   - Deep Learning Toolbox integration for neural network position evaluation
   - Statistics and ML Toolbox for opponent clustering and style classification
@@ -137,6 +165,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated `snowdrop_tangled_agents/__init__.py` to export PetersenAgent
 - Updated `snowdrop_tangled_agents/agents/__init__.py` to include PetersenAgent
 - Updated `pyproject.toml` with new dependencies (playwright, python-dotenv, coloredlogs)
+- Updated `pyproject.toml` with pytest markers (`matlab`, `slow`)
+- Updated `docs/TEST_SUITE.md` with MATLAB RL test documentation and CI/CD workflow
 
 ### Fixed
 
@@ -165,6 +195,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added signal handlers for SIGTERM/SIGINT
   - Implemented atexit cleanup handler
   - Added context manager support for automatic cleanup
+
+- MATLAB RL training bugs (`trainParallel.m`)
+  - Fixed brace indexing error: SQLiteExperienceBuffer returns matrices, not cell arrays
+  - Fixed integer/double type mismatch with explicit `double()` conversions
+  - Fixed System ID Toolbox conflict: use `forward(getModel(getCritic(agent)), ...)` instead of `predict()`
+
+- MATLAB test reliability
+  - Tests check for "PASSED" message in stdout instead of return code
+  - Handles MATLAB prerelease shutdown crashes gracefully
 
 ## [0.0.5] - 2026-01-20
 

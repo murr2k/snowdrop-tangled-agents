@@ -44,6 +44,10 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "--verbose --cov=snowdrop_tangled_agents --cov-report=html --cov-report=term"
+markers = [
+    "matlab: tests requiring MATLAB installation (deselect with '-m \"not matlab\"')",
+    "slow: slow tests that should be run explicitly (deselect with '-m \"not slow\"')",
+]
 
 [tool.setuptools.packages.find]
 exclude = ["snowdrop_tangled_agents.tests*"]

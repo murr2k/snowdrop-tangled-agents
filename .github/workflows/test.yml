@@ -1,0 +1,115 @@
+name: Tests
+
+on:
+  push:
+    branches: [main, develop, 'feature/**']
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+    inputs:
+      run_matlab_tests:
+        description: 'Run MATLAB tests (requires self-hosted runner with MATLAB)'
+        required: false
+        default: 'false'
+        type: boolean
+
+jobs:
+  python-tests:
+    name: Python Tests
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.11', '3.12', '3.13']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: latest
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+
+      - name: Load cached venv
+        id: cached-poetry-dependencies
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('**/poetry.lock') }}
+
+      - name: Install dependencies
+        if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
+        run: poetry install --no-interaction --no-root
+
+      - name: Install project
+        run: poetry install --no-interaction
+
+      - name: Run Python tests (excluding MATLAB)
+        run: |
+          poetry run pytest -v -m "not matlab" --cov=snowdrop_tangled_agents --cov-report=xml
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage.xml
+          fail_ci_if_error: false
+
+  matlab-tests:
+    name: MATLAB Tests
+    runs-on: self-hosted  # Requires self-hosted runner with MATLAB installed
+    if: github.event.inputs.run_matlab_tests == 'true' || github.event_name == 'workflow_dispatch'
+    needs: python-tests  # Only run after Python tests pass
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+
+      - name: Install dependencies
+        run: poetry install --no-interaction
+
+      - name: Run MATLAB RL tests
+        run: |
+          poetry run pytest -v -m matlab --tb=short
+        env:
+          MATLAB_PATH: ${{ secrets.MATLAB_PATH || '' }}
+
+      - name: Run MATLAB tests directly (fallback)
+        if: failure()
+        run: |
+          matlab -batch "cd('snowdrop_tangled_agents/matlab/rl'); results = run_all_tests('quick'); exit(results.failed)"
+
+  # Local MATLAB test job - for documentation purposes
+  # Run locally with: pytest -v -m matlab
+  matlab-tests-local:
+    name: MATLAB Tests (Local Instructions)
+    runs-on: ubuntu-latest
+    if: false  # Never runs - documentation only
+
+    steps:
+      - name: Instructions for local MATLAB testing
+        run: |
+          echo "To run MATLAB tests locally:"
+          echo ""
+          echo "1. Ensure MATLAB is installed and in PATH"
+          echo "2. Run: pytest -v -m matlab"
+          echo ""
+          echo "Or run directly in MATLAB:"
+          echo "  >> cd snowdrop_tangled_agents/matlab/rl"
+          echo "  >> run_all_tests('quick')"
+          echo ""
+          echo "Environment variables:"
+          echo "  MATLAB_PATH: Override MATLAB executable path"
+          echo "  SKIP_MATLAB_TESTS=1: Skip MATLAB tests entirely"

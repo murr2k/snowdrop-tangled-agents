@@ -11,23 +11,39 @@ The test suite verifies all components of the MATLAB integration:
 - Compiled bridge interface
 - Training orchestrator
 - MATLAB strategy integration
+- **MATLAB RL System** (PPO agent, environment, parallel training)
 
 ## Running Tests
 
-### Full Test Suite
+### Python Tests (No MATLAB Required)
 
 ```bash
-# Run all tests with coverage
-python -m pytest snowdrop_tangled_agents/tests/test_matlab_integration.py -v
+# Run all Python tests
+pytest -v -m "not matlab"
 
-# Run without coverage (faster)
-python -m pytest snowdrop_tangled_agents/tests/test_matlab_integration.py -v --no-cov
+# Run MATLAB integration tests (Python-side)
+pytest snowdrop_tangled_agents/tests/test_matlab_integration.py -v
+```
 
-# Run specific test class
-python -m pytest snowdrop_tangled_agents/tests/test_matlab_integration.py::TestUnifiedBridge -v
+### MATLAB RL Tests (Requires MATLAB)
 
-# Run specific test
-python -m pytest snowdrop_tangled_agents/tests/test_matlab_integration.py::TestMatlabStrategy::test_strategy_calculate_move_opening -v
+```bash
+# Run MATLAB RL tests via pytest
+pytest -v -m matlab
+
+# Run only quick MATLAB tests
+pytest -v -m matlab -k "Quick"
+
+# Run full MATLAB test suite (includes training)
+pytest -v -m matlab -k "Full"
+```
+
+### Direct MATLAB Testing
+
+```matlab
+% In MATLAB, from snowdrop_tangled_agents/matlab/rl directory:
+>> results = run_all_tests('quick')   % Fast tests (~30s)
+>> results = run_all_tests('full')    % All tests including training (~60s)
 ```
 
 ### Quick Verification
@@ -125,6 +141,69 @@ python play_tangled.py --training-status
 - Backend set after `initialize()`
 - Opening move from `opening_sequence` list
 - Stats include `backend`, `nn_calls`, `adapt_calls`
+
+### 7. MATLAB RL System (23 tests)
+
+These tests require MATLAB installation and are marked with `@pytest.mark.matlab`.
+
+#### Phase 0: Dependencies (5 tests)
+
+| Test | Description | Verifies |
+|------|-------------|----------|
+| DEP-01 | RL Toolbox available | Toolbox installation |
+| DEP-02 | Deep Learning Toolbox | Toolbox installation |
+| DEP-03 | Database Toolbox (optional) | SQLite access |
+| DEP-04 | Parallel Computing Toolbox (optional) | Parallel workers |
+| DEP-05 | GPU detection | Graceful CPU fallback |
+
+#### Phase 2: RL Environment (7 tests)
+
+| Test | Description | Verifies |
+|------|-------------|----------|
+| ENV-01 | TangledEnvironment instantiation | Environment creation |
+| ENV-02 | Observation space (50 elements) | Feature vector size |
+| ENV-03 | Action space (30 discrete) | 15 edges × 2 colors |
+| ENV-04 | Action masking | Valid move filtering |
+| ENV-05 | Environment step function | State transitions |
+| ENV-06 | Environment reset | Episode initialization |
+| ENV-07 | Episode completion | Terminal state detection |
+
+#### Phase 3: PPO Agent (6 tests)
+
+| Test | Description | Verifies |
+|------|-------------|----------|
+| PPO-01 | PPO agent creation | Agent initialization |
+| PPO-02 | Actor network forward pass | Policy inference |
+| PPO-03 | Critic network forward pass | Value estimation |
+| PPO-04 | Masked action selection | Valid action sampling |
+| PPO-05 | SQLite experience buffer | Replay buffer storage |
+| PPO-06 | Single training step | Gradient update |
+
+#### Phase 4: Parallel Self-Play (5 tests)
+
+| Test | Description | Verifies |
+|------|-------------|----------|
+| PAR-01 | Parallel environment creation | Worker setup |
+| PAR-02 | Episode collection | Experience gathering |
+| PAR-03 | Worker initialization | Pool management |
+| PAR-04 | GPU enable (graceful fallback) | Device selection |
+| PAR-05 | Short parallel training | End-to-end training |
+
+#### Phase 5: Deployment Pipeline (9 tests)
+
+Run via `test_deployment.m`:
+
+| Test | Description | Verifies |
+|------|-------------|----------|
+| Test 1 | ModelRegistry creation | SQLite registry setup |
+| Test 2 | Model registration | Version management |
+| Test 3 | Model deployment | Hot-swap deployment |
+| Test 4 | Load deployed model | Model loading |
+| Test 5 | List versions | Version enumeration |
+| Test 6 | Inference function | tangled_agent_inference |
+| Test 7 | Auto-deploy (new) | First deployment |
+| Test 8 | Auto-deploy (skip) | No improvement threshold |
+| Test 9 | Auto-deploy (improve) | Significant improvement |
 
 ---
 
@@ -364,32 +443,64 @@ python -m pytest snowdrop_tangled_agents/tests/test_matlab_integration.py::TestN
 
 ## Continuous Integration
 
-### GitHub Actions Workflow (suggested)
+### GitHub Actions Workflow
+
+The project includes a GitHub Actions workflow (`.github/workflows/test.yml`) that:
+
+1. **Python Tests** - Run on every push/PR across Python 3.11, 3.12, 3.13
+2. **MATLAB Tests** - Run on self-hosted runner with MATLAB (manual trigger)
 
 ```yaml
-name: MATLAB Integration Tests
+name: Tests
 
-on: [push, pull_request]
+on:
+  push:
+    branches: [main, develop, 'feature/**']
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+    inputs:
+      run_matlab_tests:
+        description: 'Run MATLAB tests (requires self-hosted runner)'
+        required: false
+        default: 'false'
+        type: boolean
 
 jobs:
-  test:
-    runs-on: windows-latest
+  python-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.11', '3.12', '3.13']
     steps:
-      - uses: actions/checkout@v3
+      # ... installs Poetry, runs pytest -m "not matlab"
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
-
-      - name: Install dependencies
-        run: |
-          pip install pytest pytest-cov
-          pip install -e .
-
-      - name: Run tests
-        run: |
-          python -m pytest snowdrop_tangled_agents/tests/test_matlab_integration.py -v --no-cov
+  matlab-tests:
+    runs-on: self-hosted  # Requires MATLAB installation
+    if: github.event.inputs.run_matlab_tests == 'true'
+    needs: python-tests
+    steps:
+      # ... runs pytest -m matlab
 ```
 
-Note: Full MATLAB Engine tests require a MATLAB installation and license, so CI typically runs only the heuristic fallback tests.
+### Running Locally
+
+```bash
+# Python tests only (CI default)
+pytest -v -m "not matlab"
+
+# MATLAB tests (requires MATLAB)
+pytest -v -m matlab
+
+# All tests
+pytest -v
+```
+
+### Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `MATLAB_PATH` | Override MATLAB executable path |
+| `SKIP_MATLAB_TESTS` | Set to "1" to skip MATLAB tests entirely |
+
+Note: Full MATLAB tests require a MATLAB installation and license. CI runs Python tests by default; MATLAB tests require manual trigger on self-hosted runner.

@@ -241,16 +241,19 @@ function [agent, loss] = updatePPOAgent(agent, batch, miniBatchSize)
 %UPDATEPPOAGENT Perform PPO update on agent
 
     % Extract batch data
-    states = cat(2, batch.states{:});
-    actions = batch.actions;
-    rewards = batch.rewards;
-    nextStates = cat(2, batch.nextStates{:});
-    dones = batch.dones;
+    % SQLiteExperienceBuffer.sample() returns matrices directly, not cell arrays
+    % Convert to double for arithmetic operations (SQLite may return integers)
+    states = double(batch.states);
+    actions = double(batch.actions);
+    rewards = double(batch.rewards);
+    nextStates = double(batch.nextStates);
+    dones = double(batch.dones);
 
     % Compute advantages (simple TD error for now)
-    criticNet = getCritic(agent);
-    values = predict(criticNet, dlarray(states, 'CB'));
-    nextValues = predict(criticNet, dlarray(nextStates, 'CB'));
+    critic = getCritic(agent);
+    criticNet = getModel(critic);  % Extract dlnetwork from critic
+    values = forward(criticNet, dlarray(states, 'CB'));
+    nextValues = forward(criticNet, dlarray(nextStates, 'CB'));
     values = extractdata(values);
     nextValues = extractdata(nextValues);
 
