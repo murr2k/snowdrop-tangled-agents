@@ -145,45 +145,62 @@ class RLStrategy:
         return obs
 
     def _get_rl_action(self, state: str) -> Optional[tuple[int, str]]:
-        """Get action from RL policy via MATLAB."""
+        """Get action from RL policy via MATLAB with action masking."""
         # Build observation vector
         obs = self._state_to_observation(state)
 
-        # Convert to MATLAB format
-        obs_matlab = matlab.double([obs])  # Row vector for MATLAB
-
-        # Get action from agent using getAction
         try:
-            action_cell = self.matlab_engine.getAction(
-                self.matlab_engine.eval("agent"),
-                obs_matlab
-            )
+            # Get actor network probabilities directly (not getAction which ignores mask)
+            self.matlab_engine.workspace['obs_py'] = matlab.double([obs])
+            self.matlab_engine.eval('''
+                actor = getActor(agent);
+                actorNet = getModel(actor);
+                dlObs = dlarray(obs_py', "CB");
+                probs = forward(actorNet, dlObs);
+                probs = extractdata(probs);
+            ''', nargout=0)
 
-            # Extract action (1-30)
-            if isinstance(action_cell, list):
-                action = int(action_cell[0])
-            else:
-                action = int(action_cell)
+            probs = self.matlab_engine.workspace['probs']
 
-            # Decode action
-            if action <= 15:
-                edge_idx = action - 1
+            # Build action mask (only grey edges are valid)
+            masked_probs = []
+            for i in range(30):
+                edge = i if i < 15 else i - 15
+                if state[edge] == '-':  # Grey edge - valid
+                    masked_probs.append((i, probs[i][0]))
+                else:
+                    masked_probs.append((i, 0.0))
+
+            # Find best valid action
+            if not any(p > 0 for _, p in masked_probs):
+                logger.warning("No valid actions available")
+                return None
+
+            # Get argmax of masked probabilities
+            best_action, best_prob = max(masked_probs, key=lambda x: x[1])
+
+            # Decode action (1-indexed in MATLAB, 0-indexed here)
+            if best_action < 15:
+                edge_idx = best_action
                 color = 'G'  # Green
             else:
-                edge_idx = action - 16
+                edge_idx = best_action - 15
                 color = 'P'  # Purple
 
-            # Validate action
-            if 0 <= edge_idx < 15 and state[edge_idx] == '-':
-                logger.info(f"RL selected: E{edge_idx} {color}")
-                return (edge_idx, color)
+            # Log top 3 choices for debugging
+            sorted_probs = sorted(masked_probs, key=lambda x: x[1], reverse=True)[:3]
+            choices = []
+            for idx, prob in sorted_probs:
+                if prob > 0:
+                    e = idx if idx < 15 else idx - 15
+                    c = 'G' if idx < 15 else 'P'
+                    choices.append(f"E{e}{c}:{prob:.2f}")
+            logger.info(f"RL selected: E{edge_idx} {color} (top choices: {', '.join(choices)})")
 
-            # Invalid action - try to find valid one
-            logger.debug(f"RL selected invalid edge {edge_idx}, finding alternative")
-            return None
+            return (edge_idx, color)
 
         except Exception as e:
-            logger.warning(f"MATLAB getAction error: {e}")
+            logger.warning(f"MATLAB policy error: {e}")
             return None
 
     def _petersen_action(self, state: str, score: float, history: list) -> Optional[tuple[int, str]]:
