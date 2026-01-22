@@ -86,6 +86,13 @@ except ImportError:
     MATLAB_AVAILABLE = False
     print_training_status = None
 
+# Optional RL strategy
+try:
+    from snowdrop_tangled_agents.strategy.rl_strategy import RLStrategy
+    RL_AVAILABLE = True
+except ImportError:
+    RL_AVAILABLE = False
+
 
 # Vertex coordinates - from working JS bot (tangled-bot-v28.txt)
 # These match the actual website SVG layout
@@ -179,6 +186,12 @@ class WebPlayer:
                     use_opponent_adaptation=getattr(self, '_adapt_opponent', True),
                 )
                 # Note: initialize() called in play_game() with opponent name
+        elif strategy_type == "rl":
+            if not RL_AVAILABLE:
+                self.logger.warning("RL strategy unavailable, falling back to petersen")
+                self.strategy = PetersenStrategy(params_path=self.params_path)
+            else:
+                self.strategy = RLStrategy()
         else:  # "heuristic" (default)
             self.strategy = PetersenStrategy(params_path=self.params_path)
 
@@ -1015,8 +1028,8 @@ def main():
     parser.add_argument("--debug", action="store_true")
     parser.add_argument("--keep-open", "-k", type=int, default=5,
                         help="Seconds to keep browser open after last game (0 to close immediately)")
-    parser.add_argument("--strategy", "-s", choices=["heuristic", "mcts", "hybrid", "matlab"], default="heuristic",
-                        help="Strategy to use: heuristic (fast), mcts (Monte Carlo), hybrid (MCTS with opening), matlab (MATLAB-enhanced)")
+    parser.add_argument("--strategy", "-s", choices=["heuristic", "mcts", "hybrid", "matlab", "rl"], default="heuristic",
+                        help="Strategy to use: heuristic (fast), mcts (Monte Carlo), hybrid (MCTS with opening), matlab (MATLAB-enhanced), rl (trained PPO model)")
     parser.add_argument("--mcts-time", type=float, default=2.0,
                         help="MCTS time limit per move in seconds")
     parser.add_argument("--mcts-iterations", type=int, default=5000,

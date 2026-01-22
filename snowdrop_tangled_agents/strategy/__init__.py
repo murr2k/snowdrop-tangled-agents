@@ -9,3 +9,10 @@ try:
     __all__.append('MatlabEnhancedStrategy')
 except ImportError:
     pass
+
+# Optional RL strategy (requires MATLAB)
+try:
+    from snowdrop_tangled_agents.strategy.rl_strategy import RLStrategy
+    __all__.append('RLStrategy')
+except ImportError:
+    pass
