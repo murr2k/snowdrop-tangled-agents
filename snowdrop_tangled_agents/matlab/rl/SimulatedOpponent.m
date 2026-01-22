@@ -10,6 +10,7 @@ classdef SimulatedOpponent < handle
 %       'mcts'      - MCTS-style play (simulates MCTS Melissa)
 %       'defensive' - Prioritizes blocking our good edges
 %       'aggressive'- Prioritizes taking strategic edges
+%       'petersen'  - Petersen strategy (our web bot logic)
 %
 %   Example:
 %       opp = SimulatedOpponent('Style', 'mcts');
@@ -87,6 +88,8 @@ classdef SimulatedOpponent < handle
                     move = this.defensiveMove(state);
                 case 'aggressive'
                     move = this.aggressiveMove(state);
+                case 'petersen'
+                    move = this.petersenMove(state);
                 otherwise
                     move = this.randomMove(state);
             end
@@ -230,6 +233,112 @@ classdef SimulatedOpponent < handle
             else
                 move = this.heuristicMove(state);
             end
+        end
+
+        function move = petersenMove(~, state)
+            %PETERSENMOVE Petersen strategy from web bot
+            %
+            %   Implements the same logic as petersen_strategy.py:
+            %   - Opening: Secure MY_EDGES (E9, E10, E11) with Green
+            %   - Then prioritize by edge category weights
+            %   - Color: MY_EDGES -> Green, OPP_EDGES -> Purple
+            %
+            %   Note: From opponent's perspective, edge assignments are:
+            %   - Opponent's MY_EDGES: [6, 13, 14] (1-indexed) = E5, E12, E13
+            %   - Opponent's OPP_EDGES (us): [10, 11, 12] = E9, E10, E11
+            %   - HUB_EDGES: [3, 11, 13] = E2, E10, E12
+
+            % Edge classifications (1-indexed for MATLAB)
+            % From opponent's perspective (they are Player 2)
+            OPP_MY_EDGES = [6, 13, 14];    % E5, E12, E13 - opponent secures these
+            OPP_OPP_EDGES = [10, 11, 12];  % E9, E10, E11 - they attack these
+            HUB_EDGES = [3, 11, 13];       % E2, E10, E12 - hub edges
+
+            % Edge values from petersen_strategy.py
+            edgeValues = [
+                0.0;   % E0
+                0.0;   % E1
+                0.6;   % E2 - hub
+                0.0;   % E3
+                0.0;   % E4
+                0.9;   % E5 - opponent spoke
+                0.0;   % E6
+                0.0;   % E7
+                0.0;   % E8
+                1.1;   % E9 - MY edge
+                1.0;   % E10 - MY + hub
+                1.1;   % E11 - MY edge
+                0.9;   % E12 - opponent hub
+                0.7;   % E13 - opponent edge
+                0.0;   % E14
+            ];
+
+            % Weights
+            W_MY = 10.0;
+            W_OPP = 8.0;
+            W_HUB = 5.0;
+            W_NEUTRAL = 1.0;
+            HUB_PRIORITY = 0.8;
+
+            greyEdges = find(state == '-');  % 1-indexed
+
+            if isempty(greyEdges)
+                move = struct('edge', -1, 'color', '-');
+                return;
+            end
+
+            % Opening sequence: Secure opponent's MY edges first
+            moveNum = 15 - length(greyEdges);
+            openingSequence = [6, 13, 14];  % E5, E12, E13 (1-indexed)
+
+            if moveNum < length(openingSequence)
+                forcedEdge = openingSequence(moveNum + 1);
+                if state(forcedEdge) == '-'
+                    move = struct('edge', forcedEdge - 1, 'color', 'G');
+                    return;
+                end
+            end
+
+            % Score all available edges
+            scores = zeros(length(greyEdges), 1);
+
+            for i = 1:length(greyEdges)
+                idx = greyEdges(i);
+                score = edgeValues(idx);
+
+                % Category bonuses
+                if ismember(idx, OPP_MY_EDGES)
+                    score = score + W_MY;
+                elseif ismember(idx, OPP_OPP_EDGES)
+                    score = score + W_OPP;
+                elseif ismember(idx, HUB_EDGES)
+                    score = score + W_HUB;
+                else
+                    score = score + W_NEUTRAL;
+                end
+
+                % Hub preference
+                if ismember(idx, HUB_EDGES)
+                    score = score + HUB_PRIORITY;
+                end
+
+                scores(i) = score;
+            end
+
+            % Select highest scoring edge
+            [~, bestIdx] = max(scores);
+            bestEdge = greyEdges(bestIdx);
+
+            % Choose color
+            if ismember(bestEdge, OPP_MY_EDGES)
+                color = 'G';  % Green on MY edges
+            elseif ismember(bestEdge, OPP_OPP_EDGES)
+                color = 'P';  % Purple on opponent's edges
+            else
+                color = 'G';  % Default to Green
+            end
+
+            move = struct('edge', bestEdge - 1, 'color', color);  % 0-indexed
         end
 
         function color = chooseColor(~, edge, ~)

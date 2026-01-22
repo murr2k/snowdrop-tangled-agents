@@ -28,6 +28,7 @@ classdef TangledEnvironment < rl.env.MATLABEnvironment
         % Configuration
         UseShapingReward logical = true   % Use intermediate rewards
         InvalidActionPenalty double = -1.0
+        AutoCorrectInvalidActions logical = true  % Remap invalid to valid
     end
 
     properties (Access = private)
@@ -94,13 +95,30 @@ classdef TangledEnvironment < rl.env.MATLABEnvironment
 
             % Validate action (must be grey edge)
             if this.State(edge) ~= '-'
-                % Invalid action - edge already colored
-                reward = this.InvalidActionPenalty;
-                observation = this.getObservation();
-                isDone = false;
-                info.InvalidAction = true;
-                info.Message = sprintf('Edge %d already colored', edge-1);
-                return;
+                if this.AutoCorrectInvalidActions
+                    % Remap to a random valid action
+                    greyEdges = find(this.State == '-');
+                    if isempty(greyEdges)
+                        % No valid moves - game should be over
+                        reward = 0;
+                        observation = this.getObservation();
+                        isDone = true;
+                        return;
+                    end
+                    edge = greyEdges(randi(length(greyEdges)));
+                    % Keep original color choice
+                    info.RemappedAction = true;
+                    info.OriginalEdge = action;
+                    info.NewEdge = edge;
+                else
+                    % Invalid action - edge already colored
+                    reward = this.InvalidActionPenalty;
+                    observation = this.getObservation();
+                    isDone = false;
+                    info.InvalidAction = true;
+                    info.Message = sprintf('Edge %d already colored', edge-1);
+                    return;
+                end
             end
 
             % Apply our move
