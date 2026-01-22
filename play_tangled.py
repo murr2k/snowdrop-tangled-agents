@@ -821,11 +821,17 @@ class WebPlayer:
             time.sleep(0.3)
 
         move_count = 0
+        loop_iterations = 0
+        max_iterations = 30  # Safety limit: Petersen has 15 edges, ~8 moves max per player
         prev_score = self.read_score()
         failed_edges = set()  # Track edges that failed to click
         max_retries = 3  # Max retries per move attempt
 
         while not self.is_game_over():
+            loop_iterations += 1
+            if loop_iterations > max_iterations:
+                self.logger.error(f"Safety limit reached: {loop_iterations} iterations (likely infinite loop)")
+                break
             if not self.is_our_turn():
                 time.sleep(0.3)
                 continue
@@ -875,10 +881,19 @@ class WebPlayer:
             # Try to execute with retries
             success = False
             for attempt in range(max_retries):
+                state_before = self.read_board()
                 if self.execute_move(edge, color):
-                    success = True
-                    break
-                self.logger.warning(f"Move E{edge} attempt {attempt+1}/{max_retries} failed")
+                    # Verify the board state actually changed
+                    time.sleep(0.3)
+                    state_after = self.read_board()
+                    if state_after[edge] != '-':
+                        success = True
+                        break
+                    else:
+                        # Click appeared to succeed but board didn't change
+                        self.logger.warning(f"Move E{edge} click succeeded but board unchanged (attempt {attempt+1})")
+                else:
+                    self.logger.warning(f"Move E{edge} attempt {attempt+1}/{max_retries} failed")
                 time.sleep(0.5)
 
             if success:
