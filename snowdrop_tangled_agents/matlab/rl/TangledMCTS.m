@@ -51,6 +51,11 @@ classdef TangledMCTS < handle
         LastMemoryUsed double = 0       % Memory allocated (MB)
         TotalCPUTime double = 0         % Cumulative CPU time this session
         TotalIterations int32 = 0       % Cumulative iterations this session
+
+        % Terminal state LUT for accurate evaluation
+        TerminalScoreLUT               % 32768x1 double array
+        LUTLoaded logical = false      % Whether LUT was successfully loaded
+        LUTPath char = ''              % Path to the LUT file
     end
 
     properties (Constant)
@@ -98,6 +103,69 @@ classdef TangledMCTS < handle
                 this.MyEdges = this.P1_OPP_EDGES;   % P2's edges are P1's opponent edges
                 this.OppEdges = this.P1_MY_EDGES;   % P2's opponent is P1
                 this.HubEdges = this.P1_HUB_EDGES;  % Hub stays same
+            end
+
+            % Load terminal state LUT for accurate evaluation
+            this.loadLUT();
+        end
+
+        function loadLUT(this)
+            %LOADLUT Load terminal state lookup table from .mat file
+            %
+            %   Attempts to load pre-computed terminal scores from:
+            %   <script_dir>/data/terminal_scores.mat
+            %
+            %   Falls back to heuristic evaluation if LUT not available.
+
+            % Find the LUT file relative to this script
+            scriptPath = mfilename('fullpath');
+            scriptDir = fileparts(scriptPath);
+            lutPath = fullfile(scriptDir, 'data', 'terminal_scores.mat');
+
+            if ~isfile(lutPath)
+                % Try alternative paths
+                altPaths = {
+                    fullfile(pwd, 'data', 'terminal_scores.mat'),
+                    fullfile(pwd, 'snowdrop_tangled_agents', 'matlab', 'rl', 'data', 'terminal_scores.mat')
+                };
+                for i = 1:length(altPaths)
+                    if isfile(altPaths{i})
+                        lutPath = altPaths{i};
+                        break;
+                    end
+                end
+            end
+
+            if ~isfile(lutPath)
+                warning('TangledMCTS:LUTNotFound', ...
+                    'Terminal score LUT not found at %s. Using heuristic evaluation.', lutPath);
+                this.LUTLoaded = false;
+                return;
+            end
+
+            try
+                data = load(lutPath);
+                if isfield(data, 'terminal_scores')
+                    this.TerminalScoreLUT = double(data.terminal_scores(:));
+                    expectedSize = 2^15;  % 32768
+                    if length(this.TerminalScoreLUT) == expectedSize
+                        this.LUTLoaded = true;
+                        this.LUTPath = lutPath;
+                    else
+                        warning('TangledMCTS:LUTWrongSize', ...
+                            'LUT has %d entries, expected %d. Using heuristic.', ...
+                            length(this.TerminalScoreLUT), expectedSize);
+                        this.LUTLoaded = false;
+                    end
+                else
+                    warning('TangledMCTS:LUTMissingField', ...
+                        'LUT file missing terminal_scores field. Using heuristic.');
+                    this.LUTLoaded = false;
+                end
+            catch ME
+                warning('TangledMCTS:LUTLoadError', ...
+                    'Failed to load LUT: %s. Using heuristic.', ME.message);
+                this.LUTLoaded = false;
             end
         end
 
@@ -366,80 +434,112 @@ classdef TangledMCTS < handle
         end
 
         function score = evaluateTerminal(this, state)
-            %EVALUATETERMINAL Evaluate terminal state
+            %EVALUATETERMINAL Evaluate terminal state using LUT or heuristic
             %
-            %   Calibrated evaluation based on observed game statistics.
-            %   Priority system avoids double-counting overlapping edges:
-            %   1. MY_EDGES - highest priority (defense)
-            %   2. OPP_EDGES - skip if already in MY_EDGES (attack)
-            %   3. HUB_EDGES - skip if already in MY/OPP (hub control)
-            %
-            %   CRITICAL INSIGHT from game data:
-            %   - E12 G causes massive score collapse (-1.5 points observed!)
-            %   - E12 connects hub (V6) to opponent vertex (V7)
-            %   - Green strengthens V7, which is BAD for us
+            %   If LUT is loaded, performs O(1) lookup for exact adjudicator score.
+            %   Otherwise falls back to heuristic evaluation.
             %
             %   Returns score from THIS player's perspective.
 
+            if this.LUTLoaded
+                % O(1) lookup in pre-computed LUT
+                idx = this.state2idx(state);
+                score = this.TerminalScoreLUT(idx);
+
+                % Adjust for player perspective (LUT stores P1 perspective)
+                if this.PlayerPerspective == 2
+                    score = -score;
+                end
+            else
+                % Fallback to heuristic
+                score = this.evaluateTerminalHeuristic(state);
+            end
+        end
+
+        function idx = state2idx(~, state)
+            %STATE2IDX Convert state string to 1-based LUT index
+            %
+            %   Index encoding: bit j = 1 means edge j is 'G'
+            %   Returns 1-based index for MATLAB array access.
+
+            idx = 1;  % MATLAB is 1-indexed
+            for j = 1:15
+                if state(j) == 'G'
+                    idx = idx + 2^(j-1);
+                end
+            end
+        end
+
+        function state = idx2state(~, idx)
+            %IDX2STATE Convert 1-based LUT index to state string
+            %
+            %   Inverse of state2idx for verification.
+
+            state = repmat('P', 1, 15);
+            idx0 = idx - 1;  % Convert to 0-based
+            for j = 1:15
+                if bitand(idx0, 2^(j-1)) > 0
+                    state(j) = 'G';
+                end
+            end
+        end
+
+        function score = evaluateTerminalHeuristic(this, state)
+            %EVALUATETERMINALHEURISTIC Heuristic terminal evaluation (fallback)
+            %
+            %   Calibrated evaluation based on observed game statistics.
+            %   Used when LUT is not available.
+
             score = 0;
-            scored = false(1, 15);  % Track which edges we've scored
+            scored = false(1, 15);
 
             % MY_EDGES scoring - HIGHEST PRIORITY: secure our vertex
-            % Data shows E9 G has +0.875 avg delta - defense is critical
             for e = this.MyEdges
                 if state(e) == 'G'
-                    score = score + 1.2;   % Securing our edges is very valuable
+                    score = score + 1.2;
                 elseif state(e) == 'P'
-                    score = score - 1.0;   % Enemy attacks are costly
+                    score = score - 1.0;
                 end
                 scored(e) = true;
             end
 
             % OPP_EDGES scoring - attacks on opponent's vertex
-            % CRITICAL: E12 G is VERY BAD (strengthens V7 via hub)
-            % Game data shows E12 P is risky, E13 P is OK, E5 P is mixed
             for e = this.OppEdges
                 if scored(e)
-                    continue;  % Skip if already scored as MY_EDGE
+                    continue;
                 end
 
                 if state(e) == 'P'
-                    % Attacking their vertex - modest benefit
-                    if e == 6  % E5 (1-indexed 6) - moderate benefit
+                    if e == 6
                         score = score + 0.25;
-                    elseif e == 14  % E13 (1-indexed 14) - best attack
+                    elseif e == 14
                         score = score + 0.35;
-                    else  % E12 (1-indexed 13) - risky attack
+                    else
                         score = score + 0.15;
                     end
                 elseif state(e) == 'G'
-                    % They securing their edge OR us making a mistake
-                    if e == 13  % E12 (1-indexed 13) - CRITICAL: green is TERRIBLE
-                        score = score - 0.8;  % Strong penalty for E12 G
+                    if e == 13
+                        score = score - 0.8;
                     else
-                        score = score - 0.15;  % Modest penalty for other OPP green
+                        score = score - 0.15;
                     end
                 end
                 scored(e) = true;
             end
 
-            % HUB_EDGES (V6) - only E2 gets processed here (E10, E12 handled above)
-            % CRITICAL: Game data shows E2 G causes massive score collapse (-2.6 points!)
-            % E2 = V0-V6, connecting inner pentagram to hub
-            % Green on E2 seems to help opponent in quantum adjudication
+            % HUB_EDGES scoring
             for e = this.HubEdges
                 if scored(e)
-                    continue;  % Skip if already scored
+                    continue;
                 end
 
-                if e == 3  % E2 (1-indexed 3) - special handling
+                if e == 3
                     if state(e) == 'G'
-                        score = score - 0.5;  % E2 G is BAD based on game data
+                        score = score - 0.5;
                     elseif state(e) == 'P'
-                        score = score + 0.1;  % E2 P might be slightly better
+                        score = score + 0.1;
                     end
                 else
-                    % Other hub edges (shouldn't reach here normally)
                     if state(e) == 'G'
                         score = score + 0.2;
                     elseif state(e) == 'P'
@@ -449,11 +549,11 @@ classdef TangledMCTS < handle
                 scored(e) = true;
             end
 
-            % Color balance - slight preference for balance
+            % Color balance penalty
             greenCount = sum(state == 'G');
             purpleCount = sum(state == 'P');
             imbalance = abs(greenCount - purpleCount);
-            score = score - imbalance * 0.02;  % Small penalty for imbalance
+            score = score - imbalance * 0.02;
         end
 
         function move = selectMove(this, state)
@@ -526,16 +626,45 @@ classdef TangledMCTS < handle
             this.TotalCPUTime = 0;
             this.TotalIterations = 0;
         end
+
+        function info = getLUTInfo(this)
+            %GETLUTINFO Return information about LUT status
+            %
+            %   info = getLUTInfo(mcts)
+            %
+            %   Returns struct with:
+            %     - loaded: Whether LUT is loaded
+            %     - path: Path to LUT file (if loaded)
+            %     - numEntries: Number of entries in LUT
+            %     - minScore: Minimum score in LUT
+            %     - maxScore: Maximum score in LUT
+
+            info = struct();
+            info.loaded = this.LUTLoaded;
+
+            if this.LUTLoaded
+                info.path = this.LUTPath;
+                info.numEntries = length(this.TerminalScoreLUT);
+                info.minScore = min(this.TerminalScoreLUT);
+                info.maxScore = max(this.TerminalScoreLUT);
+                info.meanScore = mean(this.TerminalScoreLUT);
+            else
+                info.path = '';
+                info.numEntries = 0;
+                info.minScore = NaN;
+                info.maxScore = NaN;
+                info.meanScore = NaN;
+            end
+        end
     end
 
     methods (Static)
         function score = evaluateTerminalFull(state)
-            %EVALUATETERMINALFULL Full evaluation using simulated annealing
+            %EVALUATETERMINALFULL Full evaluation using LUT
             %
-            %   This would call Python adjudicator for accurate scoring.
-            %   For now, falls back to heuristic.
+            %   Uses pre-computed terminal scores from SimulatedAnnealingAdjudicator.
+            %   Falls back to heuristic if LUT not available.
 
-            % TODO: Bridge to Python SimulatedAnnealingAdjudicator
             mcts = TangledMCTS();
             score = mcts.evaluateTerminal(state);
         end

@@ -45,16 +45,22 @@ classdef MCRollout < handle
                 return;
             end
 
+            % Auto-detect max workers
+            cluster = parcluster('local');
+            maxWorkers = cluster.NumWorkers;
+            actualWorkers = min(this.NumWorkers, maxWorkers);
+
             pool = gcp('nocreate');
             if isempty(pool)
-                fprintf('Starting parallel pool with %d workers...\n', this.NumWorkers);
-                parpool('local', this.NumWorkers);
-            elseif pool.NumWorkers ~= this.NumWorkers
-                fprintf('Resizing pool to %d workers...\n', this.NumWorkers);
+                fprintf('Starting parallel pool with %d workers...\n', actualWorkers);
+                parpool('local', actualWorkers);
+            elseif pool.NumWorkers < actualWorkers
+                fprintf('Resizing pool to %d workers...\n', actualWorkers);
                 delete(pool);
-                parpool('local', this.NumWorkers);
+                parpool('local', actualWorkers);
             end
 
+            this.NumWorkers = actualWorkers;
             this.PoolInitialized = true;
         end
 
@@ -177,6 +183,55 @@ classdef MCRollout < handle
     end
 
     methods (Static)
+        function lut = getTerminalLUT()
+            %GETTERMINALLUT Get the cached terminal score LUT
+            %
+            %   Uses persistent variable to load LUT once and share across calls.
+            %   Thread-safe for parfor since persistent is per-worker.
+
+            persistent cachedLUT;
+            persistent lutLoaded;
+
+            if isempty(lutLoaded)
+                lutLoaded = false;
+            end
+
+            if ~lutLoaded
+                % Find and load LUT file
+                scriptPath = mfilename('fullpath');
+                scriptDir = fileparts(scriptPath);
+                lutPath = fullfile(scriptDir, 'data', 'terminal_scores.mat');
+
+                if isfile(lutPath)
+                    try
+                        data = load(lutPath);
+                        if isfield(data, 'terminal_scores') && length(data.terminal_scores) == 32768
+                            cachedLUT = double(data.terminal_scores(:));
+                            lutLoaded = true;
+                        end
+                    catch
+                        lutLoaded = false;
+                    end
+                end
+            end
+
+            if lutLoaded
+                lut = cachedLUT;
+            else
+                lut = [];
+            end
+        end
+
+        function idx = state2idx(state)
+            %STATE2IDX Convert state string to 1-based LUT index
+            idx = 1;
+            for j = 1:15
+                if state(j) == 'G'
+                    idx = idx + 2^(j-1);
+                end
+            end
+        end
+
         function score = singleRollout(state)
             %SINGLEROLLOUT Execute one random rollout to terminal
             %
@@ -242,7 +297,25 @@ classdef MCRollout < handle
         end
 
         function score = evaluateTerminal(state)
-            %EVALUATETERMINAL Heuristic terminal state evaluation
+            %EVALUATETERMINAL Evaluate terminal state using LUT or heuristic
+            %
+            %   Returns score from Player 1's perspective.
+            %   Uses pre-computed LUT if available, otherwise heuristic.
+
+            lut = MCRollout.getTerminalLUT();
+
+            if ~isempty(lut)
+                % O(1) lookup in pre-computed LUT
+                idx = MCRollout.state2idx(state);
+                score = lut(idx);
+            else
+                % Fallback to heuristic
+                score = MCRollout.evaluateTerminalHeuristic(state);
+            end
+        end
+
+        function score = evaluateTerminalHeuristic(state)
+            %EVALUATETERMINALHEURISTIC Heuristic terminal evaluation (fallback)
             %
             %   Returns score in [-1, 1] from our perspective
             %   Positive = good for us, Negative = good for opponent
@@ -286,13 +359,18 @@ classdef MCRollout < handle
         end
 
         function score = evaluateTerminalFull(state)
-            %EVALUATETERMINALFULL Full evaluation using simulated annealing
+            %EVALUATETERMINALFULL Full evaluation using LUT
             %
-            %   This would call the Python adjudicator for accurate scoring.
-            %   For now, falls back to heuristic.
+            %   Uses pre-computed LUT with SimulatedAnnealing adjudicator scores.
+            %   Falls back to heuristic if LUT not available.
 
-            % TODO: Bridge to Python SimulatedAnnealingAdjudicator
             score = MCRollout.evaluateTerminal(state);
+        end
+
+        function loaded = isLUTLoaded()
+            %ISLUTLOADED Check if the terminal score LUT is loaded
+            lut = MCRollout.getTerminalLUT();
+            loaded = ~isempty(lut);
         end
     end
 end
