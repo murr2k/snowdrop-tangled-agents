@@ -30,18 +30,26 @@ This document outlines the phased implementation of dynamic/online learning for 
 
 ## Phase 1: Offline Training (Current)
 
-**Status**: In Progress
+**Status**: ✅ Complete
 
 - Collecting game data via web play
 - SQLite database for game/move storage
 - Value network training with Deep Learning Toolbox
-- Target: 100+ games for initial training
+- 100+ games collected and stored
 
 ---
 
 ## Phase 2: RL Environment Wrapper
 
+**Status**: ✅ Complete
+
 **Goal**: Wrap the Tangled game as a MATLAB RL environment compatible with RL Toolbox agents.
+
+**Implemented Files** (`snowdrop_tangled_agents/matlab/rl/`):
+- `TangledEnvironment.m` - Main RL environment class
+- `getActionMask.m` - Valid action masking (30 actions: 15 edges × 2 colors)
+- `buildFeatures.m` - 50-element observation vector construction
+- `test_environment.m` - Unit tests for environment
 
 ### 2.1 Observation Space
 
@@ -208,7 +216,16 @@ end
 
 ## Phase 3: PPO Agent with Experience Replay
 
+**Status**: ✅ Complete
+
 **Goal**: Implement a Proximal Policy Optimization agent that learns from gameplay.
+
+**Implemented Files** (`snowdrop_tangled_agents/matlab/rl/`):
+- `createPPOAgent.m` - PPO agent configuration with action masking
+- `createPPONetworks.m` - Actor/critic network definitions (50→128→64→30/1)
+- `SQLiteExperienceBuffer.m` - Persistent experience storage
+- `trainPPOAgent.m` - Training loop with GAE and masked actions
+- `test_ppo.m` - Unit tests for PPO agent
 
 ### 3.1 Why PPO?
 
@@ -462,7 +479,17 @@ end
 
 ## Phase 4: Parallel Self-Play
 
+**Status**: ✅ Complete
+
 **Goal**: Accelerate learning through parallel game simulations.
+
+**Implemented Files** (`snowdrop_tangled_agents/matlab/rl/`):
+- `createParallelEnv.m` - Vectorized parallel environment with parpool support
+- `trainParallel.m` - Parallel training loop with experience aggregation
+- `collectEpisode.m` - Episode collection with action masking
+- `enableGPU.m` - GPU acceleration for actor/critic networks
+- `workerInit.m` - Worker initialization with unique seeds
+- `test_parallel.m` - Unit tests for all Phase 4 components
 
 ### 4.1 Architecture
 
@@ -670,6 +697,8 @@ end
 ---
 
 ## Phase 5: Continuous Deployment Pipeline
+
+**Status**: ⏳ Not Started
 
 **Goal**: Hot-deploy updated models to the Python web player without restart.
 
@@ -920,6 +949,8 @@ end
 ---
 
 ## Phase 6: Continuous Improvement & Monitoring
+
+**Status**: ⏳ Not Started
 
 **Goal**: Automated training, evaluation, and improvement loop.
 
