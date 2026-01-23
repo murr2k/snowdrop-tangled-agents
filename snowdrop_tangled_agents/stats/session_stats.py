@@ -213,13 +213,16 @@ def get_session_stats(db_path: Optional[Path] = None, gap_minutes: int = SESSION
         )
 
 
-def print_session_report(db_path: Optional[Path] = None, gap_minutes: int = SESSION_GAP_MINUTES):
+def print_session_report(db_path: Optional[Path] = None, gap_minutes: int = SESSION_GAP_MINUTES, planned_games: Optional[int] = None):
     """Print a minimal session statistics report."""
     stats = get_session_stats(db_path, gap_minutes)
 
     if stats is None:
         print("No games found")
         return
+
+    # Use planned_games if provided, otherwise use actual game count
+    total_games = planned_games if planned_games else stats.game_count
 
     # Session info (convert UTC to local time for display)
     print(f"session_start = {format_local(stats.session_start)}")
@@ -229,7 +232,7 @@ def print_session_report(db_path: Optional[Path] = None, gap_minutes: int = SESS
         last_dt = utc_to_local(stats.session_end)
         elapsed = (last_dt - start_dt).total_seconds()
         avg_per_game = elapsed / (stats.completed_games - 1) if stats.completed_games > 1 else 120
-        games_remaining = stats.game_count - stats.completed_games
+        games_remaining = total_games - stats.completed_games
         est_remaining = games_remaining * avg_per_game
         est_end = last_dt + timedelta(seconds=est_remaining)
         print(f"session_end = {est_end.strftime('%Y-%m-%d %H:%M')} (est)")
@@ -237,7 +240,7 @@ def print_session_report(db_path: Optional[Path] = None, gap_minutes: int = SESS
         print("session_end =")
     else:
         print(f"session_end = {format_local(stats.session_end)}")
-    print(f"games = {stats.completed_games}/{stats.game_count}")
+    print(f"games = {stats.completed_games}/{total_games}")
 
     # Results
     if stats.completed_games > 0:
@@ -292,7 +295,7 @@ def print_session_report(db_path: Optional[Path] = None, gap_minutes: int = SESS
             print(f"recent_5 = {streak_str}")
 
 
-def watch_session(db_path: Optional[Path] = None, interval: int = 60, gap_minutes: int = SESSION_GAP_MINUTES):
+def watch_session(db_path: Optional[Path] = None, interval: int = 60, gap_minutes: int = SESSION_GAP_MINUTES, planned_games: Optional[int] = None):
     """Watch session stats, refreshing at interval. Press q/Q/Esc to exit."""
     import os
     import sys
@@ -332,7 +335,7 @@ def watch_session(db_path: Optional[Path] = None, interval: int = 60, gap_minute
             os.system('cls' if os.name == 'nt' else 'clear')
 
             # Fresh database read each time
-            print_session_report(db_path, gap_minutes)
+            print_session_report(db_path, gap_minutes, planned_games)
 
             # Show refresh info
             print()
@@ -393,6 +396,7 @@ def main():
     parser.add_argument("--watch", "-w", action="store_true", help="Watch mode, refresh every minute")
     parser.add_argument("--interval", "-i", type=int, default=60, help="Refresh interval in seconds (default: 60)")
     parser.add_argument("--gap", "-g", type=int, default=SESSION_GAP_MINUTES, help=f"Session gap in minutes (default: {SESSION_GAP_MINUTES})")
+    parser.add_argument("--planned", "-p", type=int, help="Planned total games (for accurate end time estimate)")
     parser.add_argument("--cleanup", action="store_true", help="Clean up stale in-progress games")
     parser.add_argument("--force", action="store_true", help="Actually perform cleanup (not dry run)")
     parser.add_argument("--db", type=Path, help="Database path")
@@ -401,7 +405,7 @@ def main():
     if args.cleanup:
         cleanup_stale_games(args.db, dry_run=not args.force)
     elif args.watch:
-        watch_session(args.db, args.interval, args.gap)
+        watch_session(args.db, args.interval, args.gap, args.planned)
     elif args.json:
         import json
         stats = get_session_stats(args.db, args.gap)
@@ -441,7 +445,7 @@ def main():
         else:
             print(json.dumps({'error': 'No games found'}))
     else:
-        print_session_report(args.db, args.gap)
+        print_session_report(args.db, args.gap, args.planned)
 
 
 if __name__ == "__main__":
