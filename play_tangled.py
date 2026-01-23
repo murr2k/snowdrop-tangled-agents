@@ -695,6 +695,82 @@ class WebPlayer:
         except Exception as e:
             self.logger.error(f"debug_lines error: {e}")
 
+    def debug_edge_strokes(self) -> dict:
+        """Return raw stroke values for all edges - useful for debugging color detection."""
+        js_code = """
+        () => {
+            const points = [];
+            document.querySelectorAll('line').forEach(l => {
+                points.push({x: +l.getAttribute('x1'), y: +l.getAttribute('y1')});
+                points.push({x: +l.getAttribute('x2'), y: +l.getAttribute('y2')});
+            });
+            const vertices = [];
+            for (const p of points) {
+                let found = false;
+                for (const v of vertices) {
+                    if (Math.sqrt((p.x - v.x)**2 + (p.y - v.y)**2) < 5) { found = true; break; }
+                }
+                if (!found) vertices.push({x: p.x, y: p.y});
+            }
+            if (vertices.length !== 10) return {error: 'vertex_count', count: vertices.length};
+
+            const cx = vertices.reduce((s,v) => s + v.x, 0) / 10;
+            const cy = vertices.reduce((s,v) => s + v.y, 0) / 10;
+            const angle = (v) => Math.atan2(v.y - cy, v.x - cx);
+            const angleDist = (a1, a2) => {
+                let d = a1 - a2;
+                while (d > Math.PI) d -= 2 * Math.PI;
+                while (d < -Math.PI) d += 2 * Math.PI;
+                return Math.abs(d);
+            };
+            const dists = vertices.map(v => ({v, d: Math.sqrt((v.x-cx)**2 + (v.y-cy)**2), ang: angle(v)}));
+            dists.sort((a,b) => b.d - a.d);
+            const outer = dists.slice(0, 5);
+            const inner = dists.slice(5, 10);
+            outer.sort((a,b) => a.ang - b.ang);
+            inner.sort((a,b) => a.ang - b.ang);
+            const rotateToAngle = (arr, targetAngle) => {
+                let minIdx = 0, minDist = Infinity;
+                for (let i = 0; i < arr.length; i++) {
+                    const d = angleDist(arr[i].ang, targetAngle);
+                    if (d < minDist) { minDist = d; minIdx = i; }
+                }
+                return [...arr.slice(minIdx), ...arr.slice(0, minIdx)];
+            };
+            const outerSorted = rotateToAngle(outer, Math.PI);
+            const innerSorted = rotateToAngle(inner, -Math.PI/2);
+            const VTX = {};
+            for (let i = 0; i < 5; i++) VTX[i] = innerSorted[i].v;
+            for (let i = 0; i < 5; i++) VTX[5 + i] = outerSorted[i].v;
+            const EDGES = [[0,2],[0,3],[0,6],[1,3],[1,4],[1,7],[2,4],[2,8],[3,9],[4,5],[5,6],[5,9],[6,7],[7,8],[8,9]];
+            function nearest(x, y) {
+                let best = -1, bestD = 1e9;
+                for (const k in VTX) {
+                    const dx = x - VTX[k].x, dy = y - VTX[k].y;
+                    const d = dx*dx + dy*dy;
+                    if (d < bestD) { bestD = d; best = +k; }
+                }
+                return best;
+            }
+            const result = {};
+            document.querySelectorAll('line').forEach(l => {
+                const x1 = +l.getAttribute('x1'), y1 = +l.getAttribute('y1');
+                const x2 = +l.getAttribute('x2'), y2 = +l.getAttribute('y2');
+                const v1 = nearest(x1, y1), v2 = nearest(x2, y2);
+                const e = EDGES.findIndex(p => p[0] === Math.min(v1,v2) && p[1] === Math.max(v1,v2));
+                if (e >= 0) {
+                    result['E' + e] = l.getAttribute('stroke') || 'none';
+                }
+            });
+            return result;
+        }
+        """
+        try:
+            return self.page.evaluate(js_code)
+        except Exception as e:
+            self.logger.warning(f"debug_edge_strokes error: {e}")
+            return {}
+
     def execute_move(self, edge: int, color: str) -> bool:
         """Execute a move using dynamic vertex discovery and MouseEvent dispatch."""
         color_name = "Green" if color == 'G' else "Purple"
@@ -795,7 +871,7 @@ class WebPlayer:
             const stroke = line.getAttribute('stroke') || '';
             if (!/grey|gray|#e5e7eb|229,\\s*231/i.test(stroke)) return 'not_grey:' + stroke;
 
-            // Click the line
+            // Click the line using synthetic event (works with React)
             const r = line.getBoundingClientRect();
             line.dispatchEvent(new MouseEvent('click', {{
                 bubbles: true,
@@ -1013,6 +1089,10 @@ class WebPlayer:
                     else:
                         # Click appeared to succeed but board didn't change
                         self.logger.warning(f"Move E{edge} click succeeded but board unchanged (attempt {attempt+1})")
+                        # Debug: show raw stroke values
+                        strokes = self.debug_edge_strokes()
+                        self.logger.debug(f"Raw strokes: E{edge}={strokes.get(f'E{edge}', 'N/A')}")
+                        self.logger.debug(f"State before: {state_before}, State after: {state_after}")
                 else:
                     self.logger.warning(f"Move E{edge} attempt {attempt+1}/{max_retries} failed")
                 time.sleep(0.5)
