@@ -1131,6 +1131,9 @@ class WebPlayer:
                 failed_edges.add(edge)
                 continue  # Try another edge without waiting for opponent
 
+            # Save board state after our move (for opponent detection)
+            our_post_move_state = self.read_board()
+
             # Wait for opponent and track their thinking time
             opponent_start_time = time.time()
             if not self.wait_for_turn(timeout=15.0):
@@ -1141,11 +1144,11 @@ class WebPlayer:
             state_after_opponent = self.read_board()
             opponent_score = self.read_score()
 
-            # Find which edge opponent played (compare to our last state)
+            # Find which edge opponent played (compare OUR post-move state with post-opponent state)
             opponent_edge = None
             opponent_color = None
             for i in range(15):
-                if state[i] == '-' and state_after_opponent[i] != '-':
+                if our_post_move_state[i] == '-' and state_after_opponent[i] != '-':
                     opponent_edge = i
                     opponent_color = state_after_opponent[i]
                     break

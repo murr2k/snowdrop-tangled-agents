@@ -156,17 +156,16 @@ classdef HybridTangledSolver < handle
             % Opening book: secure our vertex edges first (E9, E10, E11 Green)
             % These are the most critical moves based on game statistics
             % MY_EDGES (1-indexed): 10, 11, 12 = E9, E10, E11 (0-indexed)
-            if numGrey >= 12  % First 3 moves of the game
-                openingMoves = [10, 11, 12];  % Priority order: E9, E10, E11
-                for e = openingMoves
-                    if state(e) == '-'
-                        edge = e - 1;  % Convert to 0-indexed
-                        color = 'G';
-                        info.strategy = 'opening';
-                        info.score = 0.9;  % High confidence opening move
-                        info.time = toc(startTime);
-                        return;
-                    end
+            % Always prioritize these edges until all three are secured
+            openingMoves = [10, 11, 12];  % Priority order: E9, E10, E11
+            for e = openingMoves
+                if state(e) == '-'
+                    edge = e - 1;  % Convert to 0-indexed
+                    color = 'G';
+                    info.strategy = 'opening';
+                    info.score = 0.9;  % High confidence opening move
+                    info.time = toc(startTime);
+                    return;
                 end
             end
 
