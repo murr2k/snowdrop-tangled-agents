@@ -296,6 +296,35 @@ python play_tangled.py --stats
 
 See `docs/MATLAB_MCTS_STRATEGY.md` for complete theory of operation.
 
+### 9. Game Analytics & Visualization (January 2026)
+
+An instrumented research system for tracking performance, discovering patterns, and measuring improvement:
+
+**Visualization Tools:**
+- **Progress plots** — Rolling win rate and score trends over time
+- **Edge effectiveness** — Score delta and win rate by edge/color combination
+- **Opening analysis** — Identify winning opening sequences with sample sizes
+
+**Design Philosophy:**
+- Observability over raw metrics — answer *why*, not just *what*
+- Every plot maps to a subsystem lever you can actually adjust
+- Query-first architecture — plots are views, not logic
+- Timestamped outputs for historical comparison
+
+```bash
+# Generate all analysis plots
+python -m snowdrop_tangled_agents.tools.plot_progress --all
+
+# Individual plot types
+python -m snowdrop_tangled_agents.tools.plot_progress -t progress
+python -m snowdrop_tangled_agents.tools.plot_progress -t edge
+python -m snowdrop_tangled_agents.tools.plot_progress -t opening
+```
+
+Plots are saved to `plots/` with naming: `{type}_{YYYYMMDD}_{HHMMSS}.png`
+
+See `docs/GAME_ANALYTICS.md` for complete documentation and research applications.
+
 ### Documentation
 
 - `docs/THEORY_OF_OPERATION.md` - Comprehensive system documentation
@@ -303,5 +332,6 @@ See `docs/MATLAB_MCTS_STRATEGY.md` for complete theory of operation.
 - `docs/MATLAB_MCTS_STRATEGY.md` - MATLAB MCTS theory of operation and tuning guide
 - `docs/HYBRID_MINIMAX_MCTS_PLAN.md` - D-Wave inspired hybrid solver implementation plan
 - `docs/MCTS_DEPTH_ENHANCEMENT_RESEARCH.md` - MCTS depth enhancement literature review
+- `docs/GAME_ANALYTICS.md` - Game analytics and visualization system
 - `docs/TEST_SUITE.md` - Regression test documentation
 - `docs/THE_MATHEMATICS_OF_TANGLED_GAME.md` - Game theory analysis

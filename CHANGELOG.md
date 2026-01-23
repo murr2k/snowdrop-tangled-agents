@@ -216,6 +216,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `docs/MATLAB_INTEGRATION.md` - Complete MATLAB integration guide
   - `docs/tangled-bot-v28.txt` - Reference JavaScript bot implementation
 
+### Added
+
+- **Game Analytics & Visualization** (`snowdrop_tangled_agents/tools/plot_progress.py`)
+  - Progress tracking: win rate and score trends over time with rolling averages
+  - Edge effectiveness analysis: score delta and win rate by edge/color
+  - Opening sequence analysis: identify winning opening patterns
+  - Timestamped output: `plots/{type}_{YYYYMMDD}_{HHMMSS}.png`
+  - CLI: `python -m snowdrop_tangled_agents.tools.plot_progress --all`
+  - See `docs/GAME_ANALYTICS.md` for full documentation
+
 ### Changed
 
 - **SimulatedOpponent Real MCTS Mode** (`snowdrop_tangled_agents/matlab/rl/SimulatedOpponent.m`)

@@ -221,3 +221,6 @@ nul
 # MATLAB artifacts
 .MATLABDriveTag
 training_*/
+
+# Generated plots
+plots/
