@@ -218,6 +218,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **SimulatedOpponent Real MCTS Mode** (`snowdrop_tangled_agents/matlab/rl/SimulatedOpponent.m`)
+  - Added real MCTS opponent using `TangledMCTS` engine for realistic training
+  - Lazy-initialized MCTS engine to avoid overhead when not needed
+  - Renamed previous MCTS approximation to `fast_mcts` style
+  - Increased default iterations from 100 to 500 for stronger play
+  - Added `MCTSTimeLimit` parameter (default 1.0s)
+  - Available styles: `random`, `heuristic`, `mcts` (real), `fast_mcts`, `petersen`, `defensive`, `aggressive`
+
+- **TangledEnvironment Auto-Correction** (`snowdrop_tangled_agents/matlab/rl/TangledEnvironment.m`)
+  - Enabled `AutoCorrectInvalidActions` by default to improve RL learning
+  - Reduced invalid action penalty from -0.5 to -0.1 when action is remapped
+  - Kept larger -0.5 penalty when auto-correct is disabled
+  - Added `info.OriginalAction` tracking for debugging remapped moves
+
+- **Curriculum Training Worker Detection** (`snowdrop_tangled_agents/matlab/rl/train_curriculum_ensemble.m`)
+  - Added automatic detection of maximum available parallel workers
+  - Graceful degradation when requested workers exceed cluster capacity
+  - Changed `AutoCorrect` from false to true in `trainLevel()`, `trainSelfPlayEnsemble()`, and `evaluateAgent()`
+  - Improved logging to show when worker count is reduced
+
+- **Opponent Model Data** (`snowdrop_tangled_agents/matlab/rl/data/opponent_model.mat`)
+  - Updated with latest learned patterns from online gameplay
+  - Contains response-conditional and phase-conditional probability matrices
+
 - Moved `THEORY_OF_OPERATION.md` from project root to `docs/` directory
 - Updated `README.md` with Development Progress section documenting all implementation steps
 - Extended `StatsCollector` with model and opponent management methods

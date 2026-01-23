@@ -35,8 +35,8 @@ classdef TangledEnvironment < rl.env.MATLABEnvironment
 
         % Configuration
         UseShapingReward logical = true   % Use intermediate rewards
-        InvalidActionPenalty double = -0.5  % Penalty for invalid action
-        AutoCorrectInvalidActions logical = false  % Don't auto-correct - teach valid moves
+        InvalidActionPenalty double = -0.1  % Small penalty when action is remapped
+        AutoCorrectInvalidActions logical = true  % Auto-correct to enable learning
 
         % Strategic edge sets (1-indexed for MATLAB)
         MyEdges = [10, 11, 12]    % E9, E10, E11 - edges connected to our vertex
@@ -130,10 +130,13 @@ classdef TangledEnvironment < rl.env.MATLABEnvironment
                         return;
                     end
                     edge = greyEdges(randi(length(greyEdges)));
+                    % Small penalty to discourage invalid actions
+                    reward = reward + this.InvalidActionPenalty;
                     info.RemappedAction = true;
+                    info.OriginalAction = action;
                 else
                     % Invalid action - penalize and return
-                    reward = this.InvalidActionPenalty;
+                    reward = -0.5;  % Larger penalty when not auto-correcting
                     observation = this.getObservation();
                     isDone = false;
                     info.InvalidAction = true;

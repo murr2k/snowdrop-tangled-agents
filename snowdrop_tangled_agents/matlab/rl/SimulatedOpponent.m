@@ -19,9 +19,13 @@ classdef SimulatedOpponent < handle
     properties
         Style char = 'mcts'
 
-        % MCTS-style parameters
-        Iterations int32 = 100
+        % MCTS parameters
+        Iterations int32 = 500
         ExplorationConstant double = 1.41
+        MCTSTimeLimit double = 1.0
+
+        % Real MCTS engine (lazy initialized)
+        MCTSEngine TangledMCTS
 
         % Heuristic weights (for non-random styles)
         EdgeWeights (15,1) double
@@ -34,14 +38,26 @@ classdef SimulatedOpponent < handle
             %   opp = SimulatedOpponent()
             %   opp = SimulatedOpponent('Style', 'mcts')
             %   opp = SimulatedOpponent('Style', 'random')
+            %   opp = SimulatedOpponent('Style', 'mcts', 'Iterations', 1000)
+            %
+            %   Styles:
+            %       'random'     - Uniform random
+            %       'heuristic'  - Weighted heuristic
+            %       'mcts'       - Real MCTS (matches Melissa)
+            %       'fast_mcts'  - Quick heuristic approximation
+            %       'petersen'   - Petersen strategy
+            %       'defensive'  - Block opponent edges
+            %       'aggressive' - Take strategic edges
 
             arguments
                 options.Style char = 'mcts'
-                options.Iterations int32 = 100
+                options.Iterations int32 = 500
+                options.TimeLimit double = 1.0
             end
 
             this.Style = options.Style;
             this.Iterations = options.Iterations;
+            this.MCTSTimeLimit = options.TimeLimit;
 
             % Initialize edge weights based on Petersen graph analysis
             % Higher weight = more likely to play
@@ -84,6 +100,8 @@ classdef SimulatedOpponent < handle
                     move = this.heuristicMove(state);
                 case 'mcts'
                     move = this.mctsMove(state);
+                case 'fast_mcts'
+                    move = this.fastMctsMove(state);
                 case 'defensive'
                     move = this.defensiveMove(state);
                 case 'aggressive'
@@ -140,10 +158,39 @@ classdef SimulatedOpponent < handle
         end
 
         function move = mctsMove(this, state)
-            %MCTSMOVE MCTS-style move (simplified simulation)
+            %MCTSMOVE Real MCTS move using TangledMCTS engine
             %
-            %   This simulates MCTS Melissa's behavior without full MCTS.
+            %   Uses full Monte Carlo Tree Search with UCB1 selection
+            %   and heuristic-guided rollouts to match MCTS Melissa.
+
+            greyEdges = find(state == '-');
+
+            if isempty(greyEdges)
+                move = struct('edge', -1, 'color', '-');
+                return;
+            end
+
+            % Lazy initialize MCTS engine
+            if isempty(this.MCTSEngine)
+                this.MCTSEngine = TangledMCTS(...
+                    'Iterations', this.Iterations, ...
+                    'TimeLimit', this.MCTSTimeLimit, ...
+                    'Exploration', this.ExplorationConstant, ...
+                    'PriorWeight', 2.0, ...
+                    'UseParallel', false);  % Disable parallel for opponent
+            end
+
+            % Run MCTS search
+            [edge, color] = this.MCTSEngine.search(state);
+
+            move = struct('edge', edge, 'color', color);
+        end
+
+        function move = fastMctsMove(this, state)
+            %FASTMCTSMOVE Fast heuristic approximation of MCTS
+            %
             %   Uses weighted selection with exploration noise.
+            %   Much faster than real MCTS but less accurate.
 
             greyEdges = find(state == '-');  % 1-indexed
 

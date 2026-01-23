@@ -46,14 +46,24 @@ function results = train_curriculum_ensemble(options)
     results.levels = {};
 
     %% Initialize parallel pool
-    log_print(options.Verbose, 'Initializing parallel pool with %d workers...\n', options.NumWorkers);
+    % Auto-detect max workers if requested exceeds available
+    cluster = parcluster('local');
+    maxWorkers = cluster.NumWorkers;
+    actualWorkers = min(options.NumWorkers, maxWorkers);
+
+    if actualWorkers < options.NumWorkers
+        log_print(options.Verbose, 'Note: Requested %d workers but max available is %d\n', options.NumWorkers, maxWorkers);
+    end
+
+    log_print(options.Verbose, 'Initializing parallel pool with %d workers...\n', actualWorkers);
     pool = gcp('nocreate');
     if isempty(pool)
-        parpool('local', options.NumWorkers);
-    elseif pool.NumWorkers ~= options.NumWorkers
+        parpool('local', actualWorkers);
+    elseif pool.NumWorkers ~= actualWorkers
         delete(pool);
-        parpool('local', options.NumWorkers);
+        parpool('local', actualWorkers);
     end
+    options.NumWorkers = actualWorkers;  % Update for downstream use
     log_print(options.Verbose, 'Parallel pool ready.\n\n');
 
     %% Create fresh PPO agent
@@ -241,7 +251,7 @@ function result = trainLevel(agent, oppStyle, opts)
     %TRAINLEVEL Train against a specific opponent style
 
     opp = SimulatedOpponent('Style', oppStyle);
-    env = TangledEnvironment('Opponent', opp, 'AutoCorrect', false);
+    env = TangledEnvironment('Opponent', opp, 'AutoCorrect', true);
 
     result = struct();
     result.opponent = oppStyle;
@@ -328,7 +338,7 @@ function result = trainSelfPlayEnsemble(agent, opts)
 
     % Create self-play opponent using ensemble
     selfOpp = EnsembleSelfPlayOpponent(ensemble);
-    env = TangledEnvironment('Opponent', selfOpp, 'AutoCorrect', false);
+    env = TangledEnvironment('Opponent', selfOpp, 'AutoCorrect', true);
 
     numChunks = ceil(opts.maxEpisodes / opts.syncInterval);
 
@@ -401,7 +411,7 @@ function evalResults = evaluateAgent(agent, verbose)
         log_print(verbose, 'Evaluating vs %s (%d games)...\n', oppStyle, numGames);
 
         opp = SimulatedOpponent('Style', oppStyle);
-        env = TangledEnvironment('Opponent', opp, 'AutoCorrect', false);
+        env = TangledEnvironment('Opponent', opp, 'AutoCorrect', true);
 
         wins = 0;
         totalReward = 0;
