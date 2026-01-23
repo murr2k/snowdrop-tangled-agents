@@ -465,19 +465,23 @@ When we have strong data (confidence = 1.0), we now use **95% response-condition
 
 ```mermaid
 flowchart TB
-    subgraph "Before Calibration - Overdamped"
+    subgraph before ["Before Calibration - Overdamped"]
+        direction LR
         A1["Observed: E10G 43%"] --> B1["Smoothing: 57% prior"]
         B1 --> C1["Alpha: 30% phase"]
         C1 --> D1["Prediction: 18%"]
         D1 --> E1["Signal crushed"]
     end
 
-    subgraph "After Calibration - Properly Damped"
+    subgraph after ["After Calibration - Properly Damped"]
+        direction LR
         A2["Observed: E10G 43%"] --> B2["Smoothing: 12% prior"]
         B2 --> C2["Alpha: 5% phase"]
         C2 --> D2["Prediction: 38%"]
         D2 --> E2["Signal preserved"]
     end
+
+    before ~~~ after
 
     style E1 fill:#f66
     style E2 fill:#6f6
