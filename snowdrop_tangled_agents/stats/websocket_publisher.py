@@ -60,6 +60,8 @@ class StatsPublisher:
         self._last_stats: Optional[Dict[str, Any]] = None
         self._connect_attempts = 0
         self._max_connect_attempts = 3
+        self._last_ping_time = 0
+        self._ping_interval = 20  # Send ping every 20 seconds
 
         # State for current session
         self._session_start: Optional[datetime] = None
@@ -93,10 +95,13 @@ class StatsPublisher:
 
             try:
                 logger.info(f"Connecting to dashboard: {self.url}")
+                # Disable compression extensions to avoid RSV bit issues
                 self._ws = websocket.create_connection(
                     self.url,
                     timeout=10,
                     enable_multithread=True,
+                    skip_utf8_validation=True,
+                    header={"Sec-WebSocket-Extensions": ""},
                 )
                 self._connected = True
 
@@ -120,6 +125,8 @@ class StatsPublisher:
             except Exception as e:
                 logger.warning(f"Dashboard connection failed: {e}")
                 self._disconnect()
+                # Don't retry immediately on connection errors
+                self._connect_attempts = self._max_connect_attempts
                 return False
 
     def _disconnect(self):
@@ -134,9 +141,31 @@ class StatsPublisher:
             self._connected = False
             self._authenticated = False
 
+    def _send_ping(self) -> bool:
+        """Send a keep-alive ping if needed."""
+        now = time.time()
+        if now - self._last_ping_time < self._ping_interval:
+            return True
+
+        try:
+            with self._lock:
+                if self._ws:
+                    self._ws.ping()
+                    self._last_ping_time = now
+                    return True
+        except Exception:
+            return False
+        return False
+
     def _send(self, data: Dict[str, Any]) -> bool:
         """Send data to the dashboard."""
         if not self.is_connected():
+            if not self._connect():
+                return False
+
+        # Send keep-alive ping if needed
+        if not self._send_ping():
+            self._disconnect()
             if not self._connect():
                 return False
 
@@ -144,6 +173,8 @@ class StatsPublisher:
             with self._lock:
                 if self._ws:
                     self._ws.send(json.dumps(data))
+                    self._last_ping_time = time.time()
+                    logger.debug("Stats published to dashboard")
                     return True
         except Exception as e:
             logger.warning(f"Dashboard send failed: {e}")
@@ -154,6 +185,7 @@ class StatsPublisher:
                     with self._lock:
                         if self._ws:
                             self._ws.send(json.dumps(data))
+                            logger.debug("Stats published to dashboard (after reconnect)")
                             return True
                 except Exception:
                     pass
