@@ -945,12 +945,20 @@ class WebPlayer:
                 if not available:
                     break
 
-            # Calculate move
+            # Calculate move (track our thinking time)
+            our_start_time = time.time()
             result = self.strategy.calculate_move(state, score, self.score_history)
+            our_think_time = time.time() - our_start_time
+
             if result is None:
                 break
 
-            edge, color = result
+            # Handle both (edge, color) and (edge, color, solver_stats) returns
+            solver_stats = {}
+            if len(result) == 3:
+                edge, color, solver_stats = result
+            else:
+                edge, color = result
 
             # Safety check: verify strategy returned a valid edge
             # (Turn-based game means opponent can't play during our calculation,
@@ -971,7 +979,10 @@ class WebPlayer:
                     # Recalculate move with updated state instead of picking blindly
                     recalc_result = self.strategy.calculate_move(fresh_state, score, self.score_history)
                     if recalc_result is not None:
-                        edge, color = recalc_result
+                        if len(recalc_result) == 3:
+                            edge, color, solver_stats = recalc_result
+                        else:
+                            edge, color = recalc_result
                         # Verify recalculated edge is valid against fresh state
                         if fresh_state[edge] != '-' or edge in failed_edges:
                             # Strategy returned invalid edge, pick first available
@@ -1014,7 +1025,10 @@ class WebPlayer:
                 self.score_history.append((edge, color, new_score))
                 self.logger.info(f"Move {move_count}: E{edge} {color} -> Score: {new_score:.4f}")
 
-                # Record move to stats database
+                # Add timing to solver stats
+                solver_stats['wall_clock_time'] = our_think_time
+
+                # Record move to stats database with solver statistics
                 self.stats_collector.record_move(
                     game_id=self.current_game_id,
                     move_number=move_count,
@@ -1023,7 +1037,9 @@ class WebPlayer:
                     color=color,
                     score_after=new_score,
                     score_before=prev_score,
-                    state_after=self.read_board()
+                    state_after=self.read_board(),
+                    thinking_time=our_think_time,
+                    solver_stats=solver_stats
                 )
                 prev_score = new_score
 
@@ -1035,9 +1051,38 @@ class WebPlayer:
                 failed_edges.add(edge)
                 continue  # Try another edge without waiting for opponent
 
-            # Wait for opponent
+            # Wait for opponent and track their thinking time
+            opponent_start_time = time.time()
             if not self.wait_for_turn(timeout=15.0):
                 break
+            opponent_think_time = time.time() - opponent_start_time
+
+            # Record opponent's move timing (we detect their move by board state change)
+            state_after_opponent = self.read_board()
+            opponent_score = self.read_score()
+
+            # Find which edge opponent played (compare to our last state)
+            opponent_edge = None
+            opponent_color = None
+            for i in range(15):
+                if state[i] == '-' and state_after_opponent[i] != '-':
+                    opponent_edge = i
+                    opponent_color = state_after_opponent[i]
+                    break
+
+            if opponent_edge is not None:
+                self.stats_collector.record_move(
+                    game_id=self.current_game_id,
+                    move_number=move_count,
+                    player="opponent",
+                    edge=opponent_edge,
+                    color=opponent_color,
+                    score_after=opponent_score,
+                    score_before=new_score,
+                    state_after=state_after_opponent,
+                    thinking_time=opponent_think_time,
+                    solver_stats={'opponent_think_time': opponent_think_time}
+                )
 
         # Game over - wait for result to display
         time.sleep(2)

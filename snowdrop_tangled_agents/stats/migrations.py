@@ -90,6 +90,50 @@ MIGRATIONS: List[Tuple[int, str, str]] = [
         CREATE INDEX IF NOT EXISTS idx_opponent_hist_name ON opponent_history(opponent_name);
         CREATE INDEX IF NOT EXISTS idx_opponent_hist_edge ON opponent_history(edge, color);
     """),
+
+    # v6: Add comprehensive solver statistics to moves table
+    (6, "Add solver statistics columns to moves table", """
+        -- Strategy attribution
+        ALTER TABLE moves ADD COLUMN strategy_used TEXT;
+
+        -- Evaluation accuracy
+        ALTER TABLE moves ADD COLUMN predicted_score REAL;
+        ALTER TABLE moves ADD COLUMN prediction_error REAL;
+
+        -- MCTS statistics (mcts_iterations already exists)
+        ALTER TABLE moves ADD COLUMN mcts_tree_depth INTEGER;
+        ALTER TABLE moves ADD COLUMN mcts_root_visits INTEGER;
+
+        -- Minimax statistics
+        ALTER TABLE moves ADD COLUMN minimax_nodes_searched INTEGER;
+        ALTER TABLE moves ADD COLUMN minimax_prune_count INTEGER;
+        ALTER TABLE moves ADD COLUMN minimax_depth INTEGER;
+
+        -- Transposition table statistics
+        ALTER TABLE moves ADD COLUMN trans_hits INTEGER;
+        ALTER TABLE moves ADD COLUMN trans_misses INTEGER;
+
+        -- Tabu search statistics
+        ALTER TABLE moves ADD COLUMN tabu_restarts INTEGER;
+        ALTER TABLE moves ADD COLUMN tabu_improved BOOLEAN;
+
+        -- LUT statistics
+        ALTER TABLE moves ADD COLUMN lut_used BOOLEAN;
+        ALTER TABLE moves ADD COLUMN lut_grey_edges INTEGER;
+
+        -- Move confidence (score gap to second-best)
+        ALTER TABLE moves ADD COLUMN move_confidence REAL;
+        ALTER TABLE moves ADD COLUMN second_best_edge INTEGER;
+        ALTER TABLE moves ADD COLUMN second_best_score REAL;
+
+        -- Timing (thinking_time already exists for our moves)
+        ALTER TABLE moves ADD COLUMN opponent_think_time REAL;
+        ALTER TABLE moves ADD COLUMN wall_clock_time REAL;
+
+        -- Create indexes for common queries
+        CREATE INDEX IF NOT EXISTS idx_moves_strategy ON moves(strategy_used);
+        CREATE INDEX IF NOT EXISTS idx_moves_lut_used ON moves(lut_used);
+    """),
 ]
 
 

@@ -171,7 +171,8 @@ class StatsCollector:
         score_before: Optional[float] = None,
         state_after: Optional[str] = None,
         mcts_iterations: Optional[int] = None,
-        thinking_time: Optional[float] = None
+        thinking_time: Optional[float] = None,
+        solver_stats: Optional[Dict[str, Any]] = None
     ):
         """
         Record a move in the current game.
@@ -187,22 +188,57 @@ class StatsCollector:
             state_after: Board state after move (15-char string)
             mcts_iterations: Number of MCTS iterations used
             thinking_time: Time spent thinking in seconds
+            solver_stats: Optional dict with detailed solver statistics
         """
         score_delta = None
         if score_before is not None:
             score_delta = score_after - score_before
 
+        # Extract solver stats if provided
+        stats = solver_stats or {}
+
         with sqlite3.connect(self.db_path) as conn:
             conn.execute("""
                 INSERT OR REPLACE INTO moves
                 (game_id, move_number, player, edge, color, score_after,
-                 score_delta, state_after, mcts_iterations, thinking_time)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (game_id, move_number, player, edge, color, score_after,
-                  score_delta, state_after, mcts_iterations, thinking_time))
+                 score_delta, state_after, mcts_iterations, thinking_time,
+                 strategy_used, predicted_score, prediction_error,
+                 mcts_tree_depth, mcts_root_visits,
+                 minimax_nodes_searched, minimax_prune_count, minimax_depth,
+                 trans_hits, trans_misses, tabu_restarts, tabu_improved,
+                 lut_used, lut_grey_edges, move_confidence,
+                 second_best_edge, second_best_score,
+                 opponent_think_time, wall_clock_time)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                game_id, move_number, player, edge, color, score_after,
+                score_delta, state_after,
+                mcts_iterations or stats.get('mcts_iterations'),
+                thinking_time,
+                stats.get('strategy'),
+                stats.get('predicted_score'),
+                stats.get('prediction_error'),
+                stats.get('mcts_tree_depth'),
+                stats.get('mcts_root_visits'),
+                stats.get('minimax_nodes_searched'),
+                stats.get('minimax_prune_count'),
+                stats.get('minimax_depth'),
+                stats.get('trans_hits'),
+                stats.get('trans_misses'),
+                stats.get('tabu_restarts'),
+                stats.get('tabu_improved'),
+                stats.get('lut_used'),
+                stats.get('lut_grey_edges'),
+                stats.get('move_confidence'),
+                stats.get('second_best_edge'),
+                stats.get('second_best_score'),
+                stats.get('opponent_think_time'),
+                stats.get('wall_clock_time')
+            ))
             conn.commit()
 
-        logger.debug(f"Game {game_id}: Move {move_number} - E{edge} {color} -> {score_after:.3f}")
+        strategy = stats.get('strategy', 'unknown')
+        logger.debug(f"Game {game_id}: Move {move_number} - E{edge} {color} [{strategy}] -> {score_after:.3f}")
 
     def end_game(
         self,

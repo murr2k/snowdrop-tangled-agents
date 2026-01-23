@@ -523,7 +523,7 @@ class HybridSolverStrategy:
         state: str,
         score: float = 0.0,
         score_history: list = None
-    ) -> Optional[Tuple[int, str]]:
+    ) -> Optional[Tuple[int, str, dict]]:
         """
         Calculate best move using HybridTangledSolver.
 
@@ -533,7 +533,8 @@ class HybridSolverStrategy:
             score_history: Move history (unused)
 
         Returns:
-            (edge_index, color) or None if no moves available.
+            (edge_index, color, solver_stats) or None if no moves available.
+            solver_stats contains detailed statistics for database recording.
         """
         if not self.solver_initialized:
             if not self.initialize():
@@ -558,16 +559,16 @@ class HybridSolverStrategy:
             edge = int(self.engine.eval("solverEdge"))
             color = str(self.engine.eval("solverColor"))
 
-            # Get info for statistics
-            try:
-                self.last_strategy = str(self.engine.eval("solverInfo.strategy"))
-                self.last_score = float(self.engine.eval("solverInfo.score"))
-            except Exception:
-                pass
-
             elapsed = time.time() - start
             self.total_time += elapsed
             self.moves_calculated += 1
+
+            # Extract detailed statistics from MATLAB
+            solver_stats = self._extract_solver_stats(elapsed, grey_count)
+
+            # Update local tracking
+            self.last_strategy = solver_stats.get('strategy', 'unknown')
+            self.last_score = solver_stats.get('predicted_score', 0.0)
 
             logger.debug(
                 f"HybridSolver: E{edge} {color} "
@@ -575,11 +576,85 @@ class HybridSolverStrategy:
                 f"time={elapsed:.2f}s)"
             )
 
-            return (edge, color)
+            return (edge, color, solver_stats)
 
         except Exception as e:
             logger.error(f"HybridSolver error: {e}")
             return None
+
+    def _extract_solver_stats(self, elapsed: float, grey_count: int) -> dict:
+        """Extract detailed statistics from MATLAB solverInfo struct."""
+        stats = {
+            'wall_clock_time': elapsed,
+            'lut_grey_edges': grey_count,
+        }
+
+        # Strategy and score (always available)
+        try:
+            stats['strategy'] = str(self.engine.eval("solverInfo.strategy"))
+            stats['predicted_score'] = float(self.engine.eval("solverInfo.score"))
+        except Exception:
+            stats['strategy'] = 'unknown'
+            stats['predicted_score'] = 0.0
+
+        # Time from MATLAB's perspective
+        try:
+            stats['thinking_time'] = float(self.engine.eval("solverInfo.time"))
+        except Exception:
+            pass
+
+        # Strategy-specific statistics
+        strategy = stats.get('strategy', '')
+
+        if strategy == 'minimax':
+            try:
+                stats['minimax_depth'] = int(self.engine.eval("solverInfo.depth"))
+                stats['minimax_nodes_searched'] = int(self.engine.eval("solverInfo.nodesSearched"))
+                stats['minimax_prune_count'] = int(self.engine.eval("solverInfo.pruneCount"))
+            except Exception:
+                pass
+
+        elif strategy == 'hybrid':
+            try:
+                stats['minimax_depth'] = int(self.engine.eval(
+                    "hybridSolver.MinimaxDepth"
+                ))
+                # MCTS stats from most recent search
+                stats['mcts_iterations'] = int(self.engine.eval(
+                    "hybridSolver.LastMCTSIterations"
+                ))
+                # Tabu improved flag
+                stats['tabu_improved'] = bool(self.engine.eval("solverInfo.tabuImproved"))
+                if stats['tabu_improved']:
+                    stats['tabu_restarts'] = int(self.engine.eval(
+                        "hybridSolver.LastTabuRestarts"
+                    ))
+            except Exception:
+                pass
+
+        elif strategy == 'mcts':
+            try:
+                stats['mcts_iterations'] = int(self.engine.eval("solverInfo.mctsIterations"))
+                stats['mcts_root_visits'] = int(self.engine.eval("solverInfo.mctsRootVisits"))
+                stats['tabu_improved'] = bool(self.engine.eval("solverInfo.tabuImproved"))
+                if stats['tabu_improved']:
+                    stats['tabu_restarts'] = int(self.engine.eval(
+                        "hybridSolver.LastTabuRestarts"
+                    ))
+            except Exception:
+                pass
+
+        elif strategy == 'opening':
+            # Opening book moves are instant, high confidence
+            stats['move_confidence'] = 0.9
+
+        # LUT usage (from solver stats)
+        try:
+            stats['lut_used'] = bool(self.engine.eval("hybridSolver.LUTLoaded"))
+        except Exception:
+            stats['lut_used'] = False
+
+        return stats
 
     def set_player(self, player: int):
         """Set player perspective (1 or 2)."""
