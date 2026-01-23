@@ -34,6 +34,7 @@ Usage:
 
 from .collector import StatsCollector, get_collector, DEFAULT_DB_PATH
 from .migrations import run_migrations, get_migration_status
+from .opponent_model import OpponentModel, get_opponent_model
 from . import queries
 
 __all__ = [
@@ -43,4 +44,6 @@ __all__ = [
     'run_migrations',
     'get_migration_status',
     'queries',
+    'OpponentModel',
+    'get_opponent_model',
 ]
