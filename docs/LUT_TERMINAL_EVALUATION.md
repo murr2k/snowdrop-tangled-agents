@@ -172,6 +172,65 @@ score = mcts.evaluateTerminal('GGGGGGGGGGGGGGG');
 disp(['All green score: ' num2str(score)]);
 ```
 
+## Expanded LUT Layers
+
+Beyond the terminal (0-grey) LUT, additional layers can be pre-computed for states with grey edges remaining. Each layer uses depth-k minimax over the previous layer's values.
+
+### Layer Size Analysis
+
+| Layer | Grey Edges | Combinations | Colorings | Unique States | Storage (expanded) | Est. Generation Time |
+|-------|------------|--------------|-----------|---------------|-------------------|---------------------|
+| 0 (terminal) | 0 | 1 | 2^15 | 32,768 | 32K | 21 min |
+| 1 | 1 | C(15,1)=15 | 2^14 | 245,760 | 491K | + few min |
+| 2 | 2 | C(15,2)=105 | 2^13 | 860,160 | ~3.4M | + few min |
+| 3 | 3 | C(15,3)=455 | 2^12 | 1,863,680 | ~15M | + few min |
+| 4 | 4 | C(15,4)=1365 | 2^11 | 2,795,520 | ~45M | + 15-45 min |
+| 5 | 5 | C(15,5)=3003 | 2^10 | 3,075,072 | ~98M | + 1-2 hrs |
+
+**Storage format**: The "expanded" storage uses `32768 × C(15,k)` entries for O(1) lookup, trading space for speed.
+
+### Value of Each Layer
+
+| Layer | Moves from End | Search Eliminated | Impact |
+|-------|----------------|-------------------|--------|
+| 0 (terminal) | 0 | Rollout endpoint | **Essential** - must have |
+| 1-grey | 1 | Last move decision | **High** - eliminates rollout variance |
+| 2-grey | 2 | Last 2 moves | **Significant** - covers critical swings |
+| 3-grey | 3 | Last 3 moves | **Good** - endgame fully solved |
+| 4-grey | 4 | Last 4 moves | **Marginal** - easy for MCTS |
+| 5-grey+ | 5+ | Last 5+ moves | **Diminishing returns** |
+
+### Why 4-grey is Marginal Over 3-grey
+
+1. **Trivial search depth**: At 4-grey, MCTS only needs to search 4 branches → 3 branches = 12 total nodes to reach exact 3-grey values. This is trivial computation.
+
+2. **Endgame already solved**: The critical score swings happen in the last 2-3 moves. The 3-grey LUT captures this volatile phase completely.
+
+3. **Cost/benefit ratio**: 15-45 minutes generation time plus ~180MB additional memory to eliminate 1 ply of easy search is poor ROI.
+
+### Recommendation
+
+**Stop at 3-grey** for most use cases:
+- Covers the critical endgame phase where mistakes are costly
+- ~640MB total memory (layers 0-3)
+- Generation time under 30 minutes total
+- MCTS can easily handle the remaining 4+ plies
+
+If performance problems persist after 3-grey, the issue is likely **earlier in the game** (moves 4-6 from start), not late-game evaluation.
+
+### Generation Scripts
+
+| Script | Purpose |
+|--------|---------|
+| `generate_expanded_lut.m` | Generate layers 0-2 |
+| `generate_expanded_lut_parallel.m` | Parallel version for layers 0-2 |
+| `extend_lut_three_grey.m` | Add layer 3 to existing LUT |
+| `extend_lut_three_grey_parallel.m` | Parallel version for layer 3 |
+
+**Note**: These MATLAB scripts require exclusive MATLAB access (cannot run while games are playing).
+
+---
+
 ## Regenerating the LUT
 
 If the adjudicator parameters change or you need to regenerate:
