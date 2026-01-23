@@ -56,6 +56,11 @@ classdef TangledMCTS < handle
         TerminalScoreLUT               % 32768x1 double array
         LUTLoaded logical = false      % Whether LUT was successfully loaded
         LUTPath char = ''              % Path to the LUT file
+
+        % Opponent model for learned rollout policy
+        OpponentModel struct           % Loaded from opponent_model.mat
+        OpponentModelLoaded logical = false
+        UseOpponentModel logical = true  % Whether to use opponent model in rollouts
     end
 
     properties (Constant)
@@ -107,6 +112,9 @@ classdef TangledMCTS < handle
 
             % Load terminal state LUT for accurate evaluation
             this.loadLUT();
+
+            % Load opponent model for learned rollout policy
+            this.loadOpponentModel();
         end
 
         function loadLUT(this)
@@ -166,6 +174,76 @@ classdef TangledMCTS < handle
                 warning('TangledMCTS:LUTLoadError', ...
                     'Failed to load LUT: %s. Using heuristic.', ME.message);
                 this.LUTLoaded = false;
+            end
+        end
+
+        function loadOpponentModel(this)
+            %LOADOPPONENTMODEL Load opponent model for learned rollout policy
+            %
+            %   Loads opponent response probabilities from:
+            %   <script_dir>/data/opponent_model.mat
+            %
+            %   The model contains:
+            %   - response_probs: 30x30 matrix of P(opp_move | our_move)
+            %   - phase_probs: 4x30 matrix of P(opp_move | phase)
+            %   - total_moves: Number of training samples
+
+            % Find the model file relative to this script
+            scriptPath = mfilename('fullpath');
+            scriptDir = fileparts(scriptPath);
+            modelPath = fullfile(scriptDir, 'data', 'opponent_model.mat');
+
+            if ~isfile(modelPath)
+                % Try alternative paths
+                altPaths = {
+                    fullfile(pwd, 'data', 'opponent_model.mat'),
+                    fullfile(pwd, 'snowdrop_tangled_agents', 'matlab', 'rl', 'data', 'opponent_model.mat')
+                };
+                for i = 1:length(altPaths)
+                    if isfile(altPaths{i})
+                        modelPath = altPaths{i};
+                        break;
+                    end
+                end
+            end
+
+            if ~isfile(modelPath)
+                % Opponent model not found - use heuristic only
+                this.OpponentModelLoaded = false;
+                return;
+            end
+
+            try
+                data = load(modelPath);
+                if isfield(data, 'response_probs') && isfield(data, 'phase_probs')
+                    this.OpponentModel = struct();
+                    this.OpponentModel.response_probs = double(data.response_probs);
+                    this.OpponentModel.phase_probs = double(data.phase_probs);
+                    this.OpponentModel.total_moves = double(data.total_moves);
+                    this.OpponentModel.response_totals = double(data.response_totals);
+
+                    % Validate shapes
+                    if size(this.OpponentModel.response_probs, 1) == 30 && ...
+                       size(this.OpponentModel.response_probs, 2) == 30 && ...
+                       size(this.OpponentModel.phase_probs, 1) == 4 && ...
+                       size(this.OpponentModel.phase_probs, 2) == 30
+                        this.OpponentModelLoaded = true;
+                        fprintf('Loaded opponent model with %d training moves\n', ...
+                            this.OpponentModel.total_moves);
+                    else
+                        warning('TangledMCTS:OpponentModelWrongShape', ...
+                            'Opponent model has unexpected shape. Using heuristic.');
+                        this.OpponentModelLoaded = false;
+                    end
+                else
+                    warning('TangledMCTS:OpponentModelMissingField', ...
+                        'Opponent model missing required fields. Using heuristic.');
+                    this.OpponentModelLoaded = false;
+                end
+            catch ME
+                warning('TangledMCTS:OpponentModelLoadError', ...
+                    'Failed to load opponent model: %s. Using heuristic.', ME.message);
+                this.OpponentModelLoaded = false;
             end
         end
 
@@ -371,19 +449,45 @@ classdef TangledMCTS < handle
 
         function [edge, color] = heuristicAction(this, state, available, isOurTurn)
             %HEURISTICACTION Select action using weighted stochastic selection
+            %
+            %   When opponent model is loaded and it's opponent's turn,
+            %   uses learned response probabilities instead of heuristics.
 
             % Build list of actions with weights
             nActions = length(available) * 2;
             actions = zeros(nActions, 2);  % [edge, colorIdx]
             weights = zeros(nActions, 1);
 
+            % Use opponent model for opponent's turn if available
+            useOppModel = ~isOurTurn && this.UseOpponentModel && this.OpponentModelLoaded;
+
+            if useOppModel
+                % Get phase from grey count
+                greyCount = sum(state == '-');
+                phaseIdx = this.greyToPhaseIdx(greyCount);
+
+                % Get phase probabilities from model
+                phaseProbs = this.OpponentModel.phase_probs(phaseIdx, :);
+            end
+
             idx = 1;
             for i = 1:length(available)
                 e = available(i);
                 for c = 1:2
                     actions(idx, :) = [e, c];
-                    prior = this.computeRolloutPrior(e, c == 1, isOurTurn);
-                    weights(idx) = prior^2;  % Square to amplify differences
+
+                    if useOppModel
+                        % Use opponent model probability
+                        % Move index: edge * 2 + colorIdx (0 for G, 1 for P)
+                        % Note: edges are 1-indexed in MATLAB, model uses 0-indexed
+                        moveIdx = (e - 1) * 2 + (c - 1) + 1;  % +1 for MATLAB 1-indexing
+                        prior = phaseProbs(moveIdx);
+                    else
+                        % Use heuristic
+                        prior = this.computeRolloutPrior(e, c == 1, isOurTurn);
+                    end
+
+                    weights(idx) = prior + 0.001;  % Small floor to prevent zero weights
                     idx = idx + 1;
                 end
             end
@@ -396,6 +500,22 @@ classdef TangledMCTS < handle
 
             edge = actions(selectedIdx, 1);
             color = char('G' + (actions(selectedIdx, 2) - 1) * ('P' - 'G'));
+        end
+
+        function phaseIdx = greyToPhaseIdx(~, greyCount)
+            %GREYTOPHASEIDX Convert grey count to phase index (1-4)
+            %
+            %   Phases: early (12-15), mid (8-11), late (4-7), endgame (0-3)
+
+            if greyCount >= 12
+                phaseIdx = 1;  % early
+            elseif greyCount >= 8
+                phaseIdx = 2;  % mid
+            elseif greyCount >= 4
+                phaseIdx = 3;  % late
+            else
+                phaseIdx = 4;  % endgame
+            end
         end
 
         function prior = computeRolloutPrior(this, edge, isGreen, isOurTurn)
