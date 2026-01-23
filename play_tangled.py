@@ -78,12 +78,14 @@ from snowdrop_tangled_agents.stats import get_collector, queries as stats_querie
 try:
     from snowdrop_tangled_agents.matlab import (
         MatlabEnhancedStrategy,
+        HybridSolverStrategy,
         get_unified_bridge,
         print_training_status,
     )
     MATLAB_AVAILABLE = True
 except ImportError:
     MATLAB_AVAILABLE = False
+    HybridSolverStrategy = None
     print_training_status = None
 
 # Optional RL strategy
@@ -222,6 +224,17 @@ class WebPlayer:
                 self.strategy = MatlabMCTSStrategy(
                     params_path=str(mcts_params_path),
                     fallback_to_python=True,
+                )
+        elif strategy_type == "hybrid_solver":
+            if not MATLAB_AVAILABLE or HybridSolverStrategy is None:
+                self.logger.warning("Hybrid solver unavailable, falling back to python mcts")
+                self.strategy = MCTSStrategy(time_limit=10.0, max_iterations=10000)
+            else:
+                self.strategy = HybridSolverStrategy(
+                    time_limit=10.0,
+                    minimax_depth=4,
+                    mcts_iterations=5000,
+                    player=1,
                 )
         else:  # "heuristic" (default)
             self.strategy = PetersenStrategy(params_path=self.params_path)
@@ -545,6 +558,10 @@ class WebPlayer:
                 const stroke = l.getAttribute('stroke') || '';
                 if (/green|#10b981|16,\\s*185/i.test(stroke)) state[e] = 'G';
                 else if (/purple|#a855f7|168,\\s*85/i.test(stroke)) state[e] = 'P';
+                // Only treat as grey (available) if it matches known grey patterns
+                // #9ca3af and other non-standard colors mean edge is not available
+                else if (/grey|gray|#e5e7eb|229,\\s*231/i.test(stroke)) state[e] = '-';
+                else state[e] = 'P';  // Unknown color = treat as colored (unavailable)
             });
             return state.join('');
         }
@@ -889,9 +906,19 @@ class WebPlayer:
                 time.sleep(0.3)
                 continue
 
-            # Brief delay after turn change to ensure DOM is fully updated
-            # This prevents reading stale state from before opponent's move completed
-            time.sleep(0.5)
+            # Wait for board state to stabilize after turn change
+            # The turn indicator text updates faster than the SVG board state
+            # Read board twice with a gap - only proceed when state is stable
+            time.sleep(0.3)
+            state_check1 = self.read_board()
+            time.sleep(0.4)
+            state_check2 = self.read_board()
+
+            if state_check1 != state_check2:
+                # Board still changing, wait more and re-read
+                self.logger.debug(f"Board state unstable, waiting for sync")
+                time.sleep(0.5)
+                state_check2 = self.read_board()
 
             # Only count iterations where it's actually our turn (move attempts)
             loop_iterations += 1
@@ -899,7 +926,7 @@ class WebPlayer:
                 self.logger.error(f"Safety limit reached: {loop_iterations} move attempts (likely infinite loop)")
                 break
 
-            state = self.read_board()
+            state = state_check2  # Use the stable state
             score = self.read_score()
 
             # Check if all edges played
@@ -925,15 +952,17 @@ class WebPlayer:
 
             edge, color = result
 
-            # Re-read board state after MCTS calculation (opponent may have played)
+            # Safety check: verify strategy returned a valid edge
+            # (Turn-based game means opponent can't play during our calculation,
+            # but strategy might return invalid edge due to bug or stale internal state)
             current_state = self.read_board()
             state = current_state  # Update state for next iteration
             available = [i for i, c in enumerate(current_state) if c == '-' and i not in failed_edges]
 
-            # Verify edge is still available after calculation time
+            # Verify edge is actually available
             if current_state[edge] != '-' or edge in failed_edges:
                 if available:
-                    self.logger.warning(f"E{edge} no longer available (opponent played during calculation)")
+                    self.logger.warning(f"E{edge} not available - strategy returned invalid edge")
                     # Re-read board to ensure we have latest state
                     time.sleep(0.5)  # Brief wait for DOM to stabilize
                     fresh_state = self.read_board()
@@ -1084,8 +1113,8 @@ def main():
     parser.add_argument("--debug", action="store_true")
     parser.add_argument("--keep-open", "-k", type=int, default=5,
                         help="Seconds to keep browser open after last game (0 to close immediately)")
-    parser.add_argument("--strategy", "-s", choices=["heuristic", "mcts", "hybrid", "matlab", "rl", "ensemble", "matlab_mcts"], default="heuristic",
-                        help="Strategy to use: heuristic (fast), mcts (Monte Carlo), hybrid (MCTS with opening), matlab (MATLAB-enhanced), rl (trained PPO), ensemble (RL + MC rollouts), matlab_mcts (MATLAB MCTS with high compute)")
+    parser.add_argument("--strategy", "-s", choices=["heuristic", "mcts", "hybrid", "matlab", "rl", "ensemble", "matlab_mcts", "hybrid_solver"], default="heuristic",
+                        help="Strategy to use: heuristic (fast), mcts (Monte Carlo), hybrid (MCTS with opening), matlab (MATLAB-enhanced), rl (trained PPO), ensemble (RL + MC rollouts), matlab_mcts (MATLAB MCTS with high compute), hybrid_solver (D-Wave inspired minimax+MCTS)")
     parser.add_argument("--mcts-time", type=float, default=2.0,
                         help="MCTS time limit per move in seconds")
     parser.add_argument("--mcts-iterations", type=int, default=5000,
