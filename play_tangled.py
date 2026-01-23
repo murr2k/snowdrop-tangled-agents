@@ -944,6 +944,36 @@ class WebPlayer:
             time.sleep(0.3)
         return True  # Timeout - try anyway
 
+    def wait_for_opponent_to_play(self, timeout: float = 15.0) -> bool:
+        """Wait for opponent to take their turn.
+
+        First waits for it to NOT be our turn (turn switches to opponent),
+        then waits for our turn to come back (opponent has played).
+
+        Returns False if game is over or timeout.
+        """
+        start = time.time()
+
+        # Phase 1: Wait for turn to switch to opponent (max 3 seconds)
+        phase1_timeout = min(3.0, timeout / 3)
+        while time.time() - start < phase1_timeout:
+            if self.is_game_over():
+                return False
+            if not self.is_our_turn():
+                # Turn switched to opponent, now wait for them to play
+                break
+            time.sleep(0.1)
+
+        # Phase 2: Wait for our turn to come back (opponent has finished)
+        while time.time() - start < timeout:
+            if self.is_game_over():
+                return False
+            if self.is_our_turn():
+                return True
+            time.sleep(0.3)
+
+        return True  # Timeout - try anyway
+
     def play_game(self, opponent: str = "melissa") -> dict:
         """Play one complete game."""
         self.score_history = []
@@ -1134,9 +1164,9 @@ class WebPlayer:
             # Save board state after our move (for opponent detection)
             our_post_move_state = self.read_board()
 
-            # Wait for opponent and track their thinking time
+            # Wait for opponent to play (first wait for turn to switch, then wait for our turn back)
             opponent_start_time = time.time()
-            if not self.wait_for_turn(timeout=15.0):
+            if not self.wait_for_opponent_to_play(timeout=15.0):
                 break
             opponent_think_time = time.time() - opponent_start_time
 
