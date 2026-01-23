@@ -130,6 +130,7 @@ signal.signal(signal.SIGINT, _signal_handler)
 from snowdrop_tangled_agents.strategy.petersen_strategy import PetersenStrategy
 from snowdrop_tangled_agents.strategy.mcts_strategy import MCTSStrategy, HybridStrategy, evaluate_terminal_state
 from snowdrop_tangled_agents.stats import get_collector, queries as stats_queries, GameMetricsTracker
+from snowdrop_tangled_agents.stats import get_publisher, publish_session_stats
 
 # Optional MATLAB integration
 try:
@@ -1639,6 +1640,14 @@ def main():
     register_process(run_id=run_id, planned_games=total_planned)
     atexit.register(unregister_process)
 
+    # Initialize live stats publisher (if configured)
+    publisher = get_publisher()
+    if publisher.is_configured():
+        publisher.set_session_info(run_id=run_id, planned_games=total_planned)
+        logging.getLogger(__name__).info("Live stats publishing enabled")
+    else:
+        logging.getLogger(__name__).debug("Live stats publishing not configured (set TANGLED_DASHBOARD_URL and TANGLED_DASHBOARD_API_KEY)")
+
     results = []
     current_game_number = start_game_number
     restart_needed = False
@@ -1692,6 +1701,13 @@ def main():
                 print(f"\n=== Game {display_num}/{display_total} ===")
                 result = player.play_game(args.opponent)
                 results.append(result)
+
+                # Publish live stats to dashboard (if configured)
+                if publisher.is_configured():
+                    try:
+                        publish_session_stats()
+                    except Exception as e:
+                        logging.getLogger(__name__).debug(f"Stats publish failed: {e}")
 
                 # Check for stuck opponent
                 if result.get("error") == "stuck_opponent":

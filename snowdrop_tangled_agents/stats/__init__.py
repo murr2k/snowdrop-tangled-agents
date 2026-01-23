@@ -37,6 +37,7 @@ from .migrations import run_migrations, get_migration_status
 from .opponent_model import OpponentModel, get_opponent_model
 from .model_metrics import GameMetricsTracker, compute_model_entropy
 from .session_stats import get_session_stats, print_session_report, SessionStats
+from .websocket_publisher import StatsPublisher, get_publisher, publish_session_stats
 from . import queries
 
 __all__ = [
@@ -53,4 +54,7 @@ __all__ = [
     'get_session_stats',
     'print_session_report',
     'SessionStats',
+    'StatsPublisher',
+    'get_publisher',
+    'publish_session_stats',
 ]

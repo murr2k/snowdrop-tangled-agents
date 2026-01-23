@@ -49,3 +49,22 @@ Agents are loaded by string path via `import_agent()` in `utils/utilities.py`. R
 
 ### Adjudicator Notes
 Simulated annealing has known systematic errors on graphs 12 (Moser Spindle), 18 (3-Prism), and 19 (Barbell). Graphs 2, 11, 20 have matching adjudications between SA and ground truth. Schrödinger equation adjudicator is accurate but computationally expensive.
+
+### Live Stats Dashboard
+
+The game runner can publish real-time statistics to a WebSocket dashboard. Configure via environment variables:
+
+```bash
+export TANGLED_DASHBOARD_URL="wss://tangled-stats.fly.dev/ws/publish"
+export TANGLED_DASHBOARD_API_KEY="your-api-key"
+```
+
+Or add to `.env` file. If not configured, publishing is silently disabled.
+
+The publisher (`snowdrop_tangled_agents/stats/websocket_publisher.py`) sends:
+- Session info (run_id, completed/planned games)
+- Results (wins, draws, losses)
+- Score statistics (avg, median, min, max, std)
+- Trends (recent 5 results, score trend)
+- Opponent model metrics (entropy, top-3 hit rate, prediction accuracy)
+- ETA calculation based on game completion rate

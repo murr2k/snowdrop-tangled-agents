@@ -20,6 +20,7 @@ scipy = ">=1.16.2"
 coloredlogs = ">=15.0.1"
 playwright = ">=1.40.0"
 python-dotenv = ">=1.0.0"
+websocket-client = ">=1.6.0"
 
 [tool.poetry.extras]
 matlab = ["matlabengine"]
