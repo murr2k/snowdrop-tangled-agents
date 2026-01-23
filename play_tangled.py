@@ -248,6 +248,38 @@ class WebPlayer:
         self.current_game_id = None
         self.mcts_time = mcts_time
 
+        # Opponent modeling for online learning
+        self.opponent_model = None
+        self._opponent_model_updates = 0
+
+    def _ensure_opponent_model(self, opponent: str = "melissa"):
+        """Lazily initialize opponent model for online learning."""
+        if self.opponent_model is None:
+            try:
+                from snowdrop_tangled_agents.stats import get_opponent_model
+                self.opponent_model = get_opponent_model(opponent)
+                self.logger.info(f"Loaded opponent model: {self.opponent_model.total_games} games, "
+                               f"{self.opponent_model.total_moves} moves")
+            except Exception as e:
+                self.logger.warning(f"Could not load opponent model: {e}")
+
+    def _update_opponent_model(self):
+        """Update opponent model with moves from completed game (online learning)."""
+        if self.opponent_model is None:
+            return
+
+        try:
+            # Reload from database to get latest game's moves
+            self.opponent_model.load_from_database()
+            self._opponent_model_updates += 1
+
+            # Re-export to .mat for MATLAB (every game for now)
+            self.opponent_model.save_mat()
+            self.logger.debug(f"Opponent model updated: {self.opponent_model.total_moves} moves "
+                            f"(update #{self._opponent_model_updates})")
+        except Exception as e:
+            self.logger.warning(f"Could not update opponent model: {e}")
+
     def start(self):
         global _active_player
         from playwright.sync_api import sync_playwright
@@ -1000,6 +1032,9 @@ class WebPlayer:
         """Play one complete game."""
         self.score_history = []
 
+        # Initialize opponent model for online learning
+        self._ensure_opponent_model(opponent)
+
         # Initialize MATLAB strategy with opponent model
         if self.strategy_type == "matlab" and hasattr(self.strategy, 'initialize'):
             self.strategy.initialize(opponent=opponent)
@@ -1244,6 +1279,9 @@ class WebPlayer:
             result=result,
             final_score=final_score
         )
+
+        # Online learning: update opponent model and re-export
+        self._update_opponent_model()
 
         # Calibration: compare our terminal evaluation to website score
         if terminal_state.count('-') == 0:  # All edges colored
