@@ -73,13 +73,16 @@ class OpponentModel:
 
     Args:
         opponent_name: Name of the opponent (e.g., "melissa")
-        smoothing: Laplace smoothing parameter (default 1.0)
+        smoothing: Laplace smoothing parameter (default 0.1)
+                   Lower values give more weight to observed data.
+                   With smoothing=0.1 and 30 actions, adds 3 pseudo-counts.
+                   For context with N samples, data weight = N/(N+3).
     """
 
     NUM_MOVES = 30  # 15 edges * 2 colors
     PHASES = ['early', 'mid', 'late', 'endgame']
 
-    def __init__(self, opponent_name: str, smoothing: float = 1.0):
+    def __init__(self, opponent_name: str, smoothing: float = 0.1):
         self.opponent_name = opponent_name
         self.smoothing = smoothing
 
@@ -163,7 +166,7 @@ class OpponentModel:
                 (self.response_counts[our_idx] + self.smoothing) /
                 (response_total + self.smoothing * self.NUM_MOVES)
             )
-            # Confidence based on sample size
+            # Confidence based on sample size (saturates at 20 samples)
             response_confidence = min(response_total / 20.0, 1.0)
         else:
             # No data for this context - use uniform
@@ -182,7 +185,12 @@ class OpponentModel:
             phase_probs = np.ones(self.NUM_MOVES) / self.NUM_MOVES
 
         # Adjust alpha based on confidence in response data
-        effective_alpha = alpha * response_confidence
+        # When confidence is high, use mostly response-conditional (up to 95%)
+        # When confidence is low, blend more with phase-conditional
+        # Formula: effective_alpha = alpha + (0.95 - alpha) * confidence
+        # At confidence=0: effective_alpha = alpha (use phase as fallback)
+        # At confidence=1: effective_alpha = 0.95 (mostly response-conditional)
+        effective_alpha = alpha + (0.95 - alpha) * response_confidence
 
         # Combine probabilities
         combined_probs = (
