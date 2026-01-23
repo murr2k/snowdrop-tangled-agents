@@ -104,26 +104,27 @@ class OpponentModel:
         """Convert phase name to index."""
         return self.PHASES.index(phase)
 
-    def update(self, our_move: tuple[int, str], opp_move: tuple[int, str], grey_count: int):
+    def update(self, our_move: tuple[int, str], opp_move: tuple[int, str], grey_count: int, weight: float = 1.0):
         """Update model with observed opponent response.
 
         Args:
             our_move: (edge, color) of our last move
             opp_move: (edge, color) of opponent's response
             grey_count: Number of grey edges BEFORE opponent's move
+            weight: Weight for this observation (0.0-1.0), used for policy decay
         """
         our_idx = move_to_index(our_move[0], our_move[1])
         opp_idx = move_to_index(opp_move[0], opp_move[1])
         phase = grey_bucket(grey_count)
         phase_idx = self._phase_idx(phase)
 
-        # Update response counts
-        self.response_counts[our_idx, opp_idx] += 1
-        self.response_totals[our_idx] += 1
+        # Update response counts (weighted)
+        self.response_counts[our_idx, opp_idx] += weight
+        self.response_totals[our_idx] += weight
 
-        # Update phase counts
-        self.phase_counts[phase_idx, opp_idx] += 1
-        self.phase_totals[phase_idx] += 1
+        # Update phase counts (weighted)
+        self.phase_counts[phase_idx, opp_idx] += weight
+        self.phase_totals[phase_idx] += weight
 
         self.total_moves += 1
 
@@ -219,16 +220,40 @@ class OpponentModel:
 
         return result
 
-    def load_from_database(self, db_path: Optional[Path] = None):
+    def load_from_database(self, db_path: Optional[Path] = None, policy_weights: Optional[dict] = None):
         """Initialize model from historical game data.
 
         Reads opponent moves from the moves table and rebuilds the model.
+        Applies policy-based weighting to decay games from older/different policies.
 
         Args:
             db_path: Path to database (default: ~/.tangled/game_stats.db)
+            policy_weights: Dict mapping policy_id to weight (0.0-1.0).
+                           Default weights if not specified:
+                           - Current policy (from git): 1.0
+                           - One version back: 0.5
+                           - Older/unknown: 0.25
         """
         if db_path is None:
             db_path = DEFAULT_DB_PATH
+
+        # Get current policy for default weighting
+        try:
+            from snowdrop_tangled_agents.utils.version import get_policy_id
+            current_policy = get_policy_id()
+        except Exception:
+            current_policy = None
+
+        # Default policy weights: current=1.0, others decayed
+        if policy_weights is None:
+            policy_weights = {
+                current_policy: 1.0,
+                'v0.6.0-bayesian-oracle': 0.8,  # Recent with opponent modeling
+                'pre-opponent-modeling': 0.3,   # Different play style
+                'legacy': 0.1,                  # Very old
+                'abandoned': 0.0,               # Incomplete games
+                None: 0.25,                     # Unknown
+            }
 
         logger.info(f"Loading opponent model from {db_path}")
 
@@ -236,9 +261,9 @@ class OpponentModel:
         conn.row_factory = sqlite3.Row
 
         try:
-            # Get games against this opponent
+            # Get games against this opponent with policy info
             games = conn.execute('''
-                SELECT id FROM games
+                SELECT id, policy_id FROM games
                 WHERE LOWER(opponent) = LOWER(?)
             ''', (self.opponent_name,)).fetchall()
 
@@ -252,9 +277,22 @@ class OpponentModel:
             self.phase_totals.fill(0)
             self.total_moves = 0
 
-            # Process each game
+            # Track weighted vs unweighted for logging
+            weighted_moves = 0.0
+            skipped_games = 0
+
+            # Process each game with policy-based weighting
             for game in games:
                 game_id = game['id']
+                policy_id = game['policy_id']
+
+                # Get weight for this policy
+                weight = policy_weights.get(policy_id, policy_weights.get(None, 0.25))
+
+                # Skip games with zero weight
+                if weight <= 0:
+                    skipped_games += 1
+                    continue
 
                 # Get all moves in this game ordered by move_number
                 moves = conn.execute('''
@@ -283,13 +321,14 @@ class OpponentModel:
                         if our_last_move is not None:
                             # Grey count BEFORE opponent's move is after our move
                             grey_before_opp = last_grey_count
-                            self.update(our_last_move, (edge, color), grey_before_opp)
+                            self.update(our_last_move, (edge, color), grey_before_opp, weight=weight)
+                            weighted_moves += weight
 
                         # Update grey count from state
                         if state_after:
                             last_grey_count = state_after.count('-')
 
-            logger.info(f"Loaded {self.total_moves} opponent moves")
+            logger.info(f"Loaded {self.total_moves} opponent moves (weighted: {weighted_moves:.1f}, skipped {skipped_games} games)")
 
         finally:
             conn.close()
