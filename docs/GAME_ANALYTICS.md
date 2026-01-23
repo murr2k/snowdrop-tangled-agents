@@ -114,7 +114,91 @@ python -c "from snowdrop_tangled_agents.stats import queries; queries.print_summ
 
 # Check calibration accuracy
 python -c "from snowdrop_tangled_agents.stats import queries; queries.print_calibration_report()"
+
+# Live session stats
+python -m snowdrop_tangled_agents.stats.session_stats
 ```
+
+---
+
+## Live Session Stats
+
+Real-time statistics for the current gaming session. Automatically detects session boundaries and provides trend analysis.
+
+### Usage
+
+```bash
+# One-shot report
+python -m snowdrop_tangled_agents.stats.session_stats
+
+# Watch mode (refreshes every 60s, press q to exit)
+python -m snowdrop_tangled_agents.stats.session_stats --watch
+
+# Custom refresh interval (30s)
+python -m snowdrop_tangled_agents.stats.session_stats -w -i 30
+
+# Custom session gap (10 minutes instead of default 30)
+python -m snowdrop_tangled_agents.stats.session_stats --gap 10
+
+# JSON output for scripting
+python -m snowdrop_tangled_agents.stats.session_stats --json
+
+# Clean up stale in-progress games (dry run)
+python -m snowdrop_tangled_agents.stats.session_stats --cleanup
+
+# Actually clean up stale games
+python -m snowdrop_tangled_agents.stats.session_stats --cleanup --force
+```
+
+### Output Format
+
+```
+session_start = 2026-01-22 23:35
+session_end = 2026-01-23 00:56 (est)
+games = 49/50
+wins = 5, 10.2%
+draws = 22, 44.9%
+losses = 22, 44.9%
+avg_score = +0.556
+median_score = +0.423
+min_score = -2.428
+max_score = +4.085
+score_std = 1.006
+avg_moves = 8.0
+score_trend = -0.068
+winrate_trend = +3.7%
+recent_5 = DLLLL
+```
+
+### Session Detection
+
+A **session** is a contiguous group of games. Sessions are separated by gaps of 30+ minutes (configurable via `--gap`).
+
+- If a game is **in progress** (`result IS NULL`), the session includes all games from start to now
+- If no game is running, shows the **most recent completed session**
+- **Estimated end time** is calculated from play rate when games remain
+
+### Statistics Explained
+
+| Statistic | Description |
+|-----------|-------------|
+| `session_start` | First game timestamp (local time) |
+| `session_end` | Last game or estimated completion (local time) |
+| `games` | Completed/Total games in session |
+| `wins/draws/losses` | Count and percentage |
+| `avg_score` | Mean final score |
+| `median_score` | Median final score (robust to outliers) |
+| `min_score/max_score` | Score range |
+| `score_std` | Score standard deviation |
+| `avg_moves` | Average moves per game |
+| `score_trend` | Second half avg minus first half avg |
+| `winrate_trend` | Second half win rate minus first half |
+| `recent_5` | Last 5 results (W/D/L)
+
+### Timezone Handling
+
+- **Database**: Timestamps stored in UTC
+- **Display**: Converted to local time automatically
 
 ## Visualizations
 

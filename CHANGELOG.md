@@ -18,6 +18,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `backfill_policy_id.py` tool for historical game backfill
   - Integrated into `play_tangled.py` game loop for automatic metrics capture
 
+- **Live Session Statistics** (`snowdrop_tangled_agents/stats/session_stats.py`)
+  - Real-time session statistics with automatic session boundary detection
+  - Watch mode: `--watch` refreshes stats periodically (press `q` to exit)
+  - Configurable refresh interval: `--interval` (default 60s)
+  - Configurable session gap: `--gap` (default 30 minutes)
+  - Trend analysis: score trend, win rate trend, recent 5 results
+  - Estimated end time based on play rate
+  - UTC storage with local timezone display
+  - Cleanup tool for stale in-progress games: `--cleanup --force`
+  - JSON output: `--json`
+
 - **D-Wave Inspired Hybrid Solver** (`snowdrop_tangled_agents/matlab/rl/HybridTangledSolver.m`)
   - Integrated solver combining Alpha-Beta Minimax, MCTS, and Tabu Search
   - Automatic strategy selection based on game phase:
