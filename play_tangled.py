@@ -23,17 +23,74 @@ Usage:
 
 import argparse
 import atexit
+import json
 import logging
 import os
 import signal
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 
 import coloredlogs
 from dotenv import load_dotenv
 
 load_dotenv()
+
+
+class StuckOpponentError(Exception):
+    """Raised when opponent doesn't play within timeout (likely stuck/crashed)."""
+    pass
+
+
+# Process tracking for safe cleanup
+PROCESS_TRACKING_FILE = Path.home() / ".tangled" / "active_process.json"
+
+
+def register_process(run_id: int = None, planned_games: int = None):
+    """Register this process as the active game runner."""
+    PROCESS_TRACKING_FILE.parent.mkdir(parents=True, exist_ok=True)
+    info = {
+        "pid": os.getpid(),
+        "started": datetime.now().isoformat(),
+        "run_id": run_id,
+        "planned_games": planned_games,
+    }
+    with open(PROCESS_TRACKING_FILE, 'w') as f:
+        json.dump(info, f)
+
+
+def unregister_process():
+    """Remove this process from tracking."""
+    try:
+        if PROCESS_TRACKING_FILE.exists():
+            with open(PROCESS_TRACKING_FILE, 'r') as f:
+                info = json.load(f)
+            # Only remove if it's our PID
+            if info.get("pid") == os.getpid():
+                PROCESS_TRACKING_FILE.unlink()
+    except Exception:
+        pass
+
+
+def get_active_process() -> dict:
+    """Get info about the currently active game process, if any."""
+    try:
+        if PROCESS_TRACKING_FILE.exists():
+            with open(PROCESS_TRACKING_FILE, 'r') as f:
+                info = json.load(f)
+            # Check if process is still running
+            pid = info.get("pid")
+            if pid:
+                try:
+                    os.kill(pid, 0)  # Check if process exists
+                    return info
+                except OSError:
+                    # Process no longer running, clean up stale file
+                    PROCESS_TRACKING_FILE.unlink()
+    except Exception:
+        pass
+    return None
 
 # Global reference for cleanup on signals
 _active_player = None
@@ -976,7 +1033,7 @@ class WebPlayer:
             time.sleep(0.3)
         return True  # Timeout - try anyway
 
-    def wait_for_opponent_to_play(self, timeout: float = 30.0, initial_grey_count: int = None) -> bool:
+    def wait_for_opponent_to_play(self, timeout: float = 30.0, stuck_timeout: float = 180.0, initial_grey_count: int = None) -> bool:
         """Wait for opponent to take their turn.
 
         Uses two signals for reliability:
@@ -984,10 +1041,12 @@ class WebPlayer:
         2. Board state: wait for grey count to decrease (opponent colored an edge)
 
         Args:
-            timeout: Maximum time to wait
+            timeout: Normal timeout for slow opponent thinking (warns but continues)
+            stuck_timeout: Hard timeout - raises StuckOpponentError if exceeded (default 3 min)
             initial_grey_count: Grey edges before opponent's turn (for state-based detection)
 
         Returns False if game is over, True when opponent has played.
+        Raises StuckOpponentError if stuck_timeout exceeded.
         """
         start = time.time()
 
@@ -1002,8 +1061,9 @@ class WebPlayer:
                 break
             time.sleep(0.1)
 
+        warned = False
         # Phase 2: Wait for opponent to finish (turn back to us OR grey count changed)
-        while time.time() - start < timeout:
+        while time.time() - start < stuck_timeout:
             if self.is_game_over():
                 return False
 
@@ -1022,11 +1082,18 @@ class WebPlayer:
                     time.sleep(0.5)
                     return True
 
+            # Warn once after normal timeout
+            elapsed = time.time() - start
+            if not warned and elapsed > timeout:
+                self.logger.warning(f"Opponent slow after {timeout}s, waiting up to {stuck_timeout}s...")
+                warned = True
+
             time.sleep(0.3)
 
-        # Timeout - log warning but continue (opponent may have slow thinking time)
-        self.logger.warning(f"Opponent wait timeout after {timeout}s")
-        return True
+        # Stuck timeout exceeded - opponent is likely crashed/stuck
+        elapsed = time.time() - start
+        self.logger.error(f"Opponent stuck! No response after {elapsed:.0f}s")
+        raise StuckOpponentError(f"Opponent did not play within {stuck_timeout}s")
 
     def play_game(self, opponent: str = "melissa") -> dict:
         """Play one complete game."""
@@ -1043,13 +1110,17 @@ class WebPlayer:
         if self.strategy_type == "matlab" and hasattr(self.strategy, 'initialize'):
             self.strategy.initialize(opponent=opponent)
 
-        # Start stats tracking for this game (with model metrics)
+        # Start stats tracking for this game (with model metrics and run info)
+        run_id = getattr(self, '_run_id', None)
+        game_number = getattr(self, '_current_game_number', None)
         self.current_game_id = self.stats_collector.start_game(
             opponent=opponent,
             graph="petersen",
             strategy=self.strategy_type,
             mcts_time=self.mcts_time,
-            model_metrics=self.metrics_tracker.get_game_metrics()
+            model_metrics=self.metrics_tracker.get_game_metrics(),
+            run_id=run_id,
+            game_number=game_number
         )
 
         if not self.start_game(opponent):
@@ -1229,8 +1300,20 @@ class WebPlayer:
 
             # Wait for opponent to play (using both turn indicator and board state)
             opponent_start_time = time.time()
-            if not self.wait_for_opponent_to_play(timeout=30.0, initial_grey_count=our_grey_count):
-                break
+            try:
+                if not self.wait_for_opponent_to_play(timeout=30.0, stuck_timeout=180.0, initial_grey_count=our_grey_count):
+                    break
+            except StuckOpponentError:
+                # Opponent is stuck - abandon this game and signal restart needed
+                self.logger.error("Opponent stuck! Abandoning game and restarting...")
+                self.stats_collector.abandon_game(self.current_game_id, "stuck_opponent")
+                return {
+                    "result": "abandoned",
+                    "error": "stuck_opponent",
+                    "final_score": self.read_score(),
+                    "moves": move_count,
+                    "score_history": self.score_history.copy(),
+                }
             opponent_think_time = time.time() - opponent_start_time
 
             # Record opponent's move timing (we detect their move by board state change)
@@ -1354,6 +1437,7 @@ def main():
     parser = argparse.ArgumentParser(description="Play Tangled on tangled-game.com")
     parser.add_argument("--opponent", "-o", choices=["randy", "amara", "melissa"], default="melissa")
     parser.add_argument("--games", "-n", type=int, default=5)
+    parser.add_argument("--run", "-r", type=int, help="Start/resume a run of N planned games (enables run tracking)")
     parser.add_argument("--slow-mo", type=int, default=100)
     parser.add_argument("--debug", action="store_true")
     parser.add_argument("--keep-open", "-k", type=int, default=5,
@@ -1368,6 +1452,10 @@ def main():
                         help="Show statistics summary and exit (no games played)")
     parser.add_argument("--calibration", action="store_true",
                         help="Show adjudicator calibration report and exit (no games played)")
+    parser.add_argument("--process-status", action="store_true",
+                        help="Show active game process status and exit")
+    parser.add_argument("--kill-active", action="store_true",
+                        help="Kill the active game process and exit")
 
     # MATLAB training commands
     parser.add_argument("--training-status", action="store_true",
@@ -1399,6 +1487,37 @@ def main():
     # If --calibration flag, show calibration report and exit
     if args.calibration:
         stats_queries.print_calibration_report()
+        return
+
+    # If --process-status flag, show active process info and exit
+    if args.process_status:
+        active = get_active_process()
+        if active:
+            print(f"Active game process:")
+            print(f"  PID: {active['pid']}")
+            print(f"  Started: {active['started']}")
+            print(f"  Run ID: {active.get('run_id')}")
+            print(f"  Planned games: {active.get('planned_games')}")
+        else:
+            print("No active game process")
+        return
+
+    # If --kill-active flag, kill the active process and exit
+    if args.kill_active:
+        active = get_active_process()
+        if active:
+            pid = active['pid']
+            print(f"Killing process {pid}...")
+            try:
+                os.kill(pid, signal.SIGTERM)
+                print(f"Sent SIGTERM to PID {pid}")
+                # Clean up tracking file
+                if PROCESS_TRACKING_FILE.exists():
+                    PROCESS_TRACKING_FILE.unlink()
+            except OSError as e:
+                print(f"Failed to kill process: {e}")
+        else:
+            print("No active game process to kill")
         return
 
     # If --training-status flag, show training system status and exit
@@ -1489,59 +1608,159 @@ def main():
     level = "DEBUG" if args.debug else "INFO"
     coloredlogs.install(level=level, fmt="%(asctime)s %(levelname)s %(message)s")
 
-    # Use context manager for automatic cleanup on exit/kill/interrupt
-    with WebPlayer(
-        headless=False,
-        slow_mo=args.slow_mo,
-        strategy_type=args.strategy,
-        mcts_time=args.mcts_time,
-        mcts_iterations=args.mcts_iterations,
-        use_nn=args.use_nn,
-        adapt_opponent=args.adapt_opponent,
-    ) as player:
-        player.login()
+    # Check for already running process
+    active = get_active_process()
+    if active:
+        print(f"WARNING: Another game process is running (PID {active['pid']}, started {active['started']})")
+        print(f"  Run ID: {active.get('run_id')}, Planned: {active.get('planned_games')}")
+        print("  Use 'kill' command to stop it if needed, or wait for it to finish.")
+        return
 
-        results = []
-        for i in range(args.games):
-            print(f"\n=== Game {i+1}/{args.games} ===")
-            result = player.play_game(args.opponent)
-            results.append(result)
+    # Initialize stats collector outside context manager for run tracking
+    from snowdrop_tangled_agents.stats import get_collector
+    stats_collector = get_collector()
 
-            if i < args.games - 1:
-                time.sleep(2)
+    # Determine run info
+    if args.run:
+        run_id, start_game_number = stats_collector.get_or_create_run(
+            planned_games=args.run,
+            strategy=args.strategy,
+            opponent=args.opponent
+        )
+        run_info = stats_collector.get_run(run_id)
+        total_planned = run_info['planned_games']
+        print(f"Run {run_id}: {run_info['completed_games']}/{total_planned} completed")
+    else:
+        run_id = None
+        start_game_number = 1
+        total_planned = args.games
 
-        # Detailed Summary
-        print("\n" + "=" * 50)
-        print("SESSION SUMMARY")
-        print("=" * 50)
+    # Register this process for tracking
+    register_process(run_id=run_id, planned_games=total_planned)
+    atexit.register(unregister_process)
 
-        for i, r in enumerate(results):
-            result = r.get("result", "unknown")
-            score = r.get("final_score", 0)
-            moves = r.get("moves", 0)
-            history = r.get("score_history", [])
+    results = []
+    current_game_number = start_game_number
+    restart_needed = False
 
-            result_symbol = {"win": "WIN", "loss": "LOSS", "draw": "DRAW"}.get(result, "?")
-            print(f"\nGame {i+1}: {result_symbol} (Score: {score:.4f}, Moves: {moves})")
+    # Main game loop with browser restart support
+    while True:
+        # Calculate remaining games
+        if run_id:
+            run_info = stats_collector.get_run(run_id)
+            games_remaining = run_info['planned_games'] - run_info['completed_games']
+            if games_remaining <= 0:
+                print(f"\nRun {run_id} complete! ({run_info['planned_games']}/{run_info['planned_games']})")
+                break
+        else:
+            games_remaining = total_planned - len(results)
+            if games_remaining <= 0:
+                break
 
-            if history:
-                scores_str = " -> ".join(f"{s:.2f}" for _, _, s in history)
-                print(f"  Progression: {scores_str}")
+        # Create player and play games
+        with WebPlayer(
+            headless=False,
+            slow_mo=args.slow_mo,
+            strategy_type=args.strategy,
+            mcts_time=args.mcts_time,
+            mcts_iterations=args.mcts_iterations,
+            use_nn=args.use_nn,
+            adapt_opponent=args.adapt_opponent,
+        ) as player:
+            player.login()
 
-        print("\n" + "-" * 50)
-        wins = sum(1 for r in results if r.get("result") == "win")
-        losses = sum(1 for r in results if r.get("result") == "loss")
-        draws = sum(1 for r in results if r.get("result") == "draw")
-        print(f"TOTAL: {wins}W / {losses}L / {draws}D")
-        print("=" * 50)
+            # Store run info on player for use in play_game
+            player._run_id = run_id
+            player._current_game_number = current_game_number
 
-        # Show database statistics
-        stats_queries.print_summary()
+            restart_needed = False
 
-        # Keep browser open to see results
-        if args.keep_open > 0:
-            print(f"\nBrowser closing in {args.keep_open} seconds...")
-            time.sleep(args.keep_open)
+            while games_remaining > 0:
+                # Update run info for display
+                if run_id:
+                    run_info = stats_collector.get_run(run_id)
+                    games_remaining = run_info['planned_games'] - run_info['completed_games']
+                    display_num = run_info['completed_games'] + 1
+                    display_total = run_info['planned_games']
+                else:
+                    display_num = len(results) + 1
+                    display_total = total_planned
+
+                if games_remaining <= 0:
+                    break
+
+                print(f"\n=== Game {display_num}/{display_total} ===")
+                result = player.play_game(args.opponent)
+                results.append(result)
+
+                # Check for stuck opponent
+                if result.get("error") == "stuck_opponent":
+                    print("\n*** OPPONENT STUCK - Restarting browser... ***\n")
+                    restart_needed = True
+
+                    # Check if this was the final game
+                    if run_id:
+                        run_info = stats_collector.get_run(run_id)
+                        if run_info['completed_games'] >= run_info['planned_games']:
+                            print(f"Run {run_id} was on final game - starting new run")
+                            # Start a new run with same parameters
+                            run_id = stats_collector.start_run(
+                                planned_games=args.run,
+                                strategy=args.strategy,
+                                opponent=args.opponent
+                            )
+                            current_game_number = 1
+                            print(f"Started new run {run_id}")
+                    break  # Exit inner loop to restart browser
+
+                if run_id:
+                    player._current_game_number += 1
+                    current_game_number = player._current_game_number
+
+                games_remaining -= 1
+
+                if games_remaining > 0:
+                    time.sleep(2)
+
+        # If no restart needed, we're done
+        if not restart_needed:
+            break
+
+        # Brief pause before restart
+        print("Restarting in 5 seconds...")
+        time.sleep(5)
+
+    # Detailed Summary
+    print("\n" + "=" * 50)
+    print("SESSION SUMMARY")
+    print("=" * 50)
+
+    for i, r in enumerate(results):
+        result = r.get("result", "unknown")
+        score = r.get("final_score", 0) or 0
+        moves = r.get("moves", 0)
+        history = r.get("score_history", [])
+
+        result_symbol = {"win": "WIN", "loss": "LOSS", "draw": "DRAW", "abandoned": "ABANDONED"}.get(result, "?")
+        print(f"\nGame {i+1}: {result_symbol} (Score: {score:.4f}, Moves: {moves})")
+
+        if history:
+            scores_str = " -> ".join(f"{s:.2f}" for _, _, s in history)
+            print(f"  Progression: {scores_str}")
+
+    print("\n" + "-" * 50)
+    wins = sum(1 for r in results if r.get("result") == "win")
+    losses = sum(1 for r in results if r.get("result") == "loss")
+    draws = sum(1 for r in results if r.get("result") == "draw")
+    abandoned = sum(1 for r in results if r.get("result") == "abandoned")
+    print(f"TOTAL: {wins}W / {losses}L / {draws}D / {abandoned}A")
+    print("=" * 50)
+
+    # Show database statistics
+    stats_queries.print_summary()
+
+    # Keep browser open is no longer applicable since we exit context manager
+    # The browser closes when we leave the 'with' block
 
 
 if __name__ == "__main__":

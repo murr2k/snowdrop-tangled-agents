@@ -9,6 +9,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Run Tracking & Resume System** (Migration v8)
+  - New `runs` table tracks planned game batches with progress
+  - Games store `run_id` and `game_number` for batch tracking
+  - `--run N` flag to start/resume a run of N planned games
+  - Automatic resume: interrupted runs continue from where they left off
+  - Session stats shows run progress: `run = 2`, `games = 5/750`
+  - `get_or_create_run()`, `get_active_run()`, `abandon_game()` collector methods
+
+- **Stuck Opponent Detection & Recovery**
+  - 3-minute timeout when waiting for opponent to play
+  - `StuckOpponentError` exception for timeout handling
+  - Automatic browser restart on stuck opponent
+  - Games marked as "abandoned" with reason tracking
+  - If final game of run is stuck, automatically starts new run
+
+- **Process Tracking for Safe Management**
+  - Active process info stored in `~/.tangled/active_process.json`
+  - Prevents accidentally starting multiple game sessions
+  - `--process-status` flag shows active game process info
+  - `--kill-active` flag safely terminates running game process
+  - Automatic cleanup on process exit via atexit handler
+
 - **Policy Versioning & Model Metrics Tracking** (Migration v7)
   - `policy_id` field tracks code version via git tag or commit hash
   - Opponent model metrics: `model_entropy`, `model_games_learned`, `model_moves_learned`

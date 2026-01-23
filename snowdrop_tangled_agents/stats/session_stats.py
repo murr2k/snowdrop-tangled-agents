@@ -47,6 +47,8 @@ class GameRecord:
     model_entropy: Optional[float]
     model_top3_hit: Optional[float]
     prediction_accuracy: Optional[float]
+    run_id: Optional[int] = None
+    game_number: Optional[int] = None
     is_current: bool = False
 
 
@@ -153,7 +155,7 @@ def get_session_stats(db_path: Optional[Path] = None, gap_minutes: int = SESSION
             SELECT
                 id, timestamp, opponent, result, final_score, total_moves,
                 strategy, policy_id, model_entropy, model_top3_hit,
-                prediction_accuracy
+                prediction_accuracy, run_id, game_number
             FROM games
             WHERE timestamp >= ?
             ORDER BY timestamp ASC
@@ -173,6 +175,8 @@ def get_session_stats(db_path: Optional[Path] = None, gap_minutes: int = SESSION
                 model_entropy=row[8],
                 model_top3_hit=row[9],
                 prediction_accuracy=row[10],
+                run_id=row[11],
+                game_number=row[12],
                 is_current=(row[3] is None)
             ))
 
@@ -221,8 +225,28 @@ def print_session_report(db_path: Optional[Path] = None, gap_minutes: int = SESS
         print("No games found")
         return
 
-    # Use planned_games if provided, otherwise use actual game count
-    total_games = planned_games if planned_games else stats.game_count
+    # Check for run info from the most recent game
+    run_info = None
+    if stats.games:
+        latest_game = stats.games[-1]
+        if latest_game.run_id:
+            db_path = db_path or DEFAULT_DB_PATH
+            with sqlite3.connect(db_path) as conn:
+                cursor = conn.execute(
+                    "SELECT id, planned_games, completed_games FROM runs WHERE id = ?",
+                    (latest_game.run_id,)
+                )
+                row = cursor.fetchone()
+                if row:
+                    run_info = {'id': row[0], 'planned_games': row[1], 'completed_games': row[2]}
+
+    # Determine total games: run > --planned > session count
+    if run_info:
+        total_games = run_info['planned_games']
+    elif planned_games:
+        total_games = planned_games
+    else:
+        total_games = stats.game_count
 
     # Session info (convert UTC to local time for display)
     print(f"session_start = {format_local(stats.session_start)}")
@@ -240,7 +264,13 @@ def print_session_report(db_path: Optional[Path] = None, gap_minutes: int = SESS
         print("session_end =")
     else:
         print(f"session_end = {format_local(stats.session_end)}")
-    print(f"games = {stats.completed_games}/{total_games}")
+
+    # Show run info if available
+    if run_info:
+        print(f"run = {run_info['id']}")
+        print(f"games = {run_info['completed_games']}/{run_info['planned_games']}")
+    else:
+        print(f"games = {stats.completed_games}/{total_games}")
 
     # Results
     if stats.completed_games > 0:

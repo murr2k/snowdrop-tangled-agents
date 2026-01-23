@@ -136,7 +136,9 @@ class StatsCollector:
         strategy: str = "hybrid",
         mcts_time: float = 8.0,
         policy_id: str = None,
-        model_metrics: dict = None
+        model_metrics: dict = None,
+        run_id: int = None,
+        game_number: int = None
     ) -> str:
         """
         Start tracking a new game.
@@ -148,6 +150,8 @@ class StatsCollector:
             mcts_time: MCTS time limit
             policy_id: Code version identifier (auto-detected if None)
             model_metrics: Opponent model metrics dict from GameMetricsTracker
+            run_id: Optional run ID for batch tracking
+            game_number: Optional game number within the run
 
         Returns:
             Unique game ID
@@ -175,16 +179,19 @@ class StatsCollector:
             conn.execute("""
                 INSERT INTO games (
                     id, opponent, graph, strategy, mcts_time,
-                    policy_id, model_entropy, model_games_learned, model_moves_learned
+                    policy_id, model_entropy, model_games_learned, model_moves_learned,
+                    run_id, game_number
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 game_id, opponent, graph, strategy, mcts_time,
-                policy_id, model_entropy, model_games_learned, model_moves_learned
+                policy_id, model_entropy, model_games_learned, model_moves_learned,
+                run_id, game_number
             ))
             conn.commit()
 
-        logger.debug(f"Started game {game_id} vs {opponent} (policy={policy_id})")
+        run_info = f" (run {run_id}, game {game_number})" if run_id else ""
+        logger.debug(f"Started game {game_id} vs {opponent}{run_info} (policy={policy_id})")
         return game_id
 
     def record_move(
@@ -300,6 +307,14 @@ class StatsCollector:
             )
             total_moves = cursor.fetchone()[0]
 
+            # Get run_id for this game
+            cursor = conn.execute(
+                "SELECT run_id FROM games WHERE id = ?",
+                (game_id,)
+            )
+            row = cursor.fetchone()
+            run_id = row[0] if row else None
+
             conn.execute("""
                 UPDATE games
                 SET result = ?, final_score = ?, total_moves = ?, notes = ?,
@@ -308,6 +323,10 @@ class StatsCollector:
             """, (result, final_score, total_moves, notes,
                   model_top3_hit, prediction_accuracy, game_id))
             conn.commit()
+
+            # Update run completed count if this game belongs to a run
+            if run_id:
+                self.update_run_completed(run_id)
 
         logger.info(f"Game {game_id} ended: {result} ({final_score:+.3f})")
 
@@ -740,6 +759,157 @@ class StatsCollector:
         """Get database migration status."""
         with sqlite3.connect(self.db_path) as conn:
             return get_migration_status(conn)
+
+    # ========== Run Management Methods ==========
+
+    def start_run(
+        self,
+        planned_games: int,
+        description: Optional[str] = None,
+        strategy: Optional[str] = None,
+        opponent: Optional[str] = None
+    ) -> int:
+        """
+        Start a new run (batch of planned games).
+
+        Args:
+            planned_games: Total number of games planned for this run
+            description: Optional description of the run
+            strategy: Strategy being used
+            opponent: Opponent being played
+
+        Returns:
+            Run ID
+        """
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute("""
+                INSERT INTO runs (planned_games, description, strategy, opponent)
+                VALUES (?, ?, ?, ?)
+            """, (planned_games, description, strategy, opponent))
+            conn.commit()
+            run_id = cursor.lastrowid
+            logger.info(f"Started run {run_id}: {planned_games} games planned")
+            return run_id
+
+    def get_active_run(self) -> Optional[Dict[str, Any]]:
+        """
+        Get the most recent incomplete run.
+
+        Returns:
+            Run info dict or None if no active run
+        """
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.execute("""
+                SELECT * FROM runs
+                WHERE completed_games < planned_games
+                ORDER BY started DESC
+                LIMIT 1
+            """)
+            row = cursor.fetchone()
+            return dict(row) if row else None
+
+    def get_run(self, run_id: int) -> Optional[Dict[str, Any]]:
+        """
+        Get a run by ID.
+
+        Args:
+            run_id: Run ID
+
+        Returns:
+            Run info dict or None
+        """
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.execute(
+                "SELECT * FROM runs WHERE id = ?",
+                (run_id,)
+            )
+            row = cursor.fetchone()
+            return dict(row) if row else None
+
+    def get_next_game_number(self, run_id: int) -> int:
+        """
+        Get the next game number for a run.
+
+        Args:
+            run_id: Run ID
+
+        Returns:
+            Next game number (1-based)
+        """
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute(
+                "SELECT COALESCE(MAX(game_number), 0) + 1 FROM games WHERE run_id = ?",
+                (run_id,)
+            )
+            return cursor.fetchone()[0]
+
+    def update_run_completed(self, run_id: int):
+        """
+        Update the completed_games count for a run.
+
+        Args:
+            run_id: Run ID
+        """
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute("""
+                UPDATE runs SET completed_games = (
+                    SELECT COUNT(*) FROM games
+                    WHERE run_id = ? AND result IS NOT NULL
+                )
+                WHERE id = ?
+            """, (run_id, run_id))
+            conn.commit()
+
+    def get_or_create_run(
+        self,
+        planned_games: int,
+        strategy: Optional[str] = None,
+        opponent: Optional[str] = None
+    ) -> tuple[int, int]:
+        """
+        Get active run or create a new one.
+
+        Args:
+            planned_games: Total games planned (used for new run)
+            strategy: Strategy being used
+            opponent: Opponent being played
+
+        Returns:
+            Tuple of (run_id, next_game_number)
+        """
+        active = self.get_active_run()
+
+        if active:
+            run_id = active['id']
+            game_number = self.get_next_game_number(run_id)
+            logger.info(f"Resuming run {run_id}: game {game_number}/{active['planned_games']}")
+            return run_id, game_number
+
+        run_id = self.start_run(
+            planned_games=planned_games,
+            strategy=strategy,
+            opponent=opponent
+        )
+        return run_id, 1
+
+    def abandon_game(self, game_id: str, reason: str = "stuck_opponent"):
+        """
+        Mark a game as abandoned (e.g., opponent stuck).
+
+        Args:
+            game_id: Game ID from start_game()
+            reason: Reason for abandonment
+        """
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute("""
+                UPDATE games
+                SET result = 'abandoned', notes = ?
+                WHERE id = ? AND result IS NULL
+            """, (reason, game_id))
+            conn.commit()
+        logger.info(f"Game {game_id} abandoned: {reason}")
 
 
 # Global collector instance (lazy initialization)

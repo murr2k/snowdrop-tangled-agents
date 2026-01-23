@@ -151,6 +151,27 @@ MIGRATIONS: List[Tuple[int, str, str]] = [
         ALTER TABLE games ADD COLUMN model_games_learned INTEGER;
         ALTER TABLE games ADD COLUMN model_moves_learned INTEGER;
     """),
+
+    # v8: Add run tracking for multi-game sessions
+    (8, "Add runs table for tracking planned game sessions", """
+        -- Runs table for tracking planned game batches
+        CREATE TABLE IF NOT EXISTS runs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            started DATETIME DEFAULT CURRENT_TIMESTAMP,
+            planned_games INTEGER NOT NULL,
+            completed_games INTEGER DEFAULT 0,
+            description TEXT,
+            strategy TEXT,
+            opponent TEXT
+        );
+
+        -- Add run tracking to games
+        ALTER TABLE games ADD COLUMN run_id INTEGER REFERENCES runs(id);
+        ALTER TABLE games ADD COLUMN game_number INTEGER;
+
+        CREATE INDEX IF NOT EXISTS idx_games_run_id ON games(run_id);
+        CREATE INDEX IF NOT EXISTS idx_runs_started ON runs(started);
+    """),
 ]
 
 
