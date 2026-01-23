@@ -153,41 +153,28 @@ classdef HybridTangledSolver < handle
                 return;
             end
 
-            % Opening book with P1/P2 detection
+            % Opening book: Unified strategy for P1 and P2
+            % Priority order:
+            % 1. Claim our vertex edges (E9, E10, E11) Green
+            % 2. Block opponent's vertex edges (E12, E13, E14) Purple
+            %
+            % This naturally adapts:
+            % - P1: Gets E9G, E10G, E11G before opponent can take them
+            % - P2: Gets E10G, E11G (if available), then blocks with E12P, E13P, E14P
+            %
             % MY_EDGES (1-indexed): 10, 11, 12 = E9, E10, E11 (0-indexed)
             % OPP_EDGES (1-indexed): 13, 14, 15 = E12, E13, E14 (0-indexed)
-            %
-            % Detect P2: If E9 (state(10)) is already colored, opponent went first
-            isP2 = (state(10) ~= '-');
-
-            if isP2
-                % P2 Strategy: Secure remaining vertex edges, then block opponent
-                % Priority: E10G, E11G, then E12P, E13P, E14P (block opponent's vertex)
-                p2Edges  = [11, 12, 13, 14, 15];  % E10, E11, E12, E13, E14
-                p2Colors = ['G', 'G', 'P', 'P', 'P'];
-                for i = 1:length(p2Edges)
-                    e = p2Edges(i);
-                    if state(e) == '-'
-                        edge = e - 1;  % Convert to 0-indexed
-                        color = p2Colors(i);
-                        info.strategy = 'opening_p2';
-                        info.score = 0.85;  % Slightly lower confidence for P2
-                        info.time = toc(startTime);
-                        return;
-                    end
-                end
-            else
-                % P1 Strategy: Secure our vertex edges (E9, E10, E11 Green)
-                p1Edges = [10, 11, 12];  % E9, E10, E11
-                for e = p1Edges
-                    if state(e) == '-'
-                        edge = e - 1;  % Convert to 0-indexed
-                        color = 'G';
-                        info.strategy = 'opening_p1';
-                        info.score = 0.9;  % High confidence opening move
-                        info.time = toc(startTime);
-                        return;
-                    end
+            openingEdges  = [10, 11, 12, 13, 14, 15];  % E9, E10, E11, E12, E13, E14
+            openingColors = ['G', 'G', 'G', 'P', 'P', 'P'];
+            for i = 1:length(openingEdges)
+                e = openingEdges(i);
+                if state(e) == '-'
+                    edge = e - 1;  % Convert to 0-indexed
+                    color = openingColors(i);
+                    info.strategy = 'opening';
+                    info.score = 0.9 - (i-1)*0.02;  % Decreasing confidence
+                    info.time = toc(startTime);
+                    return;
                 end
             end
 
