@@ -944,35 +944,57 @@ class WebPlayer:
             time.sleep(0.3)
         return True  # Timeout - try anyway
 
-    def wait_for_opponent_to_play(self, timeout: float = 15.0) -> bool:
+    def wait_for_opponent_to_play(self, timeout: float = 30.0, initial_grey_count: int = None) -> bool:
         """Wait for opponent to take their turn.
 
-        First waits for it to NOT be our turn (turn switches to opponent),
-        then waits for our turn to come back (opponent has played).
+        Uses two signals for reliability:
+        1. Turn indicator: wait for it to switch to opponent, then back to us
+        2. Board state: wait for grey count to decrease (opponent colored an edge)
 
-        Returns False if game is over or timeout.
+        Args:
+            timeout: Maximum time to wait
+            initial_grey_count: Grey edges before opponent's turn (for state-based detection)
+
+        Returns False if game is over, True when opponent has played.
         """
         start = time.time()
 
-        # Phase 1: Wait for turn to switch to opponent (max 3 seconds)
-        phase1_timeout = min(3.0, timeout / 3)
+        # Phase 1: Wait for turn to switch to opponent (max 5 seconds)
+        phase1_timeout = min(5.0, timeout / 4)
         while time.time() - start < phase1_timeout:
             if self.is_game_over():
                 return False
             if not self.is_our_turn():
                 # Turn switched to opponent, now wait for them to play
+                self.logger.debug("Phase 1: Turn switched to opponent")
                 break
             time.sleep(0.1)
 
-        # Phase 2: Wait for our turn to come back (opponent has finished)
+        # Phase 2: Wait for opponent to finish (turn back to us OR grey count changed)
         while time.time() - start < timeout:
             if self.is_game_over():
                 return False
+
+            # Primary signal: turn indicator
             if self.is_our_turn():
+                self.logger.debug("Phase 2: Turn returned to us")
                 return True
+
+            # Secondary signal: board state changed (grey count decreased)
+            if initial_grey_count is not None:
+                current_state = self.read_board()
+                current_grey = current_state.count('-')
+                if current_grey < initial_grey_count:
+                    self.logger.debug(f"Phase 2: Board changed (grey {initial_grey_count}->{current_grey})")
+                    # Wait a moment for turn indicator to catch up
+                    time.sleep(0.5)
+                    return True
+
             time.sleep(0.3)
 
-        return True  # Timeout - try anyway
+        # Timeout - log warning but continue (opponent may have slow thinking time)
+        self.logger.warning(f"Opponent wait timeout after {timeout}s")
+        return True
 
     def play_game(self, opponent: str = "melissa") -> dict:
         """Play one complete game."""
@@ -1163,15 +1185,17 @@ class WebPlayer:
 
             # Save board state after our move (for opponent detection)
             our_post_move_state = self.read_board()
+            our_grey_count = our_post_move_state.count('-')
 
-            # Wait for opponent to play (first wait for turn to switch, then wait for our turn back)
+            # Wait for opponent to play (using both turn indicator and board state)
             opponent_start_time = time.time()
-            if not self.wait_for_opponent_to_play(timeout=15.0):
+            if not self.wait_for_opponent_to_play(timeout=30.0, initial_grey_count=our_grey_count):
                 break
             opponent_think_time = time.time() - opponent_start_time
 
             # Record opponent's move timing (we detect their move by board state change)
             state_after_opponent = self.read_board()
+            opponent_grey_count = state_after_opponent.count('-')
             opponent_score = self.read_score()
 
             # Find which edge opponent played (compare OUR post-move state with post-opponent state)
@@ -1183,7 +1207,10 @@ class WebPlayer:
                     opponent_color = state_after_opponent[i]
                     break
 
+            # Debug: Log opponent detection details
             if opponent_edge is not None:
+                self.logger.debug(f"Opponent detected: E{opponent_edge}{opponent_color} "
+                                  f"(grey: {our_grey_count}->{opponent_grey_count})")
                 self.stats_collector.record_move(
                     game_id=self.current_game_id,
                     move_number=move_count,
@@ -1196,6 +1223,14 @@ class WebPlayer:
                     thinking_time=opponent_think_time,
                     solver_stats={'opponent_think_time': opponent_think_time}
                 )
+            elif our_grey_count != opponent_grey_count:
+                # Board changed but we didn't detect which edge - log warning
+                self.logger.warning(f"Opponent move missed! Grey count changed {our_grey_count}->{opponent_grey_count}")
+                self.logger.warning(f"  Our state:  {our_post_move_state}")
+                self.logger.warning(f"  Opp state:  {state_after_opponent}")
+            else:
+                # No change detected - might be game over or timing issue
+                self.logger.debug(f"No opponent move detected (grey count unchanged: {our_grey_count})")
 
         # Game over - wait for result to display
         time.sleep(2)
