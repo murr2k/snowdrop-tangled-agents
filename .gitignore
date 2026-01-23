@@ -211,3 +211,13 @@ __marimo__/
 tangled_stats.db
 petersen_params.json
 tmpclaude-*
+
+# Claude Code
+.claude/
+
+# Windows artifacts
+nul
+
+# MATLAB artifacts
+.MATLABDriveTag
+training_*/
