@@ -24,7 +24,7 @@ Usage:
 from .bridge import MatlabBridge, get_bridge
 from .compiled_bridge import CompiledMatlabBridge, get_compiled_bridge, packages_available
 from .unified_bridge import UnifiedMatlabBridge, get_unified_bridge
-from .matlab_strategy import MatlabEnhancedStrategy
+from .matlab_strategy import MatlabEnhancedStrategy, HybridSolverStrategy
 from .training import (
     TrainingOrchestrator,
     get_training_orchestrator,
@@ -44,6 +44,7 @@ __all__ = [
     'get_unified_bridge',
     # Strategy
     'MatlabEnhancedStrategy',
+    'HybridSolverStrategy',
     # Training
     'TrainingOrchestrator',
     'get_training_orchestrator',

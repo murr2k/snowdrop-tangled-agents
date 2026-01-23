@@ -233,7 +233,40 @@ python play_tangled.py --training-status
 python play_tangled.py --strategy matlab --use-nn --adapt-opponent --games 5
 ```
 
-### 7. MATLAB MCTS Strategy (January 2026)
+### 7. D-Wave Inspired Hybrid Solver (January 2026)
+
+A hybrid Minimax-MCTS solver inspired by D-Wave's classical optimization techniques:
+
+**Architecture:**
+- **Alpha-Beta Minimax** - Exact search at shallow depths with transposition tables
+- **Tabu Search** - D-Wave MST2-inspired multistart optimization for rollout refinement
+- **MCTS** - Monte Carlo Tree Search with progressive widening for deep exploration
+- **Expanded LUT** - 19 million pre-computed exact minimax values
+
+**Lookup Table Coverage:**
+| Grey Edges | States | Method |
+|------------|--------|--------|
+| 0 (terminal) | 32,768 | Direct lookup |
+| 1 | 491,520 | Minimax depth-1 |
+| 2 | 3,440,640 | Minimax depth-2 |
+| 3 | 14,909,440 | Minimax depth-3 |
+| **Total** | **18,874,368** | **Exact values** |
+
+This gives guaranteed optimal play for the last 4 moves of every game.
+
+**References:**
+- D-Wave qbsolv decomposition strategy
+- D-Wave dwave-tabu (MST2 algorithm)
+- Palubeckis (2004) "Multistart Tabu Search Strategies"
+
+```bash
+# Play with Hybrid Solver
+python play_tangled.py --strategy hybrid_solver --games 3
+```
+
+See `docs/HYBRID_MINIMAX_MCTS_PLAN.md` for complete implementation plan.
+
+### 8. MATLAB MCTS Strategy (January 2026)
 
 High-compute MCTS implementation in MATLAB for live play against MCTS Melissa:
 
@@ -268,5 +301,7 @@ See `docs/MATLAB_MCTS_STRATEGY.md` for complete theory of operation.
 - `docs/THEORY_OF_OPERATION.md` - Comprehensive system documentation
 - `docs/MATLAB_INTEGRATION.md` - Complete MATLAB integration guide
 - `docs/MATLAB_MCTS_STRATEGY.md` - MATLAB MCTS theory of operation and tuning guide
+- `docs/HYBRID_MINIMAX_MCTS_PLAN.md` - D-Wave inspired hybrid solver implementation plan
+- `docs/MCTS_DEPTH_ENHANCEMENT_RESEARCH.md` - MCTS depth enhancement literature review
 - `docs/TEST_SUITE.md` - Regression test documentation
 - `docs/THE_MATHEMATICS_OF_TANGLED_GAME.md` - Game theory analysis

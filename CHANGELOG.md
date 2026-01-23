@@ -9,6 +9,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **D-Wave Inspired Hybrid Solver** (`snowdrop_tangled_agents/matlab/rl/HybridTangledSolver.m`)
+  - Integrated solver combining Alpha-Beta Minimax, MCTS, and Tabu Search
+  - Automatic strategy selection based on game phase:
+    - Late game (≤3 grey edges): Pure minimax with guaranteed optimal play
+    - Mid game (4-8 grey edges): Hybrid minimax + MCTS
+    - Early game (>8 grey edges): MCTS + Tabu refinement
+  - D-Wave MST2-inspired Tabu Search (`TabuSearch.m`) with multistart optimization
+  - Alpha-Beta Pruning (`AlphaBetaSearch.m`) with transposition tables
+  - Time-budgeted search with configurable allocation (35% minimax, 55% MCTS, 10% tabu)
+  - Python integration via `HybridSolverStrategy` in `matlab_strategy.py`
+  - CLI: `python play_tangled.py --strategy hybrid_solver`
+
+- **Expanded Lookup Table (19M Entries)** (`snowdrop_tangled_agents/matlab/rl/ExpandedLUT.m`)
+  - Pre-computed exact minimax values for 0-3 grey edge states
+  - Coverage breakdown:
+    - 0 grey (terminal): 32,768 states
+    - 1 grey: 491,520 states
+    - 2 grey: 3,440,640 states
+    - 3 grey: 14,909,440 states
+    - **Total: 18,874,368 exact values**
+  - Guarantees optimal play for final 4 moves of every game
+  - Generation scripts: `generate_expanded_lut.m`, `generate_expanded_lut_parallel.m`, `extend_lut_three_grey_parallel.m`
+  - 3-grey extension generated in ~12.6 minutes using 6 parallel workers
+
+- **Hybrid Solver Test Suite** (`snowdrop_tangled_agents/matlab/rl/test_hybrid_solver.m`)
+  - 27 unit tests covering ExpandedLUT, TabuSearch, AlphaBetaSearch, HybridTangledSolver
+  - Integration tests for full game simulation and solver consistency
+  - LUT generation file verification tests
+
 - **MATLAB MCTS Strategy** (`snowdrop_tangled_agents/strategy/matlab_mcts_strategy.py`)
   - High-compute MCTS using MATLAB TangledMCTS engine (5000 iterations, 20s time limit)
   - `MCTSParams` dataclass for tunable parameters with JSON persistence

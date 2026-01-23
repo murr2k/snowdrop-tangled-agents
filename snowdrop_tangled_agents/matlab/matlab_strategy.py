@@ -428,3 +428,190 @@ class MatlabMCTSStrategy(MCTSStrategy):
             self._matlab_available = self.bridge.connect()
             self._matlab_checked = True
         return self._matlab_available
+
+
+class HybridSolverStrategy:
+    """
+    Strategy using the D-Wave inspired HybridTangledSolver.
+
+    Combines:
+    - Alpha-beta minimax at shallow depths (exact)
+    - MCTS with tabu-guided rollouts (deep exploration)
+    - Expanded LUT with ~19M exact minimax values (0-3 grey edges)
+
+    Requires MATLAB Engine connection to a shared session.
+    """
+
+    def __init__(
+        self,
+        time_limit: float = 10.0,
+        minimax_depth: int = 4,
+        mcts_iterations: int = 5000,
+        player: int = 1,
+    ):
+        """
+        Initialize HybridSolverStrategy.
+
+        Args:
+            time_limit: Total time budget per move (seconds)
+            minimax_depth: Depth for exact alpha-beta search
+            mcts_iterations: MCTS iterations for deep exploration
+            player: Player perspective (1 or 2)
+        """
+        self.time_limit = time_limit
+        self.minimax_depth = minimax_depth
+        self.mcts_iterations = mcts_iterations
+        self.player = player
+
+        self.bridge = get_bridge()
+        self.engine = None
+        self.solver_initialized = False
+
+        # Statistics
+        self.moves_calculated = 0
+        self.total_time = 0.0
+        self.last_strategy = ''
+        self.last_score = 0.0
+
+    def initialize(self, opponent: Optional[str] = None) -> bool:
+        """
+        Initialize MATLAB connection and create solver instance.
+
+        Args:
+            opponent: Opponent name (unused, for API compatibility)
+
+        Returns:
+            True if MATLAB connection successful.
+        """
+        if not self.bridge.connect():
+            logger.error("Failed to connect to MATLAB Engine")
+            return False
+
+        self.engine = self.bridge.engine
+
+        # Add RL path to MATLAB
+        try:
+            import os
+            rl_path = os.path.join(
+                os.path.dirname(__file__), 'rl'
+            )
+            self.engine.addpath(rl_path, nargout=0)
+
+            # Create solver instance in MATLAB
+            self.engine.eval(
+                f"hybridSolver = HybridTangledSolver("
+                f"'TimeLimit', {self.time_limit}, "
+                f"'MinimaxDepth', {self.minimax_depth}, "
+                f"'MCTSIterations', {self.mcts_iterations}, "
+                f"'Player', {self.player});",
+                nargout=0
+            )
+
+            self.solver_initialized = True
+            logger.info(
+                f"HybridSolverStrategy initialized: "
+                f"time_limit={self.time_limit}, depth={self.minimax_depth}"
+            )
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to initialize HybridTangledSolver: {e}")
+            return False
+
+    def calculate_move(
+        self,
+        state: str,
+        score: float = 0.0,
+        score_history: list = None
+    ) -> Optional[Tuple[int, str]]:
+        """
+        Calculate best move using HybridTangledSolver.
+
+        Args:
+            state: 15-char board state ('G', 'P', or '-')
+            score: Current game score (unused)
+            score_history: Move history (unused)
+
+        Returns:
+            (edge_index, color) or None if no moves available.
+        """
+        if not self.solver_initialized:
+            if not self.initialize():
+                logger.error("Solver not initialized")
+                return None
+
+        grey_count = state.count('-')
+        if grey_count == 0:
+            return None
+
+        try:
+            import time
+            start = time.time()
+
+            # Call MATLAB solver
+            self.engine.eval(
+                f"[solverEdge, solverColor, solverInfo] = hybridSolver.solve('{state}');",
+                nargout=0
+            )
+
+            # Get results
+            edge = int(self.engine.eval("solverEdge"))
+            color = str(self.engine.eval("solverColor"))
+
+            # Get info for statistics
+            try:
+                self.last_strategy = str(self.engine.eval("solverInfo.strategy"))
+                self.last_score = float(self.engine.eval("solverInfo.score"))
+            except Exception:
+                pass
+
+            elapsed = time.time() - start
+            self.total_time += elapsed
+            self.moves_calculated += 1
+
+            logger.debug(
+                f"HybridSolver: E{edge} {color} "
+                f"(strategy={self.last_strategy}, score={self.last_score:.3f}, "
+                f"time={elapsed:.2f}s)"
+            )
+
+            return (edge, color)
+
+        except Exception as e:
+            logger.error(f"HybridSolver error: {e}")
+            return None
+
+    def set_player(self, player: int):
+        """Set player perspective (1 or 2)."""
+        self.player = player
+        if self.solver_initialized:
+            try:
+                self.engine.eval(f"hybridSolver.setPlayer({player});", nargout=0)
+            except Exception as e:
+                logger.warning(f"Failed to set player: {e}")
+
+    def get_stats(self) -> dict:
+        """Return strategy statistics."""
+        stats = {
+            'moves_calculated': self.moves_calculated,
+            'total_time': self.total_time,
+            'avg_time_per_move': self.total_time / max(1, self.moves_calculated),
+            'last_strategy': self.last_strategy,
+            'last_score': self.last_score,
+            'solver_initialized': self.solver_initialized,
+        }
+
+        # Get solver stats from MATLAB if available
+        if self.solver_initialized:
+            try:
+                self.engine.eval("solverStats = hybridSolver.getStats();", nargout=0)
+                stats['lut_loaded'] = bool(self.engine.eval("solverStats.lutLoaded"))
+                stats['lut_entries'] = int(self.engine.eval("solverStats.lutEntries"))
+            except Exception:
+                pass
+
+        return stats
+
+    def end_game(self, result: str, final_score: float):
+        """Process end of game (API compatibility)."""
+        pass
