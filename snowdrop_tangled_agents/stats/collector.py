@@ -134,7 +134,9 @@ class StatsCollector:
         opponent: str = "melissa",
         graph: str = "petersen",
         strategy: str = "hybrid",
-        mcts_time: float = 8.0
+        mcts_time: float = 8.0,
+        policy_id: str = None,
+        model_metrics: dict = None
     ) -> str:
         """
         Start tracking a new game.
@@ -144,20 +146,45 @@ class StatsCollector:
             graph: Graph type
             strategy: Strategy being used
             mcts_time: MCTS time limit
+            policy_id: Code version identifier (auto-detected if None)
+            model_metrics: Opponent model metrics dict from GameMetricsTracker
 
         Returns:
             Unique game ID
         """
         game_id = str(uuid.uuid4())[:8]  # Short ID for readability
 
+        # Auto-detect policy_id if not provided
+        if policy_id is None:
+            try:
+                from snowdrop_tangled_agents.utils.version import get_policy_id
+                policy_id = get_policy_id()
+            except Exception:
+                policy_id = 'unknown'
+
+        # Extract model metrics
+        model_entropy = None
+        model_games_learned = None
+        model_moves_learned = None
+        if model_metrics:
+            model_entropy = model_metrics.get('model_entropy')
+            model_games_learned = model_metrics.get('model_games_learned')
+            model_moves_learned = model_metrics.get('model_moves_learned')
+
         with sqlite3.connect(self.db_path) as conn:
             conn.execute("""
-                INSERT INTO games (id, opponent, graph, strategy, mcts_time)
-                VALUES (?, ?, ?, ?, ?)
-            """, (game_id, opponent, graph, strategy, mcts_time))
+                INSERT INTO games (
+                    id, opponent, graph, strategy, mcts_time,
+                    policy_id, model_entropy, model_games_learned, model_moves_learned
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                game_id, opponent, graph, strategy, mcts_time,
+                policy_id, model_entropy, model_games_learned, model_moves_learned
+            ))
             conn.commit()
 
-        logger.debug(f"Started game {game_id} vs {opponent}")
+        logger.debug(f"Started game {game_id} vs {opponent} (policy={policy_id})")
         return game_id
 
     def record_move(
@@ -245,7 +272,8 @@ class StatsCollector:
         game_id: str,
         result: str,
         final_score: float,
-        notes: Optional[str] = None
+        notes: Optional[str] = None,
+        model_metrics: dict = None
     ):
         """
         Mark a game as complete.
@@ -255,7 +283,15 @@ class StatsCollector:
             result: 'win', 'loss', or 'draw'
             final_score: Final game score
             notes: Optional notes about the game
+            model_metrics: Opponent model metrics dict from GameMetricsTracker
         """
+        # Extract prediction accuracy metrics
+        model_top3_hit = None
+        prediction_accuracy = None
+        if model_metrics:
+            model_top3_hit = model_metrics.get('model_top3_hit')
+            prediction_accuracy = model_metrics.get('prediction_accuracy')
+
         with sqlite3.connect(self.db_path) as conn:
             # Count total moves
             cursor = conn.execute(
@@ -266,9 +302,11 @@ class StatsCollector:
 
             conn.execute("""
                 UPDATE games
-                SET result = ?, final_score = ?, total_moves = ?, notes = ?
+                SET result = ?, final_score = ?, total_moves = ?, notes = ?,
+                    model_top3_hit = ?, prediction_accuracy = ?
                 WHERE id = ?
-            """, (result, final_score, total_moves, notes, game_id))
+            """, (result, final_score, total_moves, notes,
+                  model_top3_hit, prediction_accuracy, game_id))
             conn.commit()
 
         logger.info(f"Game {game_id} ended: {result} ({final_score:+.3f})")

@@ -35,6 +35,7 @@ Usage:
 from .collector import StatsCollector, get_collector, DEFAULT_DB_PATH
 from .migrations import run_migrations, get_migration_status
 from .opponent_model import OpponentModel, get_opponent_model
+from .model_metrics import GameMetricsTracker, compute_model_entropy
 from . import queries
 
 __all__ = [
@@ -46,4 +47,6 @@ __all__ = [
     'queries',
     'OpponentModel',
     'get_opponent_model',
+    'GameMetricsTracker',
+    'compute_model_entropy',
 ]

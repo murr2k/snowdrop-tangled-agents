@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Policy Versioning & Model Metrics Tracking** (Migration v7)
+  - `policy_id` field tracks code version via git tag or commit hash
+  - Opponent model metrics: `model_entropy`, `model_games_learned`, `model_moves_learned`
+  - Prediction accuracy metrics: `model_top3_hit`, `prediction_accuracy`
+  - `GameMetricsTracker` class for per-game prediction tracking
+  - `get_policy_id()` auto-detects version from git tag/commit
+  - `backfill_policy_id.py` tool for historical game backfill
+  - Integrated into `play_tangled.py` game loop for automatic metrics capture
+
 - **D-Wave Inspired Hybrid Solver** (`snowdrop_tangled_agents/matlab/rl/HybridTangledSolver.m`)
   - Integrated solver combining Alpha-Beta Minimax, MCTS, and Tabu Search
   - Automatic strategy selection based on game phase:

@@ -72,7 +72,7 @@ signal.signal(signal.SIGINT, _signal_handler)
 
 from snowdrop_tangled_agents.strategy.petersen_strategy import PetersenStrategy
 from snowdrop_tangled_agents.strategy.mcts_strategy import MCTSStrategy, HybridStrategy, evaluate_terminal_state
-from snowdrop_tangled_agents.stats import get_collector, queries as stats_queries
+from snowdrop_tangled_agents.stats import get_collector, queries as stats_queries, GameMetricsTracker
 
 # Optional MATLAB integration
 try:
@@ -1035,16 +1035,21 @@ class WebPlayer:
         # Initialize opponent model for online learning
         self._ensure_opponent_model(opponent)
 
+        # Initialize metrics tracker for opponent model visibility
+        self.metrics_tracker = GameMetricsTracker(self.opponent_model)
+        self.metrics_tracker.record_snapshot()  # Capture model state at game start
+
         # Initialize MATLAB strategy with opponent model
         if self.strategy_type == "matlab" and hasattr(self.strategy, 'initialize'):
             self.strategy.initialize(opponent=opponent)
 
-        # Start stats tracking for this game
+        # Start stats tracking for this game (with model metrics)
         self.current_game_id = self.stats_collector.start_game(
             opponent=opponent,
             graph="petersen",
             strategy=self.strategy_type,
-            mcts_time=self.mcts_time
+            mcts_time=self.mcts_time,
+            model_metrics=self.metrics_tracker.get_game_metrics()
         )
 
         if not self.start_game(opponent):
@@ -1258,6 +1263,14 @@ class WebPlayer:
                     thinking_time=opponent_think_time,
                     solver_stats={'opponent_think_time': opponent_think_time}
                 )
+                # Record prediction accuracy for opponent model learning visibility
+                if self.metrics_tracker and self.score_history:
+                    last_edge, last_color, _ = self.score_history[-1]
+                    self.metrics_tracker.record_prediction(
+                        our_move=(last_edge, last_color),
+                        actual_opp_move=(opponent_edge, opponent_color),
+                        grey_count=our_grey_count
+                    )
             elif our_grey_count != opponent_grey_count:
                 # Board changed but we didn't detect which edge - log warning
                 self.logger.warning(f"Opponent move missed! Grey count changed {our_grey_count}->{opponent_grey_count}")
@@ -1273,11 +1286,12 @@ class WebPlayer:
         result = self.get_outcome()
         terminal_state = self.read_board()
 
-        # Record game end to stats database
+        # Record game end to stats database (with prediction metrics)
         self.stats_collector.end_game(
             game_id=self.current_game_id,
             result=result,
-            final_score=final_score
+            final_score=final_score,
+            model_metrics=self.metrics_tracker.get_game_metrics() if self.metrics_tracker else None
         )
 
         # Online learning: update opponent model and re-export

@@ -134,6 +134,23 @@ MIGRATIONS: List[Tuple[int, str, str]] = [
         CREATE INDEX IF NOT EXISTS idx_moves_strategy ON moves(strategy_used);
         CREATE INDEX IF NOT EXISTS idx_moves_lut_used ON moves(lut_used);
     """),
+
+    # v7: Add policy tracking and opponent model metrics
+    (7, "Add policy_id and opponent model learning metrics", """
+        -- Policy version tracking
+        ALTER TABLE games ADD COLUMN policy_id TEXT;
+        CREATE INDEX IF NOT EXISTS idx_games_policy_id ON games(policy_id);
+
+        -- Opponent model metrics at game start
+        -- These track what the model knew before the game, enabling learning trajectory analysis
+        ALTER TABLE games ADD COLUMN model_entropy REAL;
+        ALTER TABLE games ADD COLUMN model_top3_hit REAL;
+        ALTER TABLE games ADD COLUMN prediction_accuracy REAL;
+
+        -- Additional model diagnostics
+        ALTER TABLE games ADD COLUMN model_games_learned INTEGER;
+        ALTER TABLE games ADD COLUMN model_moves_learned INTEGER;
+    """),
 ]
 
 
