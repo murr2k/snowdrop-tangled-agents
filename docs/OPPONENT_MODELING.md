@@ -557,7 +557,46 @@ flowchart TB
 
 ## Appendix: Database Schema
 
-### opponent_history table (existing but underutilized)
+**Schema Version**: v6
+**Location**: `~/.tangled/game_stats.db`
+
+### Tables
+
+| Table | Purpose | Used By |
+|-------|---------|---------|
+| `games` | Game outcomes, opponent, final scores | Stats reporting |
+| `moves` | Per-move data for both players | **OpponentModel** |
+| `opponent_history` | Detailed opponent tracking (unused) | - |
+| `opponents` | Opponent profiles and clustering | Future use |
+| `models` | Neural network metadata | MATLAB training |
+| `training_data` | Versioned training samples | MATLAB training |
+| `calibration` | Terminal state prediction accuracy | Debugging |
+
+### moves table (primary source for opponent modeling)
+
+The `OpponentModel` reads opponent behavior from this table, filtering by `player = 'opponent'`.
+
+```sql
+CREATE TABLE moves (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    game_id TEXT REFERENCES games(id),
+    move_number INTEGER,
+    player TEXT,                    -- 'us' or 'opponent'
+    edge INTEGER,
+    color TEXT,                     -- 'G' or 'P'
+    score_after REAL,
+    score_delta REAL,
+    state_after TEXT,               -- 15-char board state
+    thinking_time REAL,
+    strategy_used TEXT,             -- 'opening', 'minimax', 'mcts', etc.
+    -- ... additional solver statistics columns (v6)
+    UNIQUE(game_id, move_number, player)
+);
+```
+
+**Current data**: 292 opponent moves recorded across 208 games.
+
+### opponent_history table (deprecated)
 
 ```sql
 CREATE TABLE opponent_history (
@@ -576,4 +615,4 @@ CREATE TABLE opponent_history (
 );
 ```
 
-This table was designed for opponent modeling but isn't currently being populated. Phase 1 should populate this table in addition to the moves table.
+> **Note**: This table was designed for detailed opponent tracking but was not used. The simpler approach of storing opponent moves in the `moves` table (with `player = 'opponent'`) proved sufficient for the current opponent model.
