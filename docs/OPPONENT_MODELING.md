@@ -321,6 +321,8 @@ if hasattr(self, 'opponent_model'):
 
 The opponent model forms a closed-loop feedback system where observations influence predictions, which influence gameplay, which generates new observations:
 
+<div align="center">
+
 ```mermaid
 flowchart LR
     subgraph "Online Learning Loop"
@@ -340,6 +342,8 @@ flowchart LR
     C --> F
     I --> E
 ```
+
+</div>
 
 ### Damping Theory
 
@@ -378,10 +382,11 @@ $$\text{Data Weight} = \frac{N}{N + 30}$$
 
 With only 23 samples after E9G, **57% of the prediction came from the uniform prior**, crushing the observed signal.
 
-```mermaid
-pie title "Prediction Weight Distribution (smoothing=1.0, N=23)"
-    "Observed Data" : 43
-    "Uniform Prior" : 57
+**Prediction Weight Distribution (smoothing=1.0, N=23)**
+
+```
+Observed Data [████████████░░░░░░░░░░░░░░░░░░] 43%
+Uniform Prior [█████████████████░░░░░░░░░░░░░] 57%  ← Dominates!
 ```
 
 #### Problem 2: Fixed Alpha Blending
@@ -424,10 +429,11 @@ $$\text{Data Weight} = \frac{N}{N + 3} \text{ (instead of } \frac{N}{N + 30}\tex
 | 20 | 40% | 87% |
 | 23 | 43% | 88% |
 
-```mermaid
-pie title "Prediction Weight Distribution (smoothing=0.1, N=23)"
-    "Observed Data" : 88
-    "Uniform Prior" : 12
+**Prediction Weight Distribution (smoothing=0.1, N=23)**
+
+```
+Observed Data [██████████████████████████░░░░] 88%  ← Now dominates!
+Uniform Prior [████░░░░░░░░░░░░░░░░░░░░░░░░░░] 12%
 ```
 
 #### Fix 2: Adaptive Alpha Blending
@@ -455,6 +461,8 @@ When we have strong data (confidence = 1.0), we now use **95% response-condition
 
 ### System Response Diagram
 
+<div align="center">
+
 ```mermaid
 flowchart TB
     subgraph "Before Calibration - Overdamped"
@@ -474,6 +482,8 @@ flowchart TB
     style E1 fill:#f66
     style E2 fill:#6f6
 ```
+
+</div>
 
 ### Key Insights
 
