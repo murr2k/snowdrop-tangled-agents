@@ -217,6 +217,125 @@ def get_session_stats(db_path: Optional[Path] = None, gap_minutes: int = SESSION
         )
 
 
+def get_run_stats(run_id: int, db_path: Optional[Path] = None) -> Optional[SessionStats]:
+    """
+    Get statistics for a specific run only.
+
+    Unlike get_session_stats() which uses time-based boundaries, this function
+    returns stats only for games belonging to the specified run_id.
+
+    Args:
+        run_id: The run ID to get stats for
+        db_path: Path to the SQLite database
+
+    Returns:
+        SessionStats for the run, or None if no games found
+    """
+    db_path = db_path or DEFAULT_DB_PATH
+
+    with sqlite3.connect(db_path) as conn:
+        # First get run info
+        cursor = conn.execute(
+            "SELECT planned_games, completed_games, started FROM runs WHERE id = ?",
+            (run_id,)
+        )
+        run_row = cursor.fetchone()
+        if not run_row:
+            return None
+
+        planned_games, completed_count, run_started = run_row
+
+        # Get games for this run only
+        cursor = conn.execute("""
+            SELECT
+                id, timestamp, opponent, result, final_score, total_moves,
+                strategy, policy_id, model_entropy, model_top3_hit,
+                prediction_accuracy, run_id, game_number
+            FROM games
+            WHERE run_id = ?
+            ORDER BY timestamp ASC
+        """, (run_id,))
+
+        games = []
+        for row in cursor.fetchall():
+            games.append(GameRecord(
+                game_id=row[0],
+                timestamp=row[1],
+                opponent=row[2],
+                result=row[3],
+                final_score=row[4],
+                total_moves=row[5],
+                strategy=row[6] or 'unknown',
+                policy_id=row[7],
+                model_entropy=row[8],
+                model_top3_hit=row[9],
+                prediction_accuracy=row[10],
+                run_id=row[11],
+                game_number=row[12],
+                is_current=(row[3] is None)
+            ))
+
+        # If no games yet but run exists, return empty stats
+        if not games:
+            return SessionStats(
+                session_start=run_started,
+                session_end=run_started,
+                game_count=0,
+                completed_games=0,
+                in_progress=True,
+                wins=0,
+                losses=0,
+                draws=0,
+                win_rate=0.0,
+                avg_score=None,
+                median_score=None,
+                min_score=None,
+                max_score=None,
+                score_std=None,
+                avg_moves=None,
+                avg_entropy=None,
+                avg_top3_hit=None,
+                avg_prediction_accuracy=None,
+                games=[]
+            )
+
+        completed = [g for g in games if g.result is not None]
+        scores = [g.final_score for g in completed if g.final_score is not None]
+        moves = [g.total_moves for g in completed if g.total_moves is not None]
+        entropies = [g.model_entropy for g in games if g.model_entropy is not None]
+        top3_hits = [g.model_top3_hit for g in completed if g.model_top3_hit is not None]
+        pred_accs = [g.prediction_accuracy for g in completed if g.prediction_accuracy is not None]
+
+        wins = sum(1 for g in completed if g.result == 'win')
+        losses = sum(1 for g in completed if g.result == 'loss')
+        draws = sum(1 for g in completed if g.result == 'draw')
+
+        # Check if run is still in progress
+        in_progress = len(completed) < planned_games
+
+        return SessionStats(
+            session_start=run_started,
+            session_end=games[-1].timestamp,
+            game_count=len(games),
+            completed_games=len(completed),
+            in_progress=in_progress,
+            wins=wins,
+            losses=losses,
+            draws=draws,
+            win_rate=wins / len(completed) if completed else 0.0,
+            avg_score=statistics.mean(scores) if scores else None,
+            median_score=statistics.median(scores) if scores else None,
+            min_score=min(scores) if scores else None,
+            max_score=max(scores) if scores else None,
+            score_std=statistics.stdev(scores) if len(scores) > 1 else None,
+            avg_moves=statistics.mean(moves) if moves else None,
+            avg_entropy=statistics.mean(entropies) if entropies else None,
+            avg_top3_hit=statistics.mean(top3_hits) if top3_hits else None,
+            avg_prediction_accuracy=statistics.mean(pred_accs) if pred_accs else None,
+            games=games
+        )
+
+
 def print_session_report(db_path: Optional[Path] = None, gap_minutes: int = SESSION_GAP_MINUTES, planned_games: Optional[int] = None):
     """Print a minimal session statistics report."""
     stats = get_session_stats(db_path, gap_minutes)

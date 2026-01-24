@@ -282,6 +282,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Removes partial message handling complexity from both publisher and dashboard
   - Dashboard always renders full UI regardless of message content
 
+- **Run-Specific Dashboard Stats** (`play_tangled.py`, `snowdrop_tangled_agents/stats/session_stats.py`)
+  - Added `get_run_stats(run_id)` function for run-specific statistics (not time-based session)
+  - Dashboard now publishes immediately when game ends (after edge 15), not waiting for next game loop
+  - All dashboard messages now use run-specific stats when a run_id is active
+  - Removed redundant post-game publish block in main loop (single publisher at game end)
+  - Fixes issue where dashboard showed stats from previous runs mixed with current run
+
 - **SimulatedOpponent Real MCTS Mode** (`snowdrop_tangled_agents/matlab/rl/SimulatedOpponent.m`)
   - Added real MCTS opponent using `TangledMCTS` engine for realistic training
   - Lazy-initialized MCTS engine to avoid overhead when not needed

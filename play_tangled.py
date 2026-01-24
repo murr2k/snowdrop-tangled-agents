@@ -131,7 +131,7 @@ from snowdrop_tangled_agents.strategy.petersen_strategy import PetersenStrategy
 from snowdrop_tangled_agents.strategy.mcts_strategy import MCTSStrategy, HybridStrategy, evaluate_terminal_state
 from snowdrop_tangled_agents.stats import get_collector, queries as stats_queries, GameMetricsTracker
 from snowdrop_tangled_agents.stats import get_publisher, StatsPublisher
-from snowdrop_tangled_agents.stats.session_stats import get_session_stats
+from snowdrop_tangled_agents.stats.session_stats import get_session_stats, get_run_stats
 
 # Optional MATLAB integration
 try:
@@ -1500,8 +1500,9 @@ class WebPlayer:
                 initial_board = self.read_board()
                 initial_vertices = '-----R-B--'  # V5=red (player 1), V7=blue (player 2)
                 self.logger.info(f"DEBUG pre-game init: board={initial_board}, vertices={initial_vertices}")
-                # Get session stats for full state
-                stats = get_session_stats()
+                # Get run-specific stats (current run only)
+                run_id = getattr(self, '_run_id', None)
+                stats = get_run_stats(run_id) if run_id else get_session_stats()
                 publisher.publish_state(
                     board_state=initial_board,
                     vertex_state=initial_vertices,
@@ -1688,8 +1689,9 @@ class WebPlayer:
                         edges_colored = sum(1 for c in current_board if c in 'GP')
                         self.logger.info(f"DEBUG publishing: edges={edges_colored}, board={current_board}, vertices={vertex_colors}")
 
-                        # Get session stats for full state
-                        stats = get_session_stats()
+                        # Get run-specific stats (current run only)
+                        run_id = getattr(self, '_run_id', None)
+                        stats = get_run_stats(run_id) if run_id else get_session_stats()
                         publisher.publish_state(
                             move_edge=edge,
                             move_color=color,
@@ -1784,8 +1786,9 @@ class WebPlayer:
                         edges_colored = sum(1 for c in state_after_opponent if c in 'GP')
                         self.logger.info(f"DEBUG opp publishing: edges={edges_colored}, board={state_after_opponent}, vertices={vertex_colors}")
 
-                        # Get session stats for full state
-                        stats = get_session_stats()
+                        # Get run-specific stats (current run only)
+                        run_id = getattr(self, '_run_id', None)
+                        stats = get_run_stats(run_id) if run_id else get_session_stats()
                         publisher.publish_state(
                             move_edge=opponent_edge,
                             move_color=opponent_color,
@@ -1884,6 +1887,48 @@ class WebPlayer:
             if 'game_stats' in stats:
                 gs = stats['game_stats']
                 self.logger.info(f"Session Stats: {gs['wins']}W / {gs['losses']}L / {gs['draws']}D")
+
+        # Publish game result to dashboard immediately (don't wait for next game)
+        run_id = getattr(self, '_run_id', None)
+        publisher = get_publisher()
+        if publisher.is_configured() and run_id:
+            try:
+                publisher.game_completed()  # Finalize turn time tracking
+                run_stats = get_run_stats(run_id)
+                if run_stats:
+                    # Calculate recent_5 from run games only
+                    completed = [g for g in run_stats.games if g.result is not None]
+                    recent = completed[-5:] if len(completed) >= 5 else completed
+                    recent_5 = ''.join('W' if g.result == 'win' else 'L' if g.result == 'loss' else 'D' for g in recent)
+
+                    # Calculate score_trend from run games only
+                    score_trend = None
+                    if len(completed) >= 4:
+                        scores = [g.final_score for g in completed if g.final_score is not None]
+                        if len(scores) >= 4:
+                            first_half = scores[:len(scores)//2]
+                            second_half = scores[len(scores)//2:]
+                            score_trend = sum(second_half)/len(second_half) - sum(first_half)/len(first_half)
+
+                    publisher.publish_state(
+                        board_state=terminal_state,
+                        completed_games=run_stats.completed_games,
+                        wins=run_stats.wins,
+                        draws=run_stats.draws,
+                        losses=run_stats.losses,
+                        avg_score=run_stats.avg_score,
+                        median_score=run_stats.median_score,
+                        min_score=run_stats.min_score,
+                        max_score=run_stats.max_score,
+                        std_score=run_stats.score_std,
+                        recent_5=recent_5,
+                        score_trend=score_trend,
+                        avg_entropy=run_stats.avg_entropy,
+                        avg_top3_hit=run_stats.avg_top3_hit,
+                        avg_pred_accuracy=run_stats.avg_prediction_accuracy,
+                    )
+            except Exception as e:
+                self.logger.debug(f"Game-end publish failed: {e}")
 
         return {
             "result": result,
@@ -2176,52 +2221,8 @@ def main():
                 result = player.play_game(args.opponent)
                 results.append(result)
 
-                # Publish live stats to dashboard (if configured)
-                if publisher.is_configured():
-                    try:
-                        publisher.game_completed()  # Finalize turn time tracking
-                        stats = get_session_stats()
-
-                        # Get run info for accurate completed_games count
-                        run_completed = 0
-                        if run_id:
-                            run_info = stats_collector.get_run(run_id)
-                            if run_info:
-                                run_completed = run_info['completed_games']
-
-                        if stats:
-                            # Calculate recent_5
-                            completed = [g for g in stats.games if g.result is not None]
-                            recent = completed[-5:] if len(completed) >= 5 else completed
-                            recent_5 = ''.join('W' if g.result == 'win' else 'L' if g.result == 'loss' else 'D' for g in recent)
-
-                            # Calculate score_trend
-                            score_trend = None
-                            if len(completed) >= 4:
-                                scores = [g.final_score for g in completed if g.final_score is not None]
-                                if len(scores) >= 4:
-                                    first_half = scores[:len(scores)//2]
-                                    second_half = scores[len(scores)//2:]
-                                    score_trend = sum(second_half)/len(second_half) - sum(first_half)/len(first_half)
-
-                            publisher.publish_state(
-                                completed_games=run_completed if run_id else stats.completed_games,
-                                wins=stats.wins,
-                                draws=stats.draws,
-                                losses=stats.losses,
-                                avg_score=stats.avg_score,
-                                median_score=stats.median_score,
-                                min_score=stats.min_score,
-                                max_score=stats.max_score,
-                                std_score=stats.score_std,
-                                recent_5=recent_5,
-                                score_trend=score_trend,
-                                avg_entropy=stats.avg_entropy,
-                                avg_top3_hit=stats.avg_top3_hit,
-                                avg_pred_accuracy=stats.avg_prediction_accuracy,
-                            )
-                    except Exception as e:
-                        logging.getLogger(__name__).debug(f"Stats publish failed: {e}")
+                # Note: Dashboard publish happens immediately at game end in play_game()
+                # No need for duplicate publish here
 
                 # Check for stuck opponent
                 if result.get("error") == "stuck_opponent":
