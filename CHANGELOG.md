@@ -61,6 +61,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Alpha-Beta Pruning (`AlphaBetaSearch.m`) with transposition tables
   - Time-budgeted search with configurable allocation (35% minimax, 55% MCTS, 10% tabu)
   - Python integration via `HybridSolverStrategy` in `matlab_strategy.py`
+  - **REINFORCE-style learning** from game outcomes (added to Python strategy):
+    - Temporal credit assignment with discount factor (γ=0.9)
+    - Edge value adjustments learned from wins/losses/draws
+    - Persistent storage of learned adjustments (`~/.tangled/hybrid_solver_adjustments.json`)
+    - Configurable learning rate (default 0.03)
   - CLI: `python play_tangled.py --strategy hybrid_solver`
 
 - **Expanded Lookup Table (19M Entries)** (`snowdrop_tangled_agents/matlab/rl/ExpandedLUT.m`)

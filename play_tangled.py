@@ -141,11 +141,44 @@ try:
         get_unified_bridge,
         print_training_status,
     )
-    MATLAB_AVAILABLE = True
+    MATLAB_IMPORTS_AVAILABLE = True
 except ImportError:
-    MATLAB_AVAILABLE = False
+    MATLAB_IMPORTS_AVAILABLE = False
     HybridSolverStrategy = None
     print_training_status = None
+
+# Check actual MATLAB Engine availability (not just Python wrappers)
+MATLAB_AVAILABLE = False
+MATLAB_ENGINE_AVAILABLE = False
+MATLAB_SESSIONS = []
+MATLAB_UNAVAILABLE_REASON = None
+
+if MATLAB_IMPORTS_AVAILABLE:
+    try:
+        import matlab.engine
+        MATLAB_ENGINE_AVAILABLE = True
+        # Check for shared sessions
+        try:
+            MATLAB_SESSIONS = list(matlab.engine.find_matlab())
+            if MATLAB_SESSIONS:
+                MATLAB_AVAILABLE = True
+            else:
+                MATLAB_UNAVAILABLE_REASON = "No shared MATLAB sessions found. Run 'matlab.engine.shareEngine' in MATLAB."
+        except Exception as e:
+            MATLAB_UNAVAILABLE_REASON = f"Could not find MATLAB sessions: {e}"
+    except ImportError:
+        MATLAB_UNAVAILABLE_REASON = "MATLAB Engine API not installed. Run: pip install matlabengine"
+        # Check for compiled packages as fallback
+        try:
+            from snowdrop_tangled_agents.matlab.compiled_bridge import packages_available
+            pkgs = packages_available()
+            if any(pkgs.values()):
+                MATLAB_AVAILABLE = True
+                MATLAB_UNAVAILABLE_REASON = None
+        except Exception:
+            pass
+else:
+    MATLAB_UNAVAILABLE_REASON = "MATLAB integration module not installed"
 
 # Optional RL strategy
 try:
@@ -163,6 +196,199 @@ except ImportError:
     MATLAB_MCTS_AVAILABLE = False
     MatlabMCTSStrategy = None
     MCTSParams = None
+
+
+# Strategy metadata for validation
+# Loss rates based on historical game data
+STRATEGY_INFO = {
+    "heuristic": {
+        "requires_matlab": False,
+        "loss_rate": 0.70,  # 70.4% loss rate
+        "description": "Fast heuristic-based moves",
+    },
+    "mcts": {
+        "requires_matlab": False,
+        "loss_rate": 0.61,  # 60.6% loss rate
+        "description": "Pure Monte Carlo Tree Search",
+    },
+    "hybrid": {
+        "requires_matlab": False,
+        "loss_rate": 0.37,  # 37.4% loss rate - BEST without MATLAB
+        "description": "Opening book + MCTS + exhaustive endgame",
+    },
+    "matlab": {
+        "requires_matlab": True,
+        "loss_rate": 0.40,  # Estimated
+        "description": "MATLAB-enhanced with neural network priors",
+    },
+    "rl": {
+        "requires_matlab": False,
+        "loss_rate": 1.00,  # 100% loss rate (only 4 games)
+        "description": "Trained PPO reinforcement learning agent",
+    },
+    "ensemble": {
+        "requires_matlab": False,
+        "loss_rate": 0.50,  # Estimated
+        "description": "RL + Monte Carlo rollouts ensemble",
+    },
+    "matlab_mcts": {
+        "requires_matlab": True,
+        "loss_rate": 0.67,  # 66.7% loss rate
+        "description": "MATLAB MCTS engine with high compute",
+    },
+    "hybrid_solver": {
+        "requires_matlab": True,
+        "loss_rate": 0.45,  # 45.5% loss rate
+        "description": "D-Wave inspired minimax + MCTS + Tabu Search",
+    },
+}
+
+
+def check_matlab_availability() -> bool:
+    """
+    Check and report MATLAB availability status.
+
+    If MATLAB is not available, prompts user to confirm proceeding without it.
+    Returns True if OK to proceed, False to abort.
+    """
+    print("\n" + "=" * 60)
+    print("MATLAB AVAILABILITY CHECK")
+    print("=" * 60)
+
+    if MATLAB_AVAILABLE:
+        if MATLAB_SESSIONS:
+            print(f"  Status: AVAILABLE")
+            print(f"  Sessions: {', '.join(MATLAB_SESSIONS)}")
+            print(f"  MATLAB strategies (hybrid_solver, matlab_mcts) are enabled")
+        else:
+            print(f"  Status: AVAILABLE (compiled packages)")
+        print("=" * 60 + "\n")
+        return True
+
+    # MATLAB not available - explain why and ask user
+    print(f"  Status: NOT AVAILABLE")
+    print(f"  Reason: {MATLAB_UNAVAILABLE_REASON}")
+    print("")
+    print("  Without MATLAB, the following strategies will NOT work:")
+    print("    - hybrid_solver (D-Wave inspired, best MATLAB strategy)")
+    print("    - matlab_mcts (MATLAB MCTS engine)")
+    print("    - matlab (MATLAB-enhanced with neural networks)")
+    print("")
+    print("  Available non-MATLAB strategies:")
+    print("    - hybrid: 37% loss rate (RECOMMENDED)")
+    print("    - mcts: 61% loss rate")
+    print("    - heuristic: 70% loss rate")
+    print("=" * 60)
+
+    while True:
+        try:
+            response = input("\nProceed without MATLAB? [y/N]: ").strip().lower()
+            if response in ('y', 'yes'):
+                print("Continuing without MATLAB support.\n")
+                return True
+            elif response in ('n', 'no', ''):
+                print("\nTo enable MATLAB:")
+                print("  1. Start MATLAB")
+                print("  2. Run: matlab.engine.shareEngine")
+                print("  3. Restart this script")
+                print("\nAborting.")
+                return False
+            else:
+                print("Please enter 'y' or 'n'.")
+        except (EOFError, KeyboardInterrupt):
+            print("\nAborting.")
+            return False
+
+
+def validate_strategy_selection(strategy: str) -> str:
+    """
+    Validate strategy selection and prompt for alternatives if needed.
+
+    Returns the validated (possibly changed) strategy name.
+    """
+    info = STRATEGY_INFO.get(strategy)
+    if not info:
+        return strategy
+
+    # Check if MATLAB is required but unavailable
+    if info["requires_matlab"] and not MATLAB_AVAILABLE:
+        print(f"\n*** Strategy '{strategy}' requires MATLAB which is not available ***")
+        print(f"Description: {info['description']}")
+        print("\nAvailable alternatives (sorted by performance):")
+
+        # Get non-MATLAB strategies sorted by loss rate
+        alternatives = [
+            (name, data) for name, data in STRATEGY_INFO.items()
+            if not data["requires_matlab"]
+        ]
+        alternatives.sort(key=lambda x: x[1]["loss_rate"])
+
+        for i, (name, data) in enumerate(alternatives, 1):
+            loss_pct = data["loss_rate"] * 100
+            marker = " (recommended)" if data["loss_rate"] < 0.50 else ""
+            warning = " [HIGH LOSS RATE]" if data["loss_rate"] >= 0.50 else ""
+            print(f"  {i}. {name}: {loss_pct:.0f}% loss rate - {data['description']}{marker}{warning}")
+
+        print(f"  {len(alternatives) + 1}. Continue with '{strategy}' anyway (will use fallback)")
+
+        while True:
+            try:
+                choice = input("\nSelect strategy [1]: ").strip()
+                if not choice:
+                    choice = "1"
+                choice_num = int(choice)
+                if 1 <= choice_num <= len(alternatives):
+                    strategy = alternatives[choice_num - 1][0]
+                    print(f"Selected: {strategy}")
+                    break
+                elif choice_num == len(alternatives) + 1:
+                    print(f"Continuing with {strategy} (will use fallback strategy)")
+                    break
+                else:
+                    print("Invalid choice, try again.")
+            except ValueError:
+                print("Please enter a number.")
+            except (EOFError, KeyboardInterrupt):
+                print("\nUsing default: hybrid")
+                strategy = "hybrid"
+                break
+
+    # Check if strategy has high loss rate
+    if info["loss_rate"] >= 0.50:
+        loss_pct = info["loss_rate"] * 100
+        print(f"\n*** Warning: Strategy '{strategy}' has a {loss_pct:.0f}% historical loss rate ***")
+        print(f"Description: {info['description']}")
+
+        # Suggest better alternatives
+        better = [(n, d) for n, d in STRATEGY_INFO.items()
+                  if d["loss_rate"] < 0.50 and (not d["requires_matlab"] or MATLAB_AVAILABLE)]
+        if better:
+            better.sort(key=lambda x: x[1]["loss_rate"])
+            print("\nBetter alternatives available:")
+            for name, data in better[:3]:
+                print(f"  - {name}: {data['loss_rate']*100:.0f}% loss rate")
+
+        while True:
+            try:
+                confirm = input(f"\nContinue with '{strategy}'? [y/N]: ").strip().lower()
+                if confirm in ('y', 'yes'):
+                    print(f"Confirmed: using {strategy}")
+                    break
+                elif confirm in ('n', 'no', ''):
+                    # Suggest the best alternative
+                    if better:
+                        strategy = better[0][0]
+                        print(f"Switched to: {strategy}")
+                    break
+                else:
+                    print("Please enter 'y' or 'n'.")
+            except (EOFError, KeyboardInterrupt):
+                if better:
+                    strategy = better[0][0]
+                    print(f"\nSwitched to: {strategy}")
+                break
+
+    return strategy
 
 
 # Vertex coordinates - from working JS bot (tangled-bot-v28.txt)
@@ -1850,6 +2076,13 @@ def main():
         print("  Use 'kill' command to stop it if needed, or wait for it to finish.")
         return
 
+    # Check MATLAB availability and get user confirmation if unavailable
+    if not check_matlab_availability():
+        return
+
+    # Validate strategy selection (prompt for alternatives if MATLAB unavailable or high loss rate)
+    args.strategy = validate_strategy_selection(args.strategy)
+
     # Initialize stats collector outside context manager for run tracking
     from snowdrop_tangled_agents.stats import get_collector
     stats_collector = get_collector()
@@ -1948,6 +2181,14 @@ def main():
                     try:
                         publisher.game_completed()  # Finalize turn time tracking
                         stats = get_session_stats()
+
+                        # Get run info for accurate completed_games count
+                        run_completed = 0
+                        if run_id:
+                            run_info = stats_collector.get_run(run_id)
+                            if run_info:
+                                run_completed = run_info['completed_games']
+
                         if stats:
                             # Calculate recent_5
                             completed = [g for g in stats.games if g.result is not None]
@@ -1964,7 +2205,7 @@ def main():
                                     score_trend = sum(second_half)/len(second_half) - sum(first_half)/len(first_half)
 
                             publisher.publish_state(
-                                completed_games=stats.completed_games,
+                                completed_games=run_completed if run_id else stats.completed_games,
                                 wins=stats.wins,
                                 draws=stats.draws,
                                 losses=stats.losses,

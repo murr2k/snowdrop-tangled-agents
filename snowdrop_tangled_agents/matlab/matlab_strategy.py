@@ -13,6 +13,7 @@ Supports three backends via unified bridge:
 """
 
 import logging
+from pathlib import Path
 from typing import Optional, Dict, List, Tuple
 
 from ..strategy.mcts_strategy import (
@@ -438,9 +439,12 @@ class HybridSolverStrategy:
     - Alpha-beta minimax at shallow depths (exact)
     - MCTS with tabu-guided rollouts (deep exploration)
     - Expanded LUT with ~19M exact minimax values (0-3 grey edges)
+    - REINFORCE-style learning from game outcomes
 
     Requires MATLAB Engine connection to a shared session.
     """
+
+    NUM_EDGES = 15
 
     def __init__(
         self,
@@ -448,6 +452,8 @@ class HybridSolverStrategy:
         minimax_depth: int = 4,
         mcts_iterations: int = 5000,
         player: int = 1,
+        learning_rate: float = 0.03,
+        adjustments_path: Optional[Path] = None,
     ):
         """
         Initialize HybridSolverStrategy.
@@ -457,6 +463,8 @@ class HybridSolverStrategy:
             minimax_depth: Depth for exact alpha-beta search
             mcts_iterations: MCTS iterations for deep exploration
             player: Player perspective (1 or 2)
+            learning_rate: Rate for edge adjustment learning (default 0.03)
+            adjustments_path: Path to persist learned adjustments (default ~/.tangled/hybrid_solver_adjustments.json)
         """
         self.time_limit = time_limit
         self.minimax_depth = minimax_depth
@@ -472,6 +480,20 @@ class HybridSolverStrategy:
         self.total_time = 0.0
         self.last_strategy = ''
         self.last_score = 0.0
+
+        # Learning: track move history and outcomes
+        self.move_history: List[Tuple[int, str, float]] = []  # [(edge, color, score_after), ...]
+        self.game_results: List[Tuple[str, float, List]] = []  # [(result, final_score, moves), ...]
+
+        # Learned edge value adjustments (start at 0, adjusted by learning)
+        self.edge_adjustments = [0.0] * self.NUM_EDGES
+
+        # Learning rate - reduced to prevent overreaction to losses
+        self.learning_rate = learning_rate
+
+        # Persistence path for learned adjustments
+        self.adjustments_path = adjustments_path or Path.home() / ".tangled" / "hybrid_solver_adjustments.json"
+        self._load_adjustments()
 
     def initialize(self, opponent: Optional[str] = None) -> bool:
         """
@@ -685,8 +707,128 @@ class HybridSolverStrategy:
             except Exception:
                 pass
 
+        # Add learning stats
+        stats['game_stats'] = self.get_game_stats()
+        stats['edge_adjustments'] = self.edge_adjustments
+
         return stats
 
+    def record_move(self, edge: int, color: str, score_after: float):
+        """Record a move and its resulting score for learning."""
+        self.move_history.append((edge, color, score_after))
+
     def end_game(self, result: str, final_score: float):
-        """Process end of game (API compatibility)."""
-        pass
+        """
+        Called at end of game to trigger learning update.
+
+        Args:
+            result: 'win', 'loss', or 'draw'
+            final_score: Final game score
+        """
+        if not self.move_history:
+            return
+
+        # Store game result
+        self.game_results.append((result, final_score, list(self.move_history)))
+
+        # Learn from this game
+        self._learn_from_game(result, final_score)
+
+        # Persist learned adjustments
+        self._save_adjustments()
+
+        # Clear history for next game
+        self.move_history = []
+
+    def _learn_from_game(self, result: str, final_score: float):
+        """
+        Update edge adjustments based on game outcome.
+
+        Uses REINFORCE-style policy gradient:
+        - Winning moves get positive reinforcement
+        - Losing moves get negative reinforcement
+        - Magnitude depends on score margin
+        - Later moves get more credit/blame (temporal credit assignment)
+        """
+        if not self.move_history:
+            return
+
+        # Reward signal based on result
+        if result == 'win':
+            reward = 1.0 + min(final_score, 2.0) / 2.0  # 1.0 to 2.0
+        elif result == 'draw':
+            reward = 0.1 if final_score >= 0 else -0.1
+        else:  # loss
+            reward = -1.0 + max(final_score, -2.0) / 2.0  # -2.0 to -1.0
+
+        # Discount factor for temporal credit assignment
+        gamma = 0.9
+        n_moves = len(self.move_history)
+
+        # Update edge adjustments with discounted rewards
+        for i, (edge, color, score) in enumerate(self.move_history):
+            # Later moves get more credit/blame (less discounting)
+            discount = gamma ** (n_moves - i - 1)
+            update = self.learning_rate * reward * discount
+
+            # Apply update (same for both colors - we're learning edge value, not color preference)
+            self.edge_adjustments[edge] += update * 0.5
+
+            # Clamp adjustments to reasonable range
+            self.edge_adjustments[edge] = max(-1.0, min(1.0, self.edge_adjustments[edge]))
+
+        # Log learning stats
+        logger.info(f"Learning: {result} (score {final_score:.2f}), reward={reward:.2f}")
+        logger.debug(f"Edge adjustments: {[f'{a:.2f}' for a in self.edge_adjustments]}")
+
+    def _load_adjustments(self):
+        """Load learned edge adjustments from disk."""
+        try:
+            if self.adjustments_path.exists():
+                import json
+                with open(self.adjustments_path) as f:
+                    data = json.load(f)
+                self.edge_adjustments = data.get('edge_adjustments', [0.0] * self.NUM_EDGES)
+                games_learned = data.get('games_learned', 0)
+                logger.info(f"Loaded edge adjustments from {self.adjustments_path} ({games_learned} games learned)")
+        except Exception as e:
+            logger.warning(f"Failed to load adjustments: {e}")
+            self.edge_adjustments = [0.0] * self.NUM_EDGES
+
+    def _save_adjustments(self):
+        """Save learned edge adjustments to disk."""
+        try:
+            import json
+            self.adjustments_path.parent.mkdir(parents=True, exist_ok=True)
+            data = {
+                'edge_adjustments': self.edge_adjustments,
+                'games_learned': len(self.game_results),
+                'last_updated': __import__('datetime').datetime.now().isoformat(),
+            }
+            with open(self.adjustments_path, 'w') as f:
+                json.dump(data, f, indent=2)
+            logger.debug(f"Saved edge adjustments to {self.adjustments_path}")
+        except Exception as e:
+            logger.warning(f"Failed to save adjustments: {e}")
+
+    def get_learned_adjustments(self) -> List[float]:
+        """Return current learned edge adjustments."""
+        return self.edge_adjustments.copy()
+
+    def get_game_stats(self) -> dict:
+        """Return statistics from all games played this session."""
+        if not self.game_results:
+            return {'games': 0, 'wins': 0, 'losses': 0, 'draws': 0}
+
+        wins = sum(1 for r, _, _ in self.game_results if r == 'win')
+        losses = sum(1 for r, _, _ in self.game_results if r == 'loss')
+        draws = sum(1 for r, _, _ in self.game_results if r == 'draw')
+
+        return {
+            'games': len(self.game_results),
+            'wins': wins,
+            'losses': losses,
+            'draws': draws,
+            'win_rate': wins / len(self.game_results) if self.game_results else 0,
+            'edge_adjustments': self.edge_adjustments
+        }
