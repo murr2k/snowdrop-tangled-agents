@@ -130,7 +130,8 @@ signal.signal(signal.SIGINT, _signal_handler)
 from snowdrop_tangled_agents.strategy.petersen_strategy import PetersenStrategy
 from snowdrop_tangled_agents.strategy.mcts_strategy import MCTSStrategy, HybridStrategy, evaluate_terminal_state
 from snowdrop_tangled_agents.stats import get_collector, queries as stats_queries, GameMetricsTracker
-from snowdrop_tangled_agents.stats import get_publisher, publish_session_stats
+from snowdrop_tangled_agents.stats import get_publisher, StatsPublisher
+from snowdrop_tangled_agents.stats.session_stats import get_session_stats
 
 # Optional MATLAB integration
 try:
@@ -662,6 +663,142 @@ class WebPlayer:
             self.logger.warning(f"read_board error: {e}")
             return "-" * 15
 
+    def read_vertex_colors(self) -> str:
+        """Read vertex colors from the game board circles.
+
+        Returns a 10-character string where each character represents a vertex (0-9):
+        - 'R' = red (player 1 owns this vertex)
+        - 'B' = blue (player 2 owns this vertex)
+        - '-' = neutral (no owner yet)
+
+        Note: The game always initializes vertex 5 as red (player 1) and vertex 7 as blue (player 2).
+        """
+        js_code = """
+        () => {
+            // First build vertex map from line endpoints (same as read_board)
+            const points = [];
+            document.querySelectorAll('line').forEach(l => {
+                points.push({x: +l.getAttribute('x1'), y: +l.getAttribute('y1')});
+                points.push({x: +l.getAttribute('x2'), y: +l.getAttribute('y2')});
+            });
+
+            const vertices = [];
+            for (const p of points) {
+                let found = false;
+                for (const v of vertices) {
+                    const d = Math.sqrt((p.x - v.x)**2 + (p.y - v.y)**2);
+                    if (d < 5) { found = true; break; }
+                }
+                if (!found) vertices.push({x: p.x, y: p.y});
+            }
+
+            if (vertices.length !== 10) return '-----R-B--';  // Default: V5=R, V7=B
+
+            const cx = vertices.reduce((s,v) => s + v.x, 0) / 10;
+            const cy = vertices.reduce((s,v) => s + v.y, 0) / 10;
+            const angle = (v) => Math.atan2(v.y - cy, v.x - cx);
+
+            const angleDist = (a1, a2) => {
+                let d = a1 - a2;
+                while (d > Math.PI) d -= 2 * Math.PI;
+                while (d < -Math.PI) d += 2 * Math.PI;
+                return Math.abs(d);
+            };
+
+            const dists = vertices.map(v => ({v, d: Math.sqrt((v.x-cx)**2 + (v.y-cy)**2), ang: angle(v)}));
+            dists.sort((a,b) => b.d - a.d);
+            const outer = dists.slice(0, 5);
+            const inner = dists.slice(5, 10);
+
+            outer.sort((a,b) => a.ang - b.ang);
+            inner.sort((a,b) => a.ang - b.ang);
+
+            const rotateToAngle = (arr, targetAngle) => {
+                let minIdx = 0, minDist = Infinity;
+                for (let i = 0; i < arr.length; i++) {
+                    const d = angleDist(arr[i].ang, targetAngle);
+                    if (d < minDist) { minDist = d; minIdx = i; }
+                }
+                return [...arr.slice(minIdx), ...arr.slice(0, minIdx)];
+            };
+
+            const outerSorted = rotateToAngle(outer, Math.PI);
+            const innerSorted = rotateToAngle(inner, -Math.PI/2);
+
+            const VTX = {};
+            for (let i = 0; i < 5; i++) VTX[i] = innerSorted[i].v;
+            for (let i = 0; i < 5; i++) VTX[5 + i] = outerSorted[i].v;
+
+            // Initialize with defaults: V5=R (red/player1), V7=B (blue/player2)
+            const vertexColors = ['-','-','-','-','-','R','-','B','-','-'];
+
+            // Read circle colors and match to vertices
+            document.querySelectorAll('circle').forEach(c => {
+                const circleX = +c.getAttribute('cx');
+                const circleY = +c.getAttribute('cy');
+
+                // Find nearest vertex
+                let bestV = -1, bestD = 1e9;
+                for (const k in VTX) {
+                    const dx = circleX - VTX[k].x, dy = circleY - VTX[k].y;
+                    const d = dx*dx + dy*dy;
+                    if (d < bestD) { bestD = d; bestV = +k; }
+                }
+
+                if (bestV >= 0 && bestD < 400) {  // Within 20px
+                    const fill = (c.getAttribute('fill') || '').toLowerCase();
+                    const style = (c.getAttribute('style') || '').toLowerCase();
+                    const fillStr = fill + ' ' + style;
+
+                    // Detect red variants (hex, rgb, named)
+                    if (/red|#ef4444|#dc2626|#f87171|#b91c1c|#fee2e2|rgb\\s*\\(\\s*2[0-5]\\d|rgb\\s*\\(\\s*239/i.test(fillStr)) {
+                        vertexColors[bestV] = 'R';
+                    // Detect blue variants (hex, rgb, named)
+                    } else if (/blue|#3b82f6|#2563eb|#60a5fa|#1d4ed8|#dbeafe|rgb\\s*\\(\\s*59|rgb\\s*\\(\\s*37/i.test(fillStr)) {
+                        vertexColors[bestV] = 'B';
+                    // Detect black/neutral (reset to neutral if explicitly black)
+                    } else if (/black|#000|#1[0-9a-f]{5}|rgb\\s*\\(\\s*0/i.test(fillStr)) {
+                        vertexColors[bestV] = '-';
+                    }
+                }
+            });
+            return vertexColors.join('');
+        }
+        """
+        try:
+            result = self.page.evaluate(js_code)
+            self.logger.debug(f"Vertex colors read: {result}")
+            return result if result else '-----R-B--'
+        except Exception as e:
+            self.logger.warning(f"read_vertex_colors error: {e}")
+            return '-----R-B--'  # Default: V5=R, V7=B
+
+    def debug_vertex_fills(self) -> list:
+        """Debug: return raw fill colors from all circles on the game board."""
+        js_code = """
+        () => {
+            const results = [];
+            document.querySelectorAll('circle').forEach((c, i) => {
+                results.push({
+                    index: i,
+                    cx: c.getAttribute('cx'),
+                    cy: c.getAttribute('cy'),
+                    r: c.getAttribute('r'),
+                    fill: c.getAttribute('fill'),
+                    stroke: c.getAttribute('stroke'),
+                    style: c.getAttribute('style'),
+                    className: c.getAttribute('class')
+                });
+            });
+            return results;
+        }
+        """
+        try:
+            return self.page.evaluate(js_code)
+        except Exception as e:
+            self.logger.warning(f"debug_vertex_fills error: {e}")
+            return []
+
     def debug_lines(self):
         """Debug: print all line coordinates and their dynamically discovered vertices."""
         js_code = """
@@ -1130,6 +1267,31 @@ class WebPlayer:
         # Debug: show line coordinates
         self.debug_lines()
 
+        # Send pre-game initialization to dashboard (all black except V5=red, V7=blue)
+        publisher = get_publisher()
+        if publisher.is_configured():
+            try:
+                initial_board = self.read_board()
+                initial_vertices = '-----R-B--'  # V5=red (player 1), V7=blue (player 2)
+                self.logger.info(f"DEBUG pre-game init: board={initial_board}, vertices={initial_vertices}")
+                # Get session stats for full state
+                stats = get_session_stats()
+                publisher.publish_state(
+                    board_state=initial_board,
+                    vertex_state=initial_vertices,
+                    completed_games=stats.completed_games if stats else 0,
+                    wins=stats.wins if stats else 0,
+                    draws=stats.draws if stats else 0,
+                    losses=stats.losses if stats else 0,
+                    avg_score=stats.avg_score if stats else None,
+                    median_score=stats.median_score if stats else None,
+                    min_score=stats.min_score if stats else None,
+                    max_score=stats.max_score if stats else None,
+                    std_score=stats.score_std if stats else None,
+                )
+            except Exception as e:
+                self.logger.debug(f"Pre-game init publish failed: {e}")
+
         # Wait for initial turn
         while not self.is_our_turn() and not self.is_game_over():
             time.sleep(0.3)
@@ -1273,6 +1435,7 @@ class WebPlayer:
                 solver_stats['wall_clock_time'] = our_think_time
 
                 # Record move to stats database with solver statistics
+                current_board = self.read_board()
                 self.stats_collector.record_move(
                     game_id=self.current_game_id,
                     move_number=move_count,
@@ -1281,11 +1444,46 @@ class WebPlayer:
                     color=color,
                     score_after=new_score,
                     score_before=prev_score,
-                    state_after=self.read_board(),
+                    state_after=current_board,
                     thinking_time=our_think_time,
                     solver_stats=solver_stats
                 )
                 prev_score = new_score
+
+                # Publish move to live dashboard
+                publisher = get_publisher()
+                if publisher.is_configured():
+                    try:
+                        # Debug: log raw circle fills
+                        fills = self.debug_vertex_fills()
+                        self.logger.info(f"DEBUG vertex fills: {[(f.get('cx','?'), f.get('cy','?'), f.get('fill','?')) for f in fills[:12]]}")
+
+                        vertex_colors = self.read_vertex_colors()
+                        edges_colored = sum(1 for c in current_board if c in 'GP')
+                        self.logger.info(f"DEBUG publishing: edges={edges_colored}, board={current_board}, vertices={vertex_colors}")
+
+                        # Get session stats for full state
+                        stats = get_session_stats()
+                        publisher.publish_state(
+                            move_edge=edge,
+                            move_color=color,
+                            move_score=new_score,
+                            move_thinking_time=our_think_time,
+                            move_player="us",
+                            board_state=current_board,
+                            vertex_state=vertex_colors,
+                            completed_games=stats.completed_games if stats else 0,
+                            wins=stats.wins if stats else 0,
+                            draws=stats.draws if stats else 0,
+                            losses=stats.losses if stats else 0,
+                            avg_score=stats.avg_score if stats else None,
+                            median_score=stats.median_score if stats else None,
+                            min_score=stats.min_score if stats else None,
+                            max_score=stats.max_score if stats else None,
+                            std_score=stats.score_std if stats else None,
+                        )
+                    except Exception as e:
+                        self.logger.debug(f"Move publish failed: {e}")
 
                 # Record move for learning (if strategy supports it)
                 if hasattr(self.strategy, 'record_move'):
@@ -1347,6 +1545,41 @@ class WebPlayer:
                     thinking_time=opponent_think_time,
                     solver_stats={'opponent_think_time': opponent_think_time}
                 )
+
+                # Publish opponent move to live dashboard
+                publisher = get_publisher()
+                if publisher.is_configured():
+                    try:
+                        # Debug: log raw circle fills
+                        fills = self.debug_vertex_fills()
+                        self.logger.info(f"DEBUG opp vertex fills: {[(f.get('cx','?'), f.get('cy','?'), f.get('fill','?')) for f in fills[:12]]}")
+
+                        vertex_colors = self.read_vertex_colors()
+                        edges_colored = sum(1 for c in state_after_opponent if c in 'GP')
+                        self.logger.info(f"DEBUG opp publishing: edges={edges_colored}, board={state_after_opponent}, vertices={vertex_colors}")
+
+                        # Get session stats for full state
+                        stats = get_session_stats()
+                        publisher.publish_state(
+                            move_edge=opponent_edge,
+                            move_color=opponent_color,
+                            move_score=opponent_score,
+                            move_thinking_time=opponent_think_time,
+                            move_player="opponent",
+                            board_state=state_after_opponent,
+                            vertex_state=vertex_colors,
+                            completed_games=stats.completed_games if stats else 0,
+                            wins=stats.wins if stats else 0,
+                            draws=stats.draws if stats else 0,
+                            losses=stats.losses if stats else 0,
+                            avg_score=stats.avg_score if stats else None,
+                            median_score=stats.median_score if stats else None,
+                            min_score=stats.min_score if stats else None,
+                            max_score=stats.max_score if stats else None,
+                            std_score=stats.score_std if stats else None,
+                        )
+                    except Exception as e:
+                        self.logger.debug(f"Opponent move publish failed: {e}")
                 # Record prediction accuracy for opponent model learning visibility
                 if self.metrics_tracker and self.score_history:
                     last_edge, last_color, _ = self.score_history[-1]
@@ -1621,8 +1854,10 @@ def main():
     from snowdrop_tangled_agents.stats import get_collector
     stats_collector = get_collector()
 
-    # Determine run info
+    # Determine run info - always create a run for tracking
+    planned_games = args.run if args.run else args.games
     if args.run:
+        # Resume existing run or create new one
         run_id, start_game_number = stats_collector.get_or_create_run(
             planned_games=args.run,
             strategy=args.strategy,
@@ -1632,9 +1867,15 @@ def main():
         total_planned = run_info['planned_games']
         print(f"Run {run_id}: {run_info['completed_games']}/{total_planned} completed")
     else:
-        run_id = None
+        # Always create a new run, even for simple --games N
+        run_id = stats_collector.start_run(
+            planned_games=planned_games,
+            strategy=args.strategy,
+            opponent=args.opponent
+        )
         start_game_number = 1
-        total_planned = args.games
+        total_planned = planned_games
+        print(f"Run {run_id}: 0/{total_planned} games planned")
 
     # Register this process for tracking
     register_process(run_id=run_id, planned_games=total_planned)
@@ -1705,7 +1946,39 @@ def main():
                 # Publish live stats to dashboard (if configured)
                 if publisher.is_configured():
                     try:
-                        publish_session_stats()
+                        publisher.game_completed()  # Finalize turn time tracking
+                        stats = get_session_stats()
+                        if stats:
+                            # Calculate recent_5
+                            completed = [g for g in stats.games if g.result is not None]
+                            recent = completed[-5:] if len(completed) >= 5 else completed
+                            recent_5 = ''.join('W' if g.result == 'win' else 'L' if g.result == 'loss' else 'D' for g in recent)
+
+                            # Calculate score_trend
+                            score_trend = None
+                            if len(completed) >= 4:
+                                scores = [g.final_score for g in completed if g.final_score is not None]
+                                if len(scores) >= 4:
+                                    first_half = scores[:len(scores)//2]
+                                    second_half = scores[len(scores)//2:]
+                                    score_trend = sum(second_half)/len(second_half) - sum(first_half)/len(first_half)
+
+                            publisher.publish_state(
+                                completed_games=stats.completed_games,
+                                wins=stats.wins,
+                                draws=stats.draws,
+                                losses=stats.losses,
+                                avg_score=stats.avg_score,
+                                median_score=stats.median_score,
+                                min_score=stats.min_score,
+                                max_score=stats.max_score,
+                                std_score=stats.score_std,
+                                recent_5=recent_5,
+                                score_trend=score_trend,
+                                avg_entropy=stats.avg_entropy,
+                                avg_top3_hit=stats.avg_top3_hit,
+                                avg_pred_accuracy=stats.avg_prediction_accuracy,
+                            )
                     except Exception as e:
                         logging.getLogger(__name__).debug(f"Stats publish failed: {e}")
 

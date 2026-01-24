@@ -57,16 +57,20 @@ class StatsPublisher:
         self._lock = threading.Lock()
         self._connected = False
         self._authenticated = False
-        self._last_stats: Optional[Dict[str, Any]] = None
         self._connect_attempts = 0
         self._max_connect_attempts = 3
         self._last_ping_time = 0
-        self._ping_interval = 20  # Send ping every 20 seconds
+        self._ping_interval = 10
 
         # State for current session
         self._session_start: Optional[datetime] = None
         self._run_id: Optional[int] = None
         self._planned_games: Optional[int] = None
+
+        # Turn time tracking for ETA
+        self._total_turn_time: float = 0.0
+        self._turn_count: int = 0
+        self._current_game_turn_time: float = 0.0
 
         if auto_connect and self.is_configured():
             self._connect()
@@ -95,17 +99,19 @@ class StatsPublisher:
 
             try:
                 logger.info(f"Connecting to dashboard: {self.url}")
-                # Disable compression extensions to avoid RSV bit issues
                 self._ws = websocket.create_connection(
                     self.url,
-                    timeout=10,
+                    timeout=60,
                     enable_multithread=True,
                     skip_utf8_validation=True,
                     header={"Sec-WebSocket-Extensions": ""},
                 )
+                import socket
+                self._ws.sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+                if hasattr(socket, 'SIO_KEEPALIVE_VALS'):
+                    self._ws.sock.ioctl(socket.SIO_KEEPALIVE_VALS, (1, 30000, 10000))
                 self._connected = True
 
-                # Authenticate
                 auth_msg = json.dumps({"api_key": self.api_key})
                 self._ws.send(auth_msg)
 
@@ -114,7 +120,7 @@ class StatsPublisher:
 
                 if data.get("type") == "authenticated":
                     self._authenticated = True
-                    self._connect_attempts = 0  # Reset on success
+                    self._connect_attempts = 0
                     logger.info("Dashboard connection authenticated")
                     return True
                 else:
@@ -125,7 +131,6 @@ class StatsPublisher:
             except Exception as e:
                 logger.warning(f"Dashboard connection failed: {e}")
                 self._disconnect()
-                # Don't retry immediately on connection errors
                 self._connect_attempts = self._max_connect_attempts
                 return False
 
@@ -141,54 +146,31 @@ class StatsPublisher:
             self._connected = False
             self._authenticated = False
 
-    def _send_ping(self) -> bool:
-        """Send a keep-alive ping if needed."""
-        now = time.time()
-        if now - self._last_ping_time < self._ping_interval:
-            return True
-
-        try:
-            with self._lock:
-                if self._ws:
-                    self._ws.ping()
-                    self._last_ping_time = now
-                    return True
-        except Exception:
-            return False
-        return False
-
     def _send(self, data: Dict[str, Any]) -> bool:
-        """Send data to the dashboard."""
-        if not self.is_connected():
-            if not self._connect():
-                return False
+        """Send data to the dashboard with automatic reconnection."""
+        max_retries = 2
 
-        # Send keep-alive ping if needed
-        if not self._send_ping():
-            self._disconnect()
-            if not self._connect():
-                return False
+        for attempt in range(max_retries + 1):
+            if not self.is_connected():
+                if not self._connect():
+                    continue
 
-        try:
-            with self._lock:
-                if self._ws:
-                    self._ws.send(json.dumps(data))
-                    self._last_ping_time = time.time()
-                    logger.debug("Stats published to dashboard")
-                    return True
-        except Exception as e:
-            logger.warning(f"Dashboard send failed: {e}")
-            self._disconnect()
-            # Try reconnect once
-            if self._connect():
-                try:
-                    with self._lock:
-                        if self._ws:
-                            self._ws.send(json.dumps(data))
-                            logger.debug("Stats published to dashboard (after reconnect)")
-                            return True
-                except Exception:
-                    pass
+            try:
+                with self._lock:
+                    if self._ws:
+                        self._ws.send(json.dumps(data))
+                        self._last_ping_time = time.time()
+                        logger.debug("Stats published to dashboard")
+                        return True
+            except Exception as e:
+                if attempt < max_retries:
+                    logger.debug(f"Dashboard send failed (attempt {attempt + 1}), reconnecting: {e}")
+                    self._disconnect()
+                    time.sleep(0.2)
+                else:
+                    logger.warning(f"Dashboard send failed after {max_retries + 1} attempts: {e}")
+                    self._disconnect()
+
         return False
 
     def set_session_info(
@@ -201,26 +183,105 @@ class StatsPublisher:
         self._planned_games = planned_games
         if self._session_start is None:
             self._session_start = datetime.now()
+        self._total_turn_time = 0.0
+        self._turn_count = 0
+        self._current_game_turn_time = 0.0
+        self._connect_attempts = 0
+        if self.is_configured() and not self.is_connected():
+            self._connect()
 
-    def publish_stats(
+    def game_completed(self):
+        """Call when a game completes to finalize turn time tracking."""
+        self._total_turn_time += self._current_game_turn_time
+        self._current_game_turn_time = 0.0
+
+    def _calculate_eta(self, completed_games: int) -> Dict[str, Any]:
+        """Calculate estimated time of completion based on turn times."""
+        eta = {}
+        planned = self._planned_games
+
+        if not planned:
+            return eta
+
+        remaining = planned - completed_games
+        MOVES_PER_GAME = 8
+
+        if self._turn_count > 0:
+            avg_turn_time = self._total_turn_time / self._turn_count
+            current_game_turns = max(1, int(self._current_game_turn_time / avg_turn_time)) if avg_turn_time > 0 else 0
+            completed_game_turns = self._turn_count - current_game_turns
+
+            if completed_game_turns > 0 and completed_games > 0:
+                avg_game_duration = self._total_turn_time / completed_games
+            else:
+                avg_game_duration = avg_turn_time * MOVES_PER_GAME
+        elif completed_games >= 1 and self._session_start:
+            elapsed = (datetime.now() - self._session_start).total_seconds()
+            avg_game_duration = elapsed / completed_games
+            avg_turn_time = avg_game_duration / MOVES_PER_GAME
+        else:
+            return eta
+
+        if remaining > 0:
+            est_remaining_seconds = remaining * avg_game_duration
+            est_end = datetime.now() + timedelta(seconds=est_remaining_seconds)
+            eta = {
+                "estimated_end": est_end.isoformat(),
+                "games_remaining": remaining,
+                "avg_game_duration": avg_game_duration,
+                "avg_turn_time": avg_turn_time,
+            }
+
+        return eta
+
+    def publish_state(
         self,
-        session: Dict[str, Any],
-        results: Dict[str, int],
-        scores: Dict[str, Optional[float]],
-        trends: Optional[Dict[str, Any]] = None,
-        model: Optional[Dict[str, Any]] = None,
-        current_game: Optional[Dict[str, Any]] = None,
+        # Move info (optional - for during-game updates)
+        move_edge: Optional[int] = None,
+        move_color: Optional[str] = None,
+        move_score: Optional[float] = None,
+        move_thinking_time: Optional[float] = None,
+        move_player: str = "us",
+        # Board state
+        board_state: Optional[str] = None,
+        vertex_state: Optional[str] = None,
+        # Session stats (fetched automatically if not provided)
+        completed_games: Optional[int] = None,
+        wins: Optional[int] = None,
+        draws: Optional[int] = None,
+        losses: Optional[int] = None,
+        # Score stats
+        avg_score: Optional[float] = None,
+        median_score: Optional[float] = None,
+        min_score: Optional[float] = None,
+        max_score: Optional[float] = None,
+        std_score: Optional[float] = None,
+        # Trends
+        recent_5: Optional[str] = None,
+        score_trend: Optional[float] = None,
+        # Model metrics
+        avg_entropy: Optional[float] = None,
+        avg_top3_hit: Optional[float] = None,
+        avg_pred_accuracy: Optional[float] = None,
     ) -> bool:
         """
-        Publish stats update to the dashboard.
+        Publish the COMPLETE dashboard state. This is the ONE and ONLY message
+        type sent to the dashboard. Every call sends ALL fields.
 
         Args:
-            session: Session info (run_id, completed_games, planned_games)
-            results: Win/draw/loss counts
-            scores: Score statistics (avg, median, min, max, std)
-            trends: Trend data (recent_5, score_trend, winrate_trend)
-            model: Opponent model metrics (avg_entropy, avg_top3_hit, avg_pred_accuracy)
-            current_game: Current game state if in progress
+            move_edge: Edge index (0-14) of current/last move
+            move_color: 'G' for green/FM, 'P' for purple/AFM
+            move_score: Score after this move
+            move_thinking_time: Time spent calculating this move (seconds)
+            move_player: 'us' or 'opponent'
+            board_state: Current board state string (15 chars of G/P/-)
+            vertex_state: Current vertex colors string (10 chars of R/B/-)
+            completed_games: Number of completed games in this run
+            wins/draws/losses: Result counts
+            avg_score/median_score/min_score/max_score/std_score: Score statistics
+            recent_5: String of last 5 results (e.g., "WDWLW")
+            score_trend: Score trend slope
+            avg_entropy/avg_top3_hit/avg_pred_accuracy: Opponent model metrics
 
         Returns:
             True if published successfully
@@ -228,141 +289,80 @@ class StatsPublisher:
         if not self.is_configured():
             return False
 
-        # Calculate ETA
-        eta = self._calculate_eta(session)
+        # Track turn time for ETA calculation
+        if move_thinking_time is not None:
+            self._current_game_turn_time += move_thinking_time
+            self._turn_count += 1
 
-        stats_update = {
-            "type": "stats_update",
+        # Default board state
+        board = board_state if board_state else "-" * 15
+        vertices = vertex_state if vertex_state else "-----R-B--"
+        edges_colored = sum(1 for c in board if c in 'GP')
+
+        # Build move info
+        move = None
+        if move_edge is not None or move_color is not None:
+            color_name = "Green" if move_color == 'G' else ("Purple" if move_color == 'P' else "")
+            move = {
+                "number": edges_colored,
+                "edge": move_edge if move_edge is not None else 0,
+                "color": move_color if move_color else "-",
+                "color_name": color_name,
+                "score": move_score if move_score is not None else 0.0,
+                "thinking_time": move_thinking_time if move_thinking_time is not None else 0.0,
+                "player": move_player,
+            }
+
+        # Calculate ETA
+        games_completed = completed_games if completed_games is not None else 0
+        eta = self._calculate_eta(games_completed)
+
+        # Build the ONE message with ALL fields
+        full_state = {
+            "type": "full_state",
             "timestamp": datetime.now().isoformat(),
-            "session": session,
-            "results": results,
-            "scores": scores,
-            "trends": trends or {},
-            "model": model or {},
-            "current_game": current_game,
+            # Move info
+            "move": move,
+            # Board state
+            "board_state": board,
+            "vertex_state": vertices,
+            "edges_colored": edges_colored,
+            # Session info
+            "session": {
+                "run_id": self._run_id,
+                "completed_games": completed_games if completed_games is not None else 0,
+                "planned_games": self._planned_games,
+            },
+            # Results
+            "results": {
+                "wins": wins if wins is not None else 0,
+                "draws": draws if draws is not None else 0,
+                "losses": losses if losses is not None else 0,
+            },
+            # Score statistics
+            "scores": {
+                "avg": avg_score,
+                "median": median_score,
+                "min": min_score,
+                "max": max_score,
+                "std": std_score,
+            },
+            # Trends
+            "trends": {
+                "recent_5": recent_5 if recent_5 else "",
+                "score_trend": score_trend,
+            },
+            # Opponent model metrics
+            "model": {
+                "avg_entropy": avg_entropy,
+                "avg_top3_hit": avg_top3_hit,
+                "avg_pred_accuracy": avg_pred_accuracy,
+            },
+            # ETA
             "eta": eta,
         }
 
-        self._last_stats = stats_update
-        return self._send(stats_update)
-
-    def _calculate_eta(self, session: Dict[str, Any]) -> Dict[str, Any]:
-        """Calculate estimated time of completion."""
-        eta = {}
-
-        completed = session.get("completed_games", 0)
-        planned = session.get("planned_games") or self._planned_games
-
-        if not planned or completed < 2 or not self._session_start:
-            return eta
-
-        elapsed = (datetime.now() - self._session_start).total_seconds()
-        avg_per_game = elapsed / completed
-        remaining = planned - completed
-
-        if remaining > 0:
-            est_remaining_seconds = remaining * avg_per_game
-            est_end = datetime.now() + timedelta(seconds=est_remaining_seconds)
-            eta = {
-                "estimated_end": est_end.isoformat(),
-                "games_remaining": remaining,
-                "avg_game_duration": avg_per_game,
-            }
-
-        return eta
-
-    def publish_from_session_stats(self, session_stats, current_game: Optional[Dict[str, Any]] = None) -> bool:
-        """
-        Publish stats directly from a SessionStats object.
-
-        Args:
-            session_stats: SessionStats object from session_stats.py
-            current_game: Optional current game state
-        """
-        if session_stats is None:
-            return False
-
-        # Extract run info from latest game if available
-        run_id = None
-        planned_games = None
-        if session_stats.games:
-            latest = session_stats.games[-1]
-            run_id = latest.run_id
-            # Try to get planned games from run
-            if run_id:
-                try:
-                    from .collector import get_collector
-                    collector = get_collector()
-                    run_info = collector.get_run(run_id)
-                    if run_info:
-                        planned_games = run_info.get("planned_games")
-                except Exception:
-                    pass
-
-        # Build recent_5 string (W/D/L for last 5 games)
-        recent_5 = ""
-        completed_games = [g for g in session_stats.games if g.result is not None]
-        for game in completed_games[-5:]:
-            if game.result == "win":
-                recent_5 += "W"
-            elif game.result == "draw":
-                recent_5 += "D"
-            elif game.result == "loss":
-                recent_5 += "L"
-
-        # Calculate score trend (last 10 games regression slope)
-        score_trend = None
-        if len(completed_games) >= 3:
-            recent_scores = [g.final_score for g in completed_games[-10:] if g.final_score is not None]
-            if len(recent_scores) >= 3:
-                # Simple linear regression slope
-                n = len(recent_scores)
-                x_mean = (n - 1) / 2
-                y_mean = sum(recent_scores) / n
-                numerator = sum((i - x_mean) * (s - y_mean) for i, s in enumerate(recent_scores))
-                denominator = sum((i - x_mean) ** 2 for i in range(n))
-                if denominator > 0:
-                    score_trend = numerator / denominator
-
-        session = {
-            "run_id": run_id,
-            "completed_games": session_stats.completed_games,
-            "planned_games": planned_games or session_stats.game_count,
-        }
-
-        results = {
-            "wins": session_stats.wins,
-            "draws": session_stats.draws,
-            "losses": session_stats.losses,
-        }
-
-        scores = {
-            "avg": session_stats.avg_score,
-            "median": session_stats.median_score,
-            "min": session_stats.min_score,
-            "max": session_stats.max_score,
-            "std": session_stats.score_std,
-        }
-
-        trends = {
-            "recent_5": recent_5,
-            "score_trend": score_trend,
-        }
-
-        model = {
-            "avg_entropy": session_stats.avg_entropy,
-            "avg_top3_hit": session_stats.avg_top3_hit,
-            "avg_pred_accuracy": session_stats.avg_prediction_accuracy,
-        }
-
-        return self.publish_stats(
-            session=session,
-            results=results,
-            scores=scores,
-            trends=trends,
-            model=model,
-            current_game=current_game,
-        )
+        return self._send(full_state)
 
     def close(self):
         """Close the connection."""
@@ -379,22 +379,3 @@ def get_publisher() -> StatsPublisher:
     if _publisher is None:
         _publisher = StatsPublisher(auto_connect=False)
     return _publisher
-
-
-def publish_session_stats(current_game: Optional[Dict[str, Any]] = None) -> bool:
-    """
-    Convenience function to publish current session stats.
-
-    Fetches current session stats and publishes to dashboard.
-    """
-    publisher = get_publisher()
-    if not publisher.is_configured():
-        return False
-
-    try:
-        from .session_stats import get_session_stats
-        session_stats = get_session_stats()
-        return publisher.publish_from_session_stats(session_stats, current_game)
-    except Exception as e:
-        logger.warning(f"Failed to publish session stats: {e}")
-        return False

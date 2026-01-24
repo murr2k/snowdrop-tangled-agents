@@ -270,6 +270,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Unified Dashboard Messaging** (`snowdrop_tangled_agents/stats/websocket_publisher.py`)
+  - Consolidated `publish_move()`, `publish_stats()`, and `publish_session_stats()` into single `publish_state()` function
+  - Dashboard now receives exactly ONE message type (`full_state`) containing complete state
+  - Every message includes: move info, board state, vertex colors, session stats, score stats, trends, model metrics, ETA
+  - Removes partial message handling complexity from both publisher and dashboard
+  - Dashboard always renders full UI regardless of message content
+
 - **SimulatedOpponent Real MCTS Mode** (`snowdrop_tangled_agents/matlab/rl/SimulatedOpponent.m`)
   - Added real MCTS opponent using `TangledMCTS` engine for realistic training
   - Lazy-initialized MCTS engine to avoid overhead when not needed
