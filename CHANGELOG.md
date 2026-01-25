@@ -262,6 +262,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Added Mermaid diagrams for data flow and gameplay transaction flow
   - `docs/MATLAB_INTEGRATION.md` - Complete MATLAB integration guide
   - `docs/tangled-bot-v28.txt` - Reference JavaScript bot implementation
+  - `docs/THE_MATHEMATICS_OF_TANGLED_GAME.md` - Added Section 9: HybridSolverStrategy
+    - D-Wave inspired hybrid search architecture
+    - Alpha-Beta minimax with transposition tables
+    - MCTS with Tabu Search refinement
+    - 19M-entry expanded lookup table theory
+    - REINFORCE-style adaptive learning with temporal credit assignment
+    - Database integration and persistence mechanisms
+    - Performance analysis and research extensions for graduate students
 
 ### Added
 
@@ -288,6 +296,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - All dashboard messages now use run-specific stats when a run_id is active
   - Removed redundant post-game publish block in main loop (single publisher at game end)
   - Fixes issue where dashboard showed stats from previous runs mixed with current run
+
+- **Default Strategy Changed** (`play_tangled.py`)
+  - Changed default strategy from `heuristic` to `hybrid_solver`
+  - HybridSolverStrategy with REINFORCE learning is now the recommended approach
+  - Combines MATLAB's powerful search (minimax + MCTS + Tabu) with adaptive learning
+  - Requires MATLAB Engine connection; falls back to Python MCTS if unavailable
 
 - **SimulatedOpponent Real MCTS Mode** (`snowdrop_tangled_agents/matlab/rl/SimulatedOpponent.m`)
   - Added real MCTS opponent using `TangledMCTS` engine for realistic training
