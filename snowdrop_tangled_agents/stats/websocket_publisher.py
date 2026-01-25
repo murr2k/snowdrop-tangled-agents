@@ -246,6 +246,7 @@ class StatsPublisher:
         board_state: Optional[str] = None,
         vertex_state: Optional[str] = None,
         # Session stats (fetched automatically if not provided)
+        current_game: Optional[int] = None,
         completed_games: Optional[int] = None,
         wins: Optional[int] = None,
         draws: Optional[int] = None,
@@ -276,6 +277,7 @@ class StatsPublisher:
             move_player: 'us' or 'opponent'
             board_state: Current board state string (15 chars of G/P/-)
             vertex_state: Current vertex colors string (10 chars of R/B/-)
+            current_game: Game number currently being played (1-indexed)
             completed_games: Number of completed games in this run
             wins/draws/losses: Result counts
             avg_score/median_score/min_score/max_score/std_score: Score statistics
@@ -330,6 +332,7 @@ class StatsPublisher:
             # Session info
             "session": {
                 "run_id": self._run_id,
+                "current_game": current_game if current_game is not None else 0,
                 "completed_games": completed_games if completed_games is not None else 0,
                 "planned_games": self._planned_games,
             },

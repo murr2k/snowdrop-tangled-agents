@@ -1502,10 +1502,12 @@ class WebPlayer:
                 self.logger.info(f"DEBUG pre-game init: board={initial_board}, vertices={initial_vertices}")
                 # Get run-specific stats (current run only)
                 run_id = getattr(self, '_run_id', None)
+                current_game = getattr(self, '_current_game_number', 1)
                 stats = get_run_stats(run_id) if run_id else get_session_stats()
                 publisher.publish_state(
                     board_state=initial_board,
                     vertex_state=initial_vertices,
+                    current_game=current_game,
                     completed_games=stats.completed_games if stats else 0,
                     wins=stats.wins if stats else 0,
                     draws=stats.draws if stats else 0,
@@ -1691,6 +1693,7 @@ class WebPlayer:
 
                         # Get run-specific stats (current run only)
                         run_id = getattr(self, '_run_id', None)
+                        current_game = getattr(self, '_current_game_number', 1)
                         stats = get_run_stats(run_id) if run_id else get_session_stats()
                         publisher.publish_state(
                             move_edge=edge,
@@ -1700,6 +1703,7 @@ class WebPlayer:
                             move_player="us",
                             board_state=current_board,
                             vertex_state=vertex_colors,
+                            current_game=current_game,
                             completed_games=stats.completed_games if stats else 0,
                             wins=stats.wins if stats else 0,
                             draws=stats.draws if stats else 0,
@@ -1788,6 +1792,7 @@ class WebPlayer:
 
                         # Get run-specific stats (current run only)
                         run_id = getattr(self, '_run_id', None)
+                        current_game = getattr(self, '_current_game_number', 1)
                         stats = get_run_stats(run_id) if run_id else get_session_stats()
                         publisher.publish_state(
                             move_edge=opponent_edge,
@@ -1797,6 +1802,7 @@ class WebPlayer:
                             move_player="opponent",
                             board_state=state_after_opponent,
                             vertex_state=vertex_colors,
+                            current_game=current_game,
                             completed_games=stats.completed_games if stats else 0,
                             wins=stats.wins if stats else 0,
                             draws=stats.draws if stats else 0,
@@ -1890,6 +1896,7 @@ class WebPlayer:
 
         # Publish game result to dashboard immediately (don't wait for next game)
         run_id = getattr(self, '_run_id', None)
+        current_game = getattr(self, '_current_game_number', 1)
         publisher = get_publisher()
         if publisher.is_configured() and run_id:
             try:
@@ -1912,6 +1919,7 @@ class WebPlayer:
 
                     publisher.publish_state(
                         board_state=terminal_state,
+                        current_game=current_game,
                         completed_games=run_stats.completed_games,
                         wins=run_stats.wins,
                         draws=run_stats.draws,
@@ -2153,7 +2161,7 @@ def main():
         )
         start_game_number = 1
         total_planned = planned_games
-        print(f"Run {run_id}: 0/{total_planned} games planned")
+        print(f"Run {run_id}: {total_planned} games planned")
 
     # Register this process for tracking
     register_process(run_id=run_id, planned_games=total_planned)
