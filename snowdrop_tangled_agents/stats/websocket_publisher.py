@@ -248,6 +248,8 @@ class StatsPublisher:
         # Session stats (fetched automatically if not provided)
         current_game: Optional[int] = None,
         completed_games: Optional[int] = None,
+        strategy: Optional[str] = None,
+        opponent: Optional[str] = None,
         wins: Optional[int] = None,
         draws: Optional[int] = None,
         losses: Optional[int] = None,
@@ -335,6 +337,8 @@ class StatsPublisher:
                 "current_game": current_game if current_game is not None else 0,
                 "completed_games": completed_games if completed_games is not None else 0,
                 "planned_games": self._planned_games,
+                "strategy": strategy,
+                "opponent": opponent,
             },
             # Results
             "results": {

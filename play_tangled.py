@@ -1491,6 +1491,8 @@ class WebPlayer:
         return {
             'current_game': current_game,
             'completed_games': stats.completed_games if stats else 0,
+            'strategy': getattr(self, 'strategy_type', None),
+            'opponent': getattr(self, 'opponent', None),
             'wins': stats.wins if stats else 0,
             'draws': stats.draws if stats else 0,
             'losses': stats.losses if stats else 0,
@@ -1509,6 +1511,7 @@ class WebPlayer:
     def play_game(self, opponent: str = "melissa") -> dict:
         """Play one complete game."""
         self.score_history = []
+        self.opponent = opponent  # Store for dashboard display
 
         # Initialize opponent model for online learning
         self._ensure_opponent_model(opponent)
