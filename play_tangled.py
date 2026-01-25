@@ -1459,6 +1459,53 @@ class WebPlayer:
         self.logger.error(f"Opponent stuck! No response after {elapsed:.0f}s")
         raise StuckOpponentError(f"Opponent did not play within {stuck_timeout}s")
 
+    def _get_dashboard_stats(self) -> dict:
+        """Get all stats needed for dashboard display.
+
+        Returns a dict with all fields needed by publish_state, computed from
+        the current run stats. This ensures every publish sends complete data.
+        """
+        run_id = getattr(self, '_run_id', None)
+        current_game = getattr(self, '_current_game_number', 1)
+        stats = get_run_stats(run_id) if run_id else get_session_stats()
+
+        # Compute recent_5 and score_trend from games list
+        recent_5 = ''
+        score_trend = None
+        if stats and stats.games:
+            completed = [g for g in stats.games if g.result is not None]
+            if completed:
+                recent = completed[-5:] if len(completed) >= 5 else completed
+                recent_5 = ''.join(
+                    'W' if g.result == 'win' else 'L' if g.result == 'loss' else 'D'
+                    for g in recent
+                )
+                # Score trend: compare first half to second half averages
+                if len(completed) >= 4:
+                    scores = [g.final_score for g in completed if g.final_score is not None]
+                    if len(scores) >= 4:
+                        first_half = scores[:len(scores)//2]
+                        second_half = scores[len(scores)//2:]
+                        score_trend = sum(second_half)/len(second_half) - sum(first_half)/len(first_half)
+
+        return {
+            'current_game': current_game,
+            'completed_games': stats.completed_games if stats else 0,
+            'wins': stats.wins if stats else 0,
+            'draws': stats.draws if stats else 0,
+            'losses': stats.losses if stats else 0,
+            'avg_score': stats.avg_score if stats else None,
+            'median_score': stats.median_score if stats else None,
+            'min_score': stats.min_score if stats else None,
+            'max_score': stats.max_score if stats else None,
+            'std_score': stats.score_std if stats else None,
+            'recent_5': recent_5,
+            'score_trend': score_trend,
+            'avg_entropy': stats.avg_entropy if stats else None,
+            'avg_top3_hit': stats.avg_top3_hit if stats else None,
+            'avg_pred_accuracy': stats.avg_prediction_accuracy if stats else None,
+        }
+
     def play_game(self, opponent: str = "melissa") -> dict:
         """Play one complete game."""
         self.score_history = []
@@ -1500,23 +1547,12 @@ class WebPlayer:
                 initial_board = self.read_board()
                 initial_vertices = '-----R-B--'  # V5=red (player 1), V7=blue (player 2)
                 self.logger.info(f"DEBUG pre-game init: board={initial_board}, vertices={initial_vertices}")
-                # Get run-specific stats (current run only)
-                run_id = getattr(self, '_run_id', None)
-                current_game = getattr(self, '_current_game_number', 1)
-                stats = get_run_stats(run_id) if run_id else get_session_stats()
+                # Get all dashboard stats
+                ds = self._get_dashboard_stats()
                 publisher.publish_state(
                     board_state=initial_board,
                     vertex_state=initial_vertices,
-                    current_game=current_game,
-                    completed_games=stats.completed_games if stats else 0,
-                    wins=stats.wins if stats else 0,
-                    draws=stats.draws if stats else 0,
-                    losses=stats.losses if stats else 0,
-                    avg_score=stats.avg_score if stats else None,
-                    median_score=stats.median_score if stats else None,
-                    min_score=stats.min_score if stats else None,
-                    max_score=stats.max_score if stats else None,
-                    std_score=stats.score_std if stats else None,
+                    **ds,
                 )
             except Exception as e:
                 self.logger.debug(f"Pre-game init publish failed: {e}")
@@ -1691,10 +1727,8 @@ class WebPlayer:
                         edges_colored = sum(1 for c in current_board if c in 'GP')
                         self.logger.info(f"DEBUG publishing: edges={edges_colored}, board={current_board}, vertices={vertex_colors}")
 
-                        # Get run-specific stats (current run only)
-                        run_id = getattr(self, '_run_id', None)
-                        current_game = getattr(self, '_current_game_number', 1)
-                        stats = get_run_stats(run_id) if run_id else get_session_stats()
+                        # Get all dashboard stats
+                        ds = self._get_dashboard_stats()
                         publisher.publish_state(
                             move_edge=edge,
                             move_color=color,
@@ -1703,16 +1737,7 @@ class WebPlayer:
                             move_player="us",
                             board_state=current_board,
                             vertex_state=vertex_colors,
-                            current_game=current_game,
-                            completed_games=stats.completed_games if stats else 0,
-                            wins=stats.wins if stats else 0,
-                            draws=stats.draws if stats else 0,
-                            losses=stats.losses if stats else 0,
-                            avg_score=stats.avg_score if stats else None,
-                            median_score=stats.median_score if stats else None,
-                            min_score=stats.min_score if stats else None,
-                            max_score=stats.max_score if stats else None,
-                            std_score=stats.score_std if stats else None,
+                            **ds,
                         )
                     except Exception as e:
                         self.logger.debug(f"Move publish failed: {e}")
@@ -1790,10 +1815,8 @@ class WebPlayer:
                         edges_colored = sum(1 for c in state_after_opponent if c in 'GP')
                         self.logger.info(f"DEBUG opp publishing: edges={edges_colored}, board={state_after_opponent}, vertices={vertex_colors}")
 
-                        # Get run-specific stats (current run only)
-                        run_id = getattr(self, '_run_id', None)
-                        current_game = getattr(self, '_current_game_number', 1)
-                        stats = get_run_stats(run_id) if run_id else get_session_stats()
+                        # Get all dashboard stats
+                        ds = self._get_dashboard_stats()
                         publisher.publish_state(
                             move_edge=opponent_edge,
                             move_color=opponent_color,
@@ -1802,16 +1825,7 @@ class WebPlayer:
                             move_player="opponent",
                             board_state=state_after_opponent,
                             vertex_state=vertex_colors,
-                            current_game=current_game,
-                            completed_games=stats.completed_games if stats else 0,
-                            wins=stats.wins if stats else 0,
-                            draws=stats.draws if stats else 0,
-                            losses=stats.losses if stats else 0,
-                            avg_score=stats.avg_score if stats else None,
-                            median_score=stats.median_score if stats else None,
-                            min_score=stats.min_score if stats else None,
-                            max_score=stats.max_score if stats else None,
-                            std_score=stats.score_std if stats else None,
+                            **ds,
                         )
                     except Exception as e:
                         self.logger.debug(f"Opponent move publish failed: {e}")
@@ -1895,46 +1909,15 @@ class WebPlayer:
                 self.logger.info(f"Session Stats: {gs['wins']}W / {gs['losses']}L / {gs['draws']}D")
 
         # Publish game result to dashboard immediately (don't wait for next game)
-        run_id = getattr(self, '_run_id', None)
-        current_game = getattr(self, '_current_game_number', 1)
         publisher = get_publisher()
-        if publisher.is_configured() and run_id:
+        if publisher.is_configured():
             try:
                 publisher.game_completed()  # Finalize turn time tracking
-                run_stats = get_run_stats(run_id)
-                if run_stats:
-                    # Calculate recent_5 from run games only
-                    completed = [g for g in run_stats.games if g.result is not None]
-                    recent = completed[-5:] if len(completed) >= 5 else completed
-                    recent_5 = ''.join('W' if g.result == 'win' else 'L' if g.result == 'loss' else 'D' for g in recent)
-
-                    # Calculate score_trend from run games only
-                    score_trend = None
-                    if len(completed) >= 4:
-                        scores = [g.final_score for g in completed if g.final_score is not None]
-                        if len(scores) >= 4:
-                            first_half = scores[:len(scores)//2]
-                            second_half = scores[len(scores)//2:]
-                            score_trend = sum(second_half)/len(second_half) - sum(first_half)/len(first_half)
-
-                    publisher.publish_state(
-                        board_state=terminal_state,
-                        current_game=current_game,
-                        completed_games=run_stats.completed_games,
-                        wins=run_stats.wins,
-                        draws=run_stats.draws,
-                        losses=run_stats.losses,
-                        avg_score=run_stats.avg_score,
-                        median_score=run_stats.median_score,
-                        min_score=run_stats.min_score,
-                        max_score=run_stats.max_score,
-                        std_score=run_stats.score_std,
-                        recent_5=recent_5,
-                        score_trend=score_trend,
-                        avg_entropy=run_stats.avg_entropy,
-                        avg_top3_hit=run_stats.avg_top3_hit,
-                        avg_pred_accuracy=run_stats.avg_prediction_accuracy,
-                    )
+                ds = self._get_dashboard_stats()
+                publisher.publish_state(
+                    board_state=terminal_state,
+                    **ds,
+                )
             except Exception as e:
                 self.logger.debug(f"Game-end publish failed: {e}")
 
