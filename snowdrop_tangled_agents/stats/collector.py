@@ -871,6 +871,10 @@ class StatsCollector:
         """
         Get active run or create a new one.
 
+        If an active run exists but has different parameters (strategy or opponent),
+        a new run is started instead of resuming. This ensures each unique
+        configuration gets its own run for proper tracking.
+
         Args:
             planned_games: Total games planned (used for new run)
             strategy: Strategy being used
@@ -882,10 +886,22 @@ class StatsCollector:
         active = self.get_active_run()
 
         if active:
-            run_id = active['id']
-            game_number = self.get_next_game_number(run_id)
-            logger.info(f"Resuming run {run_id}: game {game_number}/{active['planned_games']}")
-            return run_id, game_number
+            # Check if parameters match - if not, start a new run
+            active_strategy = active.get('strategy')
+            active_opponent = active.get('opponent')
+
+            if active_strategy != strategy or active_opponent != opponent:
+                logger.info(
+                    f"Active run {active['id']} has different parameters "
+                    f"(strategy={active_strategy}, opponent={active_opponent}) vs "
+                    f"(strategy={strategy}, opponent={opponent}) - starting new run"
+                )
+            else:
+                # Parameters match - resume existing run
+                run_id = active['id']
+                game_number = self.get_next_game_number(run_id)
+                logger.info(f"Resuming run {run_id}: game {game_number}/{active['planned_games']}")
+                return run_id, game_number
 
         run_id = self.start_run(
             planned_games=planned_games,
