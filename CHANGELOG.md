@@ -297,6 +297,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Removed redundant post-game publish block in main loop (single publisher at game end)
   - Fixes issue where dashboard showed stats from previous runs mixed with current run
 
+- **Complete Dashboard State Every Publish** (`play_tangled.py`)
+  - Added `_get_dashboard_stats()` helper that computes all dashboard fields
+  - Every publish now sends complete state: session, results, scores, trends, and model metrics
+  - Dashboard displays retain values during gameplay (no more blank stats mid-game)
+  - Simplifies dashboard code: just display what's received, no caching needed
+
 - **Default Strategy Changed** (`play_tangled.py`)
   - Changed default strategy from `heuristic` to `hybrid_solver`
   - HybridSolverStrategy with REINFORCE learning is now the recommended approach
