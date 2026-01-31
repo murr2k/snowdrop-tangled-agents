@@ -9,6 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **AlphaQ Explorer Strategy with Closed Learning Loop** (`matlab_strategy.py`, `TangledMCTS.m`, `HybridTangledSolver.m`)
+  - Two-phase explore/exploit strategy designed for the new "AlphaQ Up" opponent
+  - **Exploration phase** (games 0–29): Cycles all 30 possible first moves with learning disabled,
+    recording per-opening win/score data to identify weaknesses in AlphaQ's play
+  - **Exploitation phase** (games 30+): Re-enables REINFORCE learning (rate 0.03) and rotates
+    only the top-N openings ranked by (wins, avg_score). After each game the updated
+    `edge_adjustments` are forwarded into MATLAB via `hybridSolver.setEdgeBias()`, closing the
+    learning loop so the next game's MCTS rollout priors reflect what was learned
+  - **Closed learning loop** — the critical new capability. Previously `HybridSolverStrategy`
+    ran REINFORCE and accumulated `edge_adjustments` in Python but never applied them to the
+    MATLAB solver. Now `TangledMCTS` carries an `EdgeBias` vector (1×15) that is added to the
+    heuristic prior inside `computeRolloutPrior` and clamped to [0.001, 0.999]. `setEdgeBias()`
+    on both `TangledMCTS` and `HybridTangledSolver` propagates updates, and `setPlayer()`
+    re-applies any existing bias to the freshly constructed MCTS instance
+  - Persistent state at `~/.tangled/alphaq_explorer_state.json` (phase, exploration results,
+    exploitation openings, index). Safe to resume mid-run: exploitation phase re-enables learning
+    and re-pushes accumulated edge bias at `initialize()` time
+  - New opponent `"alphaq"` ("AlphaQ Up") added to `play_tangled.py`
+  - CLI: `python play_tangled.py --strategy alphaq_explorer --opponent alphaq --run 30`
+
 - **Run Tracking & Resume System** (Migration v8)
   - New `runs` table tracks planned game batches with progress
   - Games store `run_id` and `game_number` for batch tracking

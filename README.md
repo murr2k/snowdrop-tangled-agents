@@ -325,6 +325,47 @@ Plots are saved to `plots/` with naming: `{type}_{YYYYMMDD}_{HHMMSS}.png`
 
 See `docs/GAME_ANALYTICS.md` for complete documentation and research applications.
 
+### 10. AlphaQ Explorer — Closed-Loop Learning Against a New Opponent (January 2026)
+
+A two-phase explore/exploit strategy built to contend with the new **AlphaQ Up** opponent.
+The key advance over previous opponent-specific strategies is a **closed learning loop**: learned
+edge-value adjustments now actually modify the MATLAB MCTS rollout priors, so the solver gets
+stronger with every game it plays.
+
+**How it works:**
+
+| Phase | Games | Behaviour |
+|-------|-------|-----------|
+| Exploration | 0–29 | Cycles all 30 possible first moves (15 edges × 2 colors). Learning is disabled so each opening is tested under identical solver conditions. Win/score is recorded per opening. |
+| Exploitation | 30+ | Re-enables REINFORCE learning. Rotates only the top-N openings (default 5) ranked by wins then avg score. After every game, the updated `edge_adjustments` vector is pushed into MATLAB via `hybridSolver.setEdgeBias()`. |
+
+**The closed loop in detail:**
+
+Previously `HybridSolverStrategy` ran REINFORCE and accumulated per-edge adjustments in Python,
+but those values were never fed back into the MATLAB solver — the MCTS rollouts kept using the
+same static heuristic priors every game. This change adds:
+
+1. An `EdgeBias` property (1×15 double) to both `TangledMCTS` and `HybridTangledSolver`
+2. A `setEdgeBias()` method on both classes, with the solver forwarding to its MCTS instance
+3. Two lines at the end of `computeRolloutPrior`: `prior += EdgeBias(edge)`, clamped to [0.001, 0.999]
+4. Bias preservation across `setPlayer()` so a new MCTS instance inherits learned adjustments
+5. `AlphaQExplorerStrategy._push_edge_bias()` which calls `hybridSolver.setEdgeBias([...])` after
+   each exploitation game, closing the loop
+
+**Persistence and resumability:** Full strategy state (phase, exploration results, exploitation
+openings, index) is saved to `~/.tangled/alphaq_explorer_state.json`. If a run is interrupted
+during exploitation, the next run re-enables learning and re-pushes the accumulated bias before
+playing.
+
+```bash
+# Run 30 exploration games followed by exploitation
+python play_tangled.py --strategy alphaq_explorer --opponent alphaq --run 60
+
+# Check what the explorer learned
+cat ~/.tangled/alphaq_explorer_state.json
+cat ~/.tangled/hybrid_solver_adjustments.json
+```
+
 ### Documentation
 
 - `docs/THEORY_OF_OPERATION.md` - Comprehensive system documentation

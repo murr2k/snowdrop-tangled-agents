@@ -141,10 +141,15 @@ try:
         get_unified_bridge,
         print_training_status,
     )
+    from snowdrop_tangled_agents.matlab.matlab_strategy import AmaraExplorerStrategy, AmaraKillerStrategy, MelissaKillerStrategy, AlphaQExplorerStrategy
     MATLAB_IMPORTS_AVAILABLE = True
 except ImportError:
     MATLAB_IMPORTS_AVAILABLE = False
     HybridSolverStrategy = None
+    AmaraExplorerStrategy = None
+    AmaraKillerStrategy = None
+    MelissaKillerStrategy = None
+    AlphaQExplorerStrategy = None
     print_training_status = None
 
 # Check actual MATLAB Engine availability (not just Python wrappers)
@@ -426,6 +431,8 @@ class WebPlayer:
         "randy": "Random Randy",
         "amara": "AlphaZero Amara",
         "melissa": "MCTS Melissa",
+        "andy": "AlphaZero Andy",
+        "alphaq": "AlphaQ Up",
     }
 
     def __init__(
@@ -433,8 +440,8 @@ class WebPlayer:
         headless: bool = False,
         slow_mo: int = 100,
         strategy_type: str = "heuristic",
-        mcts_time: float = 2.0,
-        mcts_iterations: int = 5000,
+        mcts_time: float = 30.0,
+        mcts_iterations: int = 1_000_000,
         use_nn: bool = True,
         adapt_opponent: bool = True,
     ):
@@ -520,6 +527,49 @@ class WebPlayer:
                     minimax_depth=4,
                     mcts_iterations=5000,
                     player=1,
+                )
+        elif strategy_type == "amara_explorer":
+            if not MATLAB_AVAILABLE or AmaraExplorerStrategy is None:
+                self.strategy = MCTSStrategy(time_limit=10.0, max_iterations=10000)
+            else:
+                self.strategy = AmaraExplorerStrategy(
+                    time_limit=10.0,
+                    minimax_depth=4,
+                    mcts_iterations=5000,
+                    player=1,
+                )
+        elif strategy_type == "amara_killer":
+            if not MATLAB_AVAILABLE or AmaraKillerStrategy is None:
+                self.strategy = MCTSStrategy(time_limit=10.0, max_iterations=10000)
+            else:
+                self.strategy = AmaraKillerStrategy(
+                    time_limit=10.0,
+                    minimax_depth=4,
+                    mcts_iterations=5000,
+                    player=1,
+                    opening_mode='best',  # Always use E14P (highest win score)
+                )
+        elif strategy_type == "melissa_killer":
+            if not MATLAB_AVAILABLE or MelissaKillerStrategy is None:
+                self.strategy = MCTSStrategy(time_limit=10.0, max_iterations=10000)
+            else:
+                self.strategy = MelissaKillerStrategy(
+                    time_limit=10.0,
+                    minimax_depth=4,
+                    mcts_iterations=5000,
+                    player=1,
+                    opening_mode='cycle',  # Cycle through E9G, E12P, E13P
+                )
+        elif strategy_type == "alphaq_explorer":
+            if not MATLAB_AVAILABLE or AlphaQExplorerStrategy is None:
+                self.strategy = MCTSStrategy(time_limit=30.0, max_iterations=1_000_000)
+            else:
+                self.strategy = AlphaQExplorerStrategy(
+                    time_limit=30.0,
+                    minimax_depth=4,
+                    mcts_iterations=5000,
+                    player=1,
+                    top_n_openings=5,
                 )
         else:  # "heuristic" (default)
             self.strategy = PetersenStrategy(params_path=self.params_path)
@@ -1760,7 +1810,7 @@ class WebPlayer:
             # Wait for opponent to play (using both turn indicator and board state)
             opponent_start_time = time.time()
             try:
-                if not self.wait_for_opponent_to_play(timeout=30.0, stuck_timeout=180.0, initial_grey_count=our_grey_count):
+                if not self.wait_for_opponent_to_play(timeout=30.0, stuck_timeout=240.0, initial_grey_count=our_grey_count):
                     break
             except StuckOpponentError:
                 # Opponent is stuck - abandon this game and signal restart needed
@@ -1934,19 +1984,19 @@ class WebPlayer:
 
 def main():
     parser = argparse.ArgumentParser(description="Play Tangled on tangled-game.com")
-    parser.add_argument("--opponent", "-o", choices=["randy", "amara", "melissa"], default="melissa")
+    parser.add_argument("--opponent", "-o", choices=["randy", "amara", "melissa", "andy", "alphaq"], default="melissa")
     parser.add_argument("--games", "-n", type=int, default=5)
     parser.add_argument("--run", "-r", type=int, help="Start/resume a run of N planned games (enables run tracking)")
     parser.add_argument("--slow-mo", type=int, default=100)
     parser.add_argument("--debug", action="store_true")
     parser.add_argument("--keep-open", "-k", type=int, default=5,
                         help="Seconds to keep browser open after last game (0 to close immediately)")
-    parser.add_argument("--strategy", "-s", choices=["heuristic", "mcts", "hybrid", "matlab", "rl", "ensemble", "matlab_mcts", "hybrid_solver"], default="hybrid_solver",
-                        help="Strategy to use: hybrid_solver (DEFAULT: D-Wave inspired minimax+MCTS+learning), hybrid (MCTS with opening), mcts (Monte Carlo), heuristic (fast), matlab (MATLAB-enhanced), rl (trained PPO), ensemble (RL + MC rollouts), matlab_mcts (MATLAB MCTS)")
-    parser.add_argument("--mcts-time", type=float, default=2.0,
-                        help="MCTS time limit per move in seconds")
-    parser.add_argument("--mcts-iterations", type=int, default=5000,
-                        help="Maximum MCTS iterations per move")
+    parser.add_argument("--strategy", "-s", choices=["heuristic", "mcts", "hybrid", "matlab", "rl", "ensemble", "matlab_mcts", "hybrid_solver", "amara_explorer", "amara_killer", "melissa_killer", "alphaq_explorer"], default="hybrid_solver",
+                        help="Strategy to use: hybrid_solver (DEFAULT: D-Wave inspired minimax+MCTS+learning), alphaq_explorer (explore/exploit vs AlphaQ Up with closed learning loop), amara_killer (uses E14P against Amara), melissa_killer (cycles E12P/E13P against Melissa - 40%% win rate), amara_explorer (cycles all 30 openings), hybrid (MCTS with opening), mcts (Monte Carlo, 30s/move), heuristic (fast), matlab (MATLAB-enhanced), rl (trained PPO), ensemble (RL + MC rollouts), matlab_mcts (MATLAB MCTS)")
+    parser.add_argument("--mcts-time", type=float, default=30.0,
+                        help="MCTS time limit per move in seconds (default 30s to leverage compute advantage)")
+    parser.add_argument("--mcts-iterations", type=int, default=1000000,
+                        help="Maximum MCTS iterations per move (default 1M - time is the real limit)")
     parser.add_argument("--stats", action="store_true",
                         help="Show statistics summary and exit (no games played)")
     parser.add_argument("--calibration", action="store_true",

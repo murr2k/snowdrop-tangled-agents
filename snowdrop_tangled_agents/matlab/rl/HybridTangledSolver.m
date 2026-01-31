@@ -61,6 +61,9 @@ classdef HybridTangledSolver < handle
         % LUT for direct evaluation
         LUT ExpandedLUT
         LUTLoaded logical = false
+
+        % Learned edge bias from REINFORCE (1x15, default zeros)
+        EdgeBias double = zeros(1, 15)
     end
 
     methods
@@ -438,6 +441,17 @@ classdef HybridTangledSolver < handle
             this.MCTS = TangledMCTS('Iterations', this.MCTSIterations, ...
                                     'TimeLimit', mctsTime, ...
                                     'Player', player);
+
+            % Re-apply any previously set edge bias to new MCTS instance
+            if any(this.EdgeBias ~= 0)
+                this.MCTS.setEdgeBias(this.EdgeBias);
+            end
+        end
+
+        function setEdgeBias(this, bias)
+            %SETEDGEBIAS Set learned edge bias and propagate to MCTS
+            this.EdgeBias = bias;
+            this.MCTS.setEdgeBias(bias);
         end
 
         function stats = getStats(this)

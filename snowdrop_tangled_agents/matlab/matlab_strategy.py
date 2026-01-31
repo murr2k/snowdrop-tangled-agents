@@ -832,3 +832,966 @@ class HybridSolverStrategy:
             'win_rate': wins / len(self.game_results) if self.game_results else 0,
             'edge_adjustments': self.edge_adjustments
         }
+
+
+class AmaraExplorerStrategy:
+    """
+    Strategy for systematically exploring openings against Amara.
+
+    Wraps HybridSolverStrategy but forces different opening moves to
+    explore branches of the game tree that Amara may not have seen
+    during training.
+
+    Cycles through all 30 possible first moves (15 edges × 2 colors)
+    to find potential weaknesses in Amara's play.
+
+    Based on advice from Geordie Rose: "make moves that are not the
+    best ones" in the early game to reach positions unlikely to have
+    been seen during training.
+    """
+
+    NUM_EDGES = 15
+    COLORS = ['G', 'P']  # Green, Purple
+
+    # All 30 possible opening moves
+    ALL_OPENINGS = [(edge, color) for edge in range(15) for color in ['G', 'P']]
+
+    def __init__(
+        self,
+        time_limit: float = 10.0,
+        minimax_depth: int = 4,
+        mcts_iterations: int = 5000,
+        player: int = 1,
+        state_path: Optional[Path] = None,
+    ):
+        """
+        Initialize AmaraExplorerStrategy.
+
+        Args:
+            time_limit: Time budget per move for underlying solver
+            minimax_depth: Depth for minimax in underlying solver
+            mcts_iterations: MCTS iterations in underlying solver
+            player: Player perspective (1 or 2)
+            state_path: Path to persist exploration state
+        """
+        # Create underlying hybrid solver (no learning - we want controlled experiments)
+        self.solver = HybridSolverStrategy(
+            time_limit=time_limit,
+            minimax_depth=minimax_depth,
+            mcts_iterations=mcts_iterations,
+            player=player,
+            learning_rate=0.0,  # Disable learning during exploration
+        )
+
+        # Exploration state
+        self.state_path = state_path or Path.home() / ".tangled" / "amara_explorer_state.json"
+        self.current_opening_index = 0
+        self.exploration_results = {}  # {opening: [(score, result), ...]}
+        self._load_state()
+
+        # Track current game
+        self.current_game_opening = None
+        self.move_count = 0
+
+    def _load_state(self):
+        """Load exploration state from disk."""
+        try:
+            if self.state_path.exists():
+                import json
+                with open(self.state_path) as f:
+                    data = json.load(f)
+                self.current_opening_index = data.get('current_opening_index', 0)
+                self.exploration_results = data.get('exploration_results', {})
+                logger.info(
+                    f"Loaded explorer state: opening {self.current_opening_index}/30, "
+                    f"{sum(len(v) for v in self.exploration_results.values())} games recorded"
+                )
+        except Exception as e:
+            logger.warning(f"Failed to load explorer state: {e}")
+
+    def _save_state(self):
+        """Save exploration state to disk."""
+        try:
+            import json
+            self.state_path.parent.mkdir(parents=True, exist_ok=True)
+            data = {
+                'current_opening_index': self.current_opening_index,
+                'exploration_results': self.exploration_results,
+                'last_updated': __import__('datetime').datetime.now().isoformat(),
+            }
+            with open(self.state_path, 'w') as f:
+                json.dump(data, f, indent=2)
+        except Exception as e:
+            logger.warning(f"Failed to save explorer state: {e}")
+
+    def initialize(self, opponent: Optional[str] = None) -> bool:
+        """Initialize the underlying solver."""
+        return self.solver.initialize(opponent)
+
+    def calculate_move(
+        self,
+        state: str,
+        score: float = 0.0,
+        score_history: list = None
+    ) -> Optional[Tuple[int, str, dict]]:
+        """
+        Calculate move, forcing specific opening on first move.
+
+        Args:
+            state: 15-char board state
+            score: Current score
+            score_history: Score history
+
+        Returns:
+            (edge, color, stats) tuple
+        """
+        grey_count = state.count('-')
+
+        # First move of game (all edges grey)?
+        if grey_count == 15:
+            self.move_count = 1
+
+            # Get the opening for this game
+            opening = self.ALL_OPENINGS[self.current_opening_index]
+            self.current_game_opening = opening
+            edge, color = opening
+
+            logger.info(
+                f"AmaraExplorer: Forcing opening {self.current_opening_index + 1}/30: "
+                f"E{edge} {color}"
+            )
+
+            stats = {
+                'strategy': 'amara_explorer_opening',
+                'predicted_score': 0.0,
+                'opening_index': self.current_opening_index,
+                'forced_opening': f"E{edge}{color}",
+            }
+
+            return (edge, color, stats)
+
+        # After first move, use underlying solver
+        self.move_count += 1
+        return self.solver.calculate_move(state, score, score_history)
+
+    def record_move(self, edge: int, color: str, score_after: float):
+        """Record move (delegate to solver for non-opening moves)."""
+        if self.move_count > 1:
+            self.solver.record_move(edge, color, score_after)
+
+    def end_game(self, result: str, final_score: float):
+        """
+        Record game result and advance to next opening.
+
+        Args:
+            result: 'win', 'loss', or 'draw'
+            final_score: Final game score
+        """
+        # Record result for this opening
+        if self.current_game_opening:
+            opening_key = f"E{self.current_game_opening[0]}{self.current_game_opening[1]}"
+            if opening_key not in self.exploration_results:
+                self.exploration_results[opening_key] = []
+            self.exploration_results[opening_key].append({
+                'score': final_score,
+                'result': result,
+            })
+
+            logger.info(
+                f"AmaraExplorer: Opening {opening_key} -> {result} (score: {final_score:+.4f})"
+            )
+
+        # Advance to next opening
+        self.current_opening_index = (self.current_opening_index + 1) % len(self.ALL_OPENINGS)
+
+        # Save state
+        self._save_state()
+
+        # Reset for next game
+        self.current_game_opening = None
+        self.move_count = 0
+
+    def get_exploration_summary(self) -> dict:
+        """Get summary of exploration results."""
+        summary = {
+            'total_openings': len(self.ALL_OPENINGS),
+            'openings_tested': len(self.exploration_results),
+            'current_index': self.current_opening_index,
+            'next_opening': f"E{self.ALL_OPENINGS[self.current_opening_index][0]}"
+                           f"{self.ALL_OPENINGS[self.current_opening_index][1]}",
+            'results_by_opening': {},
+        }
+
+        for opening, results in self.exploration_results.items():
+            wins = sum(1 for r in results if r['result'] == 'win')
+            losses = sum(1 for r in results if r['result'] == 'loss')
+            draws = sum(1 for r in results if r['result'] == 'draw')
+            avg_score = sum(r['score'] for r in results) / len(results) if results else 0
+
+            summary['results_by_opening'][opening] = {
+                'games': len(results),
+                'wins': wins,
+                'losses': losses,
+                'draws': draws,
+                'avg_score': avg_score,
+            }
+
+        # Find best opening so far
+        if summary['results_by_opening']:
+            best = max(
+                summary['results_by_opening'].items(),
+                key=lambda x: (x[1]['wins'], x[1]['avg_score'])
+            )
+            summary['best_opening'] = best[0]
+            summary['best_opening_stats'] = best[1]
+
+        return summary
+
+    def get_stats(self) -> dict:
+        """Get strategy statistics."""
+        stats = self.solver.get_stats() if hasattr(self.solver, 'get_stats') else {}
+        stats['exploration'] = self.get_exploration_summary()
+        return stats
+
+
+class AmaraKillerStrategy:
+    """
+    Optimized strategy for defeating Amara based on exploration results.
+
+    Uses proven winning openings discovered through systematic exploration
+    of all 30 possible first moves. Prioritizes openings that found gaps
+    in Amara's D-Wave training data.
+
+    Winning openings (Run 32, January 25, 2026):
+    - E14P: +1.799 (highest score)
+    - E1G:  +1.382
+    - E4G:  +0.864
+    - E4P:  -1.547 (win)
+    - E12P: -1.474 (win)
+    """
+
+    # Proven winning openings, ordered by score
+    WINNING_OPENINGS = [
+        (14, 'P'),  # E14P: +1.799 - Best opening
+        (1, 'G'),   # E1G:  +1.382 - Inner cross
+        (4, 'G'),   # E4G:  +0.864 - Inner cross
+        (4, 'P'),   # E4P:  win    - Same edge weakness
+        (12, 'P'),  # E12P: win    - Outer ring
+    ]
+
+    # Openings to avoid (losses)
+    LOSING_OPENINGS = [
+        (10, 'P'),  # E10P: -0.138
+        (12, 'G'),  # E12G: -0.131
+        (0, 'P'),   # E0P:  -0.060
+    ]
+
+    def __init__(
+        self,
+        time_limit: float = 10.0,
+        minimax_depth: int = 4,
+        mcts_iterations: int = 5000,
+        player: int = 1,
+        opening_mode: str = 'best',
+        state_path: Optional[Path] = None,
+    ):
+        """
+        Initialize AmaraKillerStrategy.
+
+        Args:
+            time_limit: Time budget per move for underlying solver
+            minimax_depth: Depth for minimax in underlying solver
+            mcts_iterations: MCTS iterations in underlying solver
+            player: Player perspective (1 or 2)
+            opening_mode: 'best' (always E14P), 'cycle' (rotate through winners),
+                         'random' (random winning opening)
+            state_path: Path to persist state for cycle mode
+        """
+        self.solver = HybridSolverStrategy(
+            time_limit=time_limit,
+            minimax_depth=minimax_depth,
+            mcts_iterations=mcts_iterations,
+            player=player,
+            learning_rate=0.03,  # Enable learning
+        )
+
+        self.opening_mode = opening_mode
+        self.state_path = state_path or Path.home() / ".tangled" / "amara_killer_state.json"
+
+        # Track wins/games per opening
+        self.opening_stats = {f"E{e}{c}": {'wins': 0, 'games': 0}
+                             for e, c in self.WINNING_OPENINGS}
+        self.current_opening_index = 0
+        self._load_state()
+
+        # Current game state
+        self.current_game_opening = None
+        self.move_count = 0
+
+    def _load_state(self):
+        """Load state from disk."""
+        try:
+            if self.state_path.exists():
+                import json
+                with open(self.state_path) as f:
+                    data = json.load(f)
+                self.current_opening_index = data.get('current_opening_index', 0)
+                self.opening_stats = data.get('opening_stats', self.opening_stats)
+                total_games = sum(s['games'] for s in self.opening_stats.values())
+                total_wins = sum(s['wins'] for s in self.opening_stats.values())
+                logger.info(
+                    f"Loaded amara_killer state: {total_wins}/{total_games} wins, "
+                    f"mode={self.opening_mode}"
+                )
+        except Exception as e:
+            logger.warning(f"Failed to load amara_killer state: {e}")
+
+    def _save_state(self):
+        """Save state to disk."""
+        try:
+            import json
+            self.state_path.parent.mkdir(parents=True, exist_ok=True)
+            data = {
+                'current_opening_index': self.current_opening_index,
+                'opening_stats': self.opening_stats,
+                'last_updated': __import__('datetime').datetime.now().isoformat(),
+            }
+            with open(self.state_path, 'w') as f:
+                json.dump(data, f, indent=2)
+        except Exception as e:
+            logger.warning(f"Failed to save amara_killer state: {e}")
+
+    def _select_opening(self) -> Tuple[int, str]:
+        """Select opening based on mode."""
+        if self.opening_mode == 'best':
+            # Always use the highest-scoring opening
+            return self.WINNING_OPENINGS[0]
+
+        elif self.opening_mode == 'cycle':
+            # Cycle through winning openings
+            opening = self.WINNING_OPENINGS[self.current_opening_index]
+            return opening
+
+        elif self.opening_mode == 'random':
+            # Random winning opening
+            import random
+            return random.choice(self.WINNING_OPENINGS)
+
+        else:
+            # Default to best
+            return self.WINNING_OPENINGS[0]
+
+    def initialize(self, opponent: Optional[str] = None) -> bool:
+        """Initialize the underlying solver."""
+        return self.solver.initialize(opponent)
+
+    def calculate_move(
+        self,
+        state: str,
+        score: float = 0.0,
+        score_history: list = None
+    ) -> Optional[Tuple[int, str, dict]]:
+        """
+        Calculate move, using winning openings on first move.
+
+        Args:
+            state: 15-char board state
+            score: Current score
+            score_history: Score history
+
+        Returns:
+            (edge, color, stats) tuple
+        """
+        grey_count = state.count('-')
+
+        # First move of game (all edges grey)?
+        if grey_count == 15:
+            self.move_count = 1
+
+            # Select winning opening
+            edge, color = self._select_opening()
+            self.current_game_opening = (edge, color)
+
+            opening_key = f"E{edge}{color}"
+            logger.info(f"AmaraKiller: Using opening {opening_key}")
+
+            stats = {
+                'strategy': 'amara_killer_opening',
+                'predicted_score': 1.0,  # Optimistic - these are winning openings
+                'opening': opening_key,
+                'opening_mode': self.opening_mode,
+            }
+
+            return (edge, color, stats)
+
+        # After first move, use underlying solver
+        self.move_count += 1
+        return self.solver.calculate_move(state, score, score_history)
+
+    def record_move(self, edge: int, color: str, score_after: float):
+        """Record move for learning."""
+        if self.move_count > 1:
+            self.solver.record_move(edge, color, score_after)
+
+    def end_game(self, result: str, final_score: float):
+        """
+        Record game result and update statistics.
+
+        Args:
+            result: 'win', 'loss', or 'draw'
+            final_score: Final game score
+        """
+        # Update opening stats
+        if self.current_game_opening:
+            opening_key = f"E{self.current_game_opening[0]}{self.current_game_opening[1]}"
+            if opening_key in self.opening_stats:
+                self.opening_stats[opening_key]['games'] += 1
+                if result == 'win':
+                    self.opening_stats[opening_key]['wins'] += 1
+
+            logger.info(
+                f"AmaraKiller: {opening_key} -> {result} (score: {final_score:+.4f})"
+            )
+
+        # Advance cycle index
+        if self.opening_mode == 'cycle':
+            self.current_opening_index = (
+                (self.current_opening_index + 1) % len(self.WINNING_OPENINGS)
+            )
+
+        # Delegate to solver for learning
+        self.solver.end_game(result, final_score)
+
+        # Save state
+        self._save_state()
+
+        # Reset for next game
+        self.current_game_opening = None
+        self.move_count = 0
+
+    def get_stats(self) -> dict:
+        """Get strategy statistics."""
+        stats = self.solver.get_stats() if hasattr(self.solver, 'get_stats') else {}
+
+        total_games = sum(s['games'] for s in self.opening_stats.values())
+        total_wins = sum(s['wins'] for s in self.opening_stats.values())
+
+        stats['amara_killer'] = {
+            'opening_mode': self.opening_mode,
+            'total_games': total_games,
+            'total_wins': total_wins,
+            'win_rate': total_wins / total_games if total_games > 0 else 0,
+            'opening_stats': self.opening_stats,
+        }
+
+        return stats
+
+
+class MelissaKillerStrategy:
+    """
+    Optimized strategy for defeating Melissa based on exploration results.
+
+    Uses proven winning openings discovered through systematic exploration.
+    Unlike Amara, Melissa has more variance, so we use openings that
+    consistently won across multiple runs.
+
+    Run 37 analysis (30 games, January 25, 2026):
+    - E12P: 60% win rate (6W/2D/2L) - Best opening
+    - E13P: 50% win rate (5W/2D/3L) - Second best
+    - E9G:  10% win rate (1W/5D/4L) - Dropped from rotation
+    """
+
+    # Proven winning openings against Melissa
+    WINNING_OPENINGS = [
+        (12, 'P'),  # E12P: 60% win rate - primary opening
+        (13, 'P'),  # E13P: 50% win rate - secondary opening
+    ]
+
+    # Safe openings (never lost in both runs)
+    SAFE_OPENINGS = [
+        (4, 'P'),   # E4P:  draw/draw
+        (5, 'P'),   # E5P:  draw/draw
+        (13, 'P'),  # E13P: draw/win
+        (14, 'P'),  # E14P: draw/draw
+    ]
+
+    def __init__(
+        self,
+        time_limit: float = 10.0,
+        minimax_depth: int = 4,
+        mcts_iterations: int = 5000,
+        player: int = 1,
+        opening_mode: str = 'best',
+        state_path: Optional[Path] = None,
+    ):
+        """
+        Initialize MelissaKillerStrategy.
+
+        Args:
+            time_limit: Time budget per move for underlying solver
+            minimax_depth: Depth for minimax in underlying solver
+            mcts_iterations: MCTS iterations in underlying solver
+            player: Player perspective (1 or 2)
+            opening_mode: 'best' (always E9G), 'cycle' (rotate through winners),
+                         'random' (random winning opening)
+            state_path: Path to persist state for cycle mode
+        """
+        self.solver = HybridSolverStrategy(
+            time_limit=time_limit,
+            minimax_depth=minimax_depth,
+            mcts_iterations=mcts_iterations,
+            player=player,
+            learning_rate=0.03,
+        )
+
+        self.opening_mode = opening_mode
+        self.state_path = state_path or Path.home() / ".tangled" / "melissa_killer_state.json"
+
+        self.opening_stats = {f"E{e}{c}": {'wins': 0, 'games': 0}
+                             for e, c in self.WINNING_OPENINGS}
+        self.current_opening_index = 0
+        self._load_state()
+
+        self.current_game_opening = None
+        self.move_count = 0
+
+    def _load_state(self):
+        """Load state from disk."""
+        try:
+            if self.state_path.exists():
+                import json
+                with open(self.state_path) as f:
+                    data = json.load(f)
+                self.current_opening_index = data.get('current_opening_index', 0)
+                self.opening_stats = data.get('opening_stats', self.opening_stats)
+                total_games = sum(s['games'] for s in self.opening_stats.values())
+                total_wins = sum(s['wins'] for s in self.opening_stats.values())
+                logger.info(
+                    f"Loaded melissa_killer state: {total_wins}/{total_games} wins"
+                )
+        except Exception as e:
+            logger.warning(f"Failed to load melissa_killer state: {e}")
+
+    def _save_state(self):
+        """Save state to disk."""
+        try:
+            import json
+            self.state_path.parent.mkdir(parents=True, exist_ok=True)
+            data = {
+                'current_opening_index': self.current_opening_index,
+                'opening_stats': self.opening_stats,
+                'last_updated': __import__('datetime').datetime.now().isoformat(),
+            }
+            with open(self.state_path, 'w') as f:
+                json.dump(data, f, indent=2)
+        except Exception as e:
+            logger.warning(f"Failed to save melissa_killer state: {e}")
+
+    def _select_opening(self) -> Tuple[int, str]:
+        """Select opening based on mode."""
+        if self.opening_mode == 'best':
+            return self.WINNING_OPENINGS[0]
+        elif self.opening_mode == 'cycle':
+            opening = self.WINNING_OPENINGS[self.current_opening_index]
+            return opening
+        elif self.opening_mode == 'random':
+            import random
+            return random.choice(self.WINNING_OPENINGS)
+        else:
+            return self.WINNING_OPENINGS[0]
+
+    def initialize(self, opponent: Optional[str] = None) -> bool:
+        """Initialize the underlying solver."""
+        return self.solver.initialize(opponent)
+
+    def calculate_move(
+        self,
+        state: str,
+        score: float = 0.0,
+        score_history: list = None
+    ) -> Optional[Tuple[int, str, dict]]:
+        """Calculate move, using winning openings on first move."""
+        grey_count = state.count('-')
+
+        if grey_count == 15:
+            self.move_count = 1
+            edge, color = self._select_opening()
+            self.current_game_opening = (edge, color)
+
+            opening_key = f"E{edge}{color}"
+            logger.info(f"MelissaKiller: Using opening {opening_key}")
+
+            stats = {
+                'strategy': 'melissa_killer_opening',
+                'predicted_score': 1.0,
+                'opening': opening_key,
+                'opening_mode': self.opening_mode,
+            }
+
+            return (edge, color, stats)
+
+        self.move_count += 1
+        return self.solver.calculate_move(state, score, score_history)
+
+    def record_move(self, edge: int, color: str, score_after: float):
+        """Record move for learning."""
+        if self.move_count > 1:
+            self.solver.record_move(edge, color, score_after)
+
+    def end_game(self, result: str, final_score: float):
+        """Record game result and update statistics."""
+        if self.current_game_opening:
+            opening_key = f"E{self.current_game_opening[0]}{self.current_game_opening[1]}"
+            if opening_key in self.opening_stats:
+                self.opening_stats[opening_key]['games'] += 1
+                if result == 'win':
+                    self.opening_stats[opening_key]['wins'] += 1
+
+            logger.info(
+                f"MelissaKiller: {opening_key} -> {result} (score: {final_score:+.4f})"
+            )
+
+        if self.opening_mode == 'cycle':
+            self.current_opening_index = (
+                (self.current_opening_index + 1) % len(self.WINNING_OPENINGS)
+            )
+
+        self.solver.end_game(result, final_score)
+        self._save_state()
+
+        self.current_game_opening = None
+        self.move_count = 0
+
+    def get_stats(self) -> dict:
+        """Get strategy statistics."""
+        stats = self.solver.get_stats() if hasattr(self.solver, 'get_stats') else {}
+
+        total_games = sum(s['games'] for s in self.opening_stats.values())
+        total_wins = sum(s['wins'] for s in self.opening_stats.values())
+
+        stats['melissa_killer'] = {
+            'opening_mode': self.opening_mode,
+            'total_games': total_games,
+            'total_wins': total_wins,
+            'win_rate': total_wins / total_games if total_games > 0 else 0,
+            'opening_stats': self.opening_stats,
+        }
+
+        return stats
+
+
+class AlphaQExplorerStrategy:
+    """
+    Two-phase strategy for defeating AlphaQ Up with a closed learning loop.
+
+    Phase 1 — Exploration (games 0..29):
+        Cycles through all 30 possible first moves. The underlying solver runs
+        with learning_rate=0.0 so the exploration data is uncontaminated.
+        Results per opening are recorded for phase-2 selection.
+
+    Phase 2 — Exploitation (games 30+):
+        Re-enables learning_rate=0.03 on the solver. Only the top N openings
+        (by wins, then avg_score) are used. After each game, end_game() triggers
+        REINFORCE inside the solver, then _push_edge_bias() forwards the learned
+        edge_adjustments into MATLAB via hybridSolver.setEdgeBias(), closing the
+        loop so the next game's MCTS rollout priors are updated.
+    """
+
+    NUM_EDGES = 15
+    EXPLORATION_GAMES = 30
+
+    # All 30 possible opening moves (edge 0..14 × G/P)
+    ALL_OPENINGS = [(edge, color) for edge in range(15) for color in ['G', 'P']]
+
+    def __init__(
+        self,
+        time_limit: float = 10.0,
+        minimax_depth: int = 4,
+        mcts_iterations: int = 5000,
+        player: int = 1,
+        top_n_openings: int = 5,
+        state_path: Optional[Path] = None,
+    ):
+        """
+        Initialize AlphaQExplorerStrategy.
+
+        Args:
+            time_limit: Time budget per move for underlying solver
+            minimax_depth: Depth for minimax in underlying solver
+            mcts_iterations: MCTS iterations in underlying solver
+            player: Player perspective (1 or 2)
+            top_n_openings: Number of best openings to rotate in exploitation
+            state_path: Path to persist state across runs
+        """
+        self.time_limit = time_limit
+        self.minimax_depth = minimax_depth
+        self.mcts_iterations = mcts_iterations
+        self.player = player
+        self.top_n_openings = top_n_openings
+
+        # Start in exploration phase with learning disabled
+        self.solver = HybridSolverStrategy(
+            time_limit=time_limit,
+            minimax_depth=minimax_depth,
+            mcts_iterations=mcts_iterations,
+            player=player,
+            learning_rate=0.0,
+        )
+
+        # Persistent state
+        self.state_path = state_path or Path.home() / ".tangled" / "alphaq_explorer_state.json"
+
+        # Phase tracking
+        self.phase = 'exploration'  # 'exploration' or 'exploitation'
+        self.exploration_results = {}  # {opening_key: [{'score': ..., 'result': ...}, ...]}
+        self.exploitation_openings = []  # Ordered list of opening keys chosen for exploitation
+        self.exploitation_index = 0
+
+        # Current game tracking
+        self.current_game_opening = None
+        self.move_count = 0
+        self.games_played = 0  # Total games this session (including loaded state)
+
+        self._load_state()
+
+    def _load_state(self):
+        """Load persisted state from disk."""
+        try:
+            if self.state_path.exists():
+                import json
+                with open(self.state_path) as f:
+                    data = json.load(f)
+                self.phase = data.get('phase', 'exploration')
+                self.exploration_results = data.get('exploration_results', {})
+                self.exploitation_openings = data.get('exploitation_openings', [])
+                self.exploitation_index = data.get('exploitation_index', 0)
+                total_exploration = sum(len(v) for v in self.exploration_results.values())
+                logger.info(
+                    f"Loaded AlphaQ explorer state: phase={self.phase}, "
+                    f"{total_exploration} exploration games, "
+                    f"exploitation_openings={self.exploitation_openings}"
+                )
+        except Exception as e:
+            logger.warning(f"Failed to load AlphaQ explorer state: {e}")
+
+    def _save_state(self):
+        """Persist state to disk."""
+        try:
+            import json
+            self.state_path.parent.mkdir(parents=True, exist_ok=True)
+            data = {
+                'phase': self.phase,
+                'exploration_results': self.exploration_results,
+                'exploitation_openings': self.exploitation_openings,
+                'exploitation_index': self.exploitation_index,
+                'last_updated': __import__('datetime').datetime.now().isoformat(),
+            }
+            with open(self.state_path, 'w') as f:
+                json.dump(data, f, indent=2)
+        except Exception as e:
+            logger.warning(f"Failed to save AlphaQ explorer state: {e}")
+
+    def initialize(self, opponent: Optional[str] = None) -> bool:
+        """
+        Initialize the underlying solver and, if resuming exploitation,
+        re-enable learning and push any previously learned edge bias.
+        """
+        result = self.solver.initialize(opponent)
+
+        if self.phase == 'exploitation':
+            # Re-enable learning for exploitation phase
+            self.solver.learning_rate = 0.03
+            # Push any previously accumulated edge bias into MATLAB
+            if any(a != 0.0 for a in self.solver.edge_adjustments):
+                self._push_edge_bias()
+                logger.info("AlphaQ explorer: Re-applied edge bias from previous session")
+
+        return result
+
+    def _current_exploration_index(self) -> int:
+        """Compute which exploration opening we're on based on recorded results."""
+        return sum(len(v) for v in self.exploration_results.values())
+
+    def calculate_move(
+        self,
+        state: str,
+        score: float = 0.0,
+        score_history: list = None
+    ) -> Optional[Tuple[int, str, dict]]:
+        """
+        Calculate move. On the first move of each game, force the configured
+        opening. All subsequent moves delegate to the underlying solver.
+        """
+        grey_count = state.count('-')
+
+        # First move of the game
+        if grey_count == 15:
+            self.move_count = 1
+
+            if self.phase == 'exploration':
+                idx = self._current_exploration_index()
+                if idx >= self.EXPLORATION_GAMES:
+                    # All exploration games done — transition now
+                    self._transition_to_exploitation()
+                    # Fall through to exploitation logic below
+                else:
+                    opening = self.ALL_OPENINGS[idx]
+                    edge, color = opening
+                    self.current_game_opening = opening
+
+                    logger.info(
+                        f"AlphaQ [exploration]: Opening E{edge}{color} "
+                        f"({idx + 1}/{self.EXPLORATION_GAMES})"
+                    )
+
+                    stats = {
+                        'strategy': 'alphaq_explorer_opening',
+                        'predicted_score': 0.0,
+                        'opening_index': idx,
+                        'forced_opening': f"E{edge}{color}",
+                        'phase': 'exploration',
+                    }
+                    return (edge, color, stats)
+
+            # Exploitation phase opening selection
+            if self.phase == 'exploitation':
+                opening_key = self.exploitation_openings[
+                    self.exploitation_index % len(self.exploitation_openings)
+                ]
+                edge = int(opening_key[1:-1])
+                color = opening_key[-1]
+                self.current_game_opening = (edge, color)
+
+                logger.info(
+                    f"AlphaQ [exploitation]: Opening {opening_key} "
+                    f"(#{self.exploitation_index % len(self.exploitation_openings) + 1}"
+                    f"/{len(self.exploitation_openings)})"
+                )
+
+                stats = {
+                    'strategy': 'alphaq_explorer_opening',
+                    'predicted_score': 0.0,
+                    'forced_opening': opening_key,
+                    'phase': 'exploitation',
+                }
+                return (edge, color, stats)
+
+        # After first move, delegate to underlying solver
+        self.move_count += 1
+        return self.solver.calculate_move(state, score, score_history)
+
+    def _transition_to_exploitation(self):
+        """
+        Analyse exploration results and switch to exploitation phase.
+
+        Selects top N openings ranked by (wins DESC, avg_score DESC).
+        Re-enables learning on the solver.
+        """
+        logger.info("Exploration complete. Transitioning to exploitation.")
+
+        # Score each opening
+        ranked = []
+        for key, results in self.exploration_results.items():
+            wins = sum(1 for r in results if r['result'] == 'win')
+            avg_score = sum(r['score'] for r in results) / len(results) if results else 0.0
+            ranked.append((key, wins, avg_score))
+
+        # Sort: most wins first, then highest avg_score
+        ranked.sort(key=lambda x: (x[1], x[2]), reverse=True)
+
+        self.exploitation_openings = [key for key, _, _ in ranked[:self.top_n_openings]]
+        self.exploitation_index = 0
+        self.phase = 'exploitation'
+
+        # Re-enable learning
+        self.solver.learning_rate = 0.03
+
+        logger.info(
+            f"AlphaQ exploitation openings: {self.exploitation_openings}"
+        )
+        self._save_state()
+
+    def _push_edge_bias(self):
+        """
+        Forward learned edge_adjustments into MATLAB via hybridSolver.setEdgeBias().
+        This closes the learning loop: REINFORCE updates edge_adjustments in Python,
+        and this method propagates them into the MCTS rollout priors in MATLAB.
+        """
+        if not self.solver.solver_initialized or self.solver.engine is None:
+            logger.debug("AlphaQ: Cannot push edge bias — solver not initialized")
+            return
+
+        try:
+            bias_str = ', '.join(f'{a:.6f}' for a in self.solver.edge_adjustments)
+            self.solver.engine.eval(
+                f"hybridSolver.setEdgeBias([{bias_str}]);",
+                nargout=0
+            )
+            logger.info(
+                f"AlphaQ: Pushed edge bias to MATLAB: "
+                f"[{', '.join(f'{a:.3f}' for a in self.solver.edge_adjustments)}]"
+            )
+        except Exception as e:
+            logger.warning(f"AlphaQ: Failed to push edge bias: {e}")
+
+    def record_move(self, edge: int, color: str, score_after: float):
+        """Record move for learning (delegate to solver for non-opening moves)."""
+        if self.move_count > 1:
+            self.solver.record_move(edge, color, score_after)
+
+    def end_game(self, result: str, final_score: float):
+        """
+        Record game result. In exploration, logs and saves. In exploitation,
+        triggers REINFORCE learning on the solver and then pushes the updated
+        edge bias into MATLAB.
+        """
+        if self.current_game_opening:
+            edge, color = self.current_game_opening
+            opening_key = f"E{edge}{color}"
+
+            if opening_key not in self.exploration_results:
+                self.exploration_results[opening_key] = []
+            self.exploration_results[opening_key].append({
+                'score': final_score,
+                'result': result,
+            })
+
+            logger.info(
+                f"AlphaQ [{self.phase}]: {opening_key} -> {result} "
+                f"(score: {final_score:+.4f})"
+            )
+
+        if self.phase == 'exploitation':
+            # Advance to next exploitation opening
+            self.exploitation_index += 1
+
+            # Trigger REINFORCE learning inside the solver
+            self.solver.end_game(result, final_score)
+
+            # Close the loop: push updated adjustments into MATLAB
+            self._push_edge_bias()
+        else:
+            # Exploration: no learning, just clear solver history
+            self.solver.move_history = []
+
+        # Save state
+        self._save_state()
+
+        # Reset for next game
+        self.current_game_opening = None
+        self.move_count = 0
+
+    def get_stats(self) -> dict:
+        """Return strategy statistics."""
+        stats = self.solver.get_stats() if hasattr(self.solver, 'get_stats') else {}
+
+        exploration_count = sum(len(v) for v in self.exploration_results.values())
+        stats['alphaq_explorer'] = {
+            'phase': self.phase,
+            'exploration_games': exploration_count,
+            'exploitation_openings': self.exploitation_openings,
+            'exploitation_index': self.exploitation_index,
+            'edge_adjustments': self.solver.edge_adjustments,
+        }
+
+        return stats

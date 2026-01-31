@@ -61,6 +61,9 @@ classdef TangledMCTS < handle
         OpponentModel struct           % Loaded from opponent_model.mat
         OpponentModelLoaded logical = false
         UseOpponentModel logical = true  % Whether to use opponent model in rollouts
+
+        % Learned edge bias from REINFORCE (1x15, default zeros)
+        EdgeBias double = zeros(1, 15)
     end
 
     properties (Constant)
@@ -87,6 +90,7 @@ classdef TangledMCTS < handle
                 options.NumWorkers int32 = 6
                 options.UseParallel logical = true
                 options.Player int32 = 1
+                options.EdgeBias double = zeros(1, 15)
             end
 
             this.Iterations = options.Iterations;
@@ -96,6 +100,7 @@ classdef TangledMCTS < handle
             this.NumWorkers = options.NumWorkers;
             this.UseParallel = options.UseParallel;
             this.PlayerPerspective = options.Player;
+            this.EdgeBias = options.EdgeBias;
 
             % Set edge classifications based on player perspective
             if this.PlayerPerspective == 1
@@ -518,6 +523,16 @@ classdef TangledMCTS < handle
             end
         end
 
+        function setEdgeBias(this, bias)
+            %SETEDGEBIAS Update learned edge bias from REINFORCE
+            if length(bias) ~= 15
+                warning('TangledMCTS:BadBiasSize', ...
+                    'EdgeBias must be 1x15. Got 1x%d. Ignoring.', length(bias));
+                return;
+            end
+            this.EdgeBias = max(-1.0, min(1.0, double(bias(:))'));
+        end
+
         function prior = computeRolloutPrior(this, edge, isGreen, isOurTurn)
             %COMPUTEROLLOUTPRIOR Compute prior for rollout action selection
             %
@@ -551,6 +566,10 @@ classdef TangledMCTS < handle
                     prior = 0.55 * isGreen + 0.45 * ~isGreen;
                 end
             end
+
+            % Apply learned edge bias (additive, clamped to valid prior range)
+            prior = prior + this.EdgeBias(edge);
+            prior = max(0.001, min(0.999, prior));
         end
 
         function score = evaluateTerminal(this, state)
