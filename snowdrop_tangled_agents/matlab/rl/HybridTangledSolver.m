@@ -38,8 +38,8 @@ classdef HybridTangledSolver < handle
         MCTS TangledMCTS
 
         % Strategy thresholds
-        MinimaxNodeThreshold int32 = 500000  % Max nodes for pure minimax
-        TabuThreshold int32 = 8              % Max grey edges for pure tabu
+        MinimaxNodeThreshold int32 = 200000  % Max nodes for pure minimax
+        TabuThreshold int32 = 9              % Max grey edges for hybrid path
         MCTSThreshold int32 = 4              % Min grey edges for MCTS
 
         % Time allocation (fractions of TimeLimit)
@@ -162,20 +162,23 @@ classdef HybridTangledSolver < handle
                 return;
             end
 
-            % Opening book: Secure our vertex edges (E9, E10, E11) Green
-            % These edges connect to our scoring vertex and are the most critical.
-            % After securing these, let minimax/MCTS handle mid-game decisions.
-            %
-            % MY_EDGES (1-indexed): 10, 11, 12 = E9, E10, E11 (0-indexed)
-            openingEdges = [10, 11, 12];  % E9, E10, E11
-            for e = openingEdges
-                if state(e) == '-'
-                    edge = e - 1;  % Convert to 0-indexed
-                    color = 'G';
-                    info.strategy = 'opening';
-                    info.score = 0.9;
-                    info.time = toc(startTime);
-                    return;
+            % Opening book: Secure our vertex edges (E9, E10, E11) Green.
+            % Empirically correct against Melissa (fitted calibration exists).
+            % Skip for named opponents without a fitted calibration curve —
+            % those opponents counter the opening and the 30 s budget is better
+            % spent on MCTS/hybrid search at 12–13 grey edges.
+            useOpeningBook = isempty(this.OpponentName) || this.MCTS.CalibrationLoaded;
+            if useOpeningBook
+                openingEdges = [10, 11, 12];  % E9, E10, E11
+                for e = openingEdges
+                    if state(e) == '-'
+                        edge = e - 1;  % Convert to 0-indexed
+                        color = 'G';
+                        info.strategy = 'opening';
+                        info.score = 0.9;
+                        info.time = toc(startTime);
+                        return;
+                    end
                 end
             end
 
@@ -187,7 +190,7 @@ classdef HybridTangledSolver < handle
                 [edge, color, info] = this.solveMinimax(state, startTime);
 
             elseif numGrey <= this.TabuThreshold
-                % Mid-late game: Hybrid minimax + MCTS
+                % Mid game (grey 9): Hybrid minimax candidate gen + MCTS eval
                 [edge, color, info] = this.solveHybrid(state, startTime);
 
             else

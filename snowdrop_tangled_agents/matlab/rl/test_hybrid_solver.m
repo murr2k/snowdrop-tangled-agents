@@ -293,6 +293,44 @@ function testHybridSolverEarlyGame(testCase)
     verifyTrue(testCase, info.time < 6.0, 'Should complete within time limit');
 end
 
+function testHybridSolverHybridPath(testCase)
+    % 9 grey edges should route to hybrid with the new thresholds
+    solver = HybridTangledSolver('TimeLimit', 5.0, 'Opponent', 'nonexistent_xyz');
+
+    state = 'GGGGGG---------';  % 6 G + 9 grey = 15 chars
+    [edge, color, info] = solver.solve(state);
+
+    verifyGreaterThanOrEqual(testCase, edge, 0, 'Edge should be >= 0');
+    verifyLessThan(testCase, edge, 15, 'Edge should be < 15');
+    verifyTrue(testCase, ismember(color, ['G', 'P']), 'Valid color');
+    verifyEqual(testCase, info.strategy, 'hybrid', ...
+        'Should use hybrid strategy at 9 grey edges');
+end
+
+function testHybridSolverOpeningBookSkipped(testCase)
+    % Named opponent with no calibration file → opening book bypassed
+    solver = HybridTangledSolver('TimeLimit', 5.0, 'Opponent', 'nonexistent_xyz');
+
+    state = '---------------';  % All grey; opening book would claim E9
+    [edge, color, info] = solver.solve(state);
+
+    verifyNotEqual(testCase, info.strategy, 'opening', ...
+        'Opening book should be skipped for uncalibrated opponent');
+end
+
+function testHybridSolverOpeningBookRetained(testCase)
+    % No opponent name = legacy path; opening book fires as before
+    solver = HybridTangledSolver('TimeLimit', 5.0);
+
+    state = '---------------';  % All grey
+    [edge, color, info] = solver.solve(state);
+
+    verifyEqual(testCase, info.strategy, 'opening', ...
+        'Opening book should fire for legacy path');
+    verifyEqual(testCase, edge, 9, 'Should claim E9 (0-indexed)');
+    verifyEqual(testCase, color, 'G', 'Should claim Green');
+end
+
 function testHybridSolverPlayerSwitch(testCase)
     solver = HybridTangledSolver('TimeLimit', 1.0, 'Player', 1);
     % NOTE: verifyEqual reports "failure" due to type mismatch (int32 vs double).
