@@ -16,7 +16,7 @@ This is similar to the AlphaZero architecture: the neural network provides intui
 │                    ENSEMBLE DECISION FLOW                       │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
-│   Current State ──┬──► RL Policy ──► Prior P(action)           │
+│   Current State ──┬──► RL Policy ──► Prior P(action)            │
 │                   │       │              │                      │
 │                   │       │              ▼                      │
 │                   │       │         Top-K Filter                │

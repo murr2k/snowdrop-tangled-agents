@@ -376,5 +376,218 @@ class TestMatlabStrategy:
         assert 'matlab_available' in stats
 
 
+class TestAlphaQExplorerThompson:
+    """Test Thompson Sampling opening selection in AlphaQExplorerStrategy."""
+
+    def test_thompson_favours_safe_opening(self):
+        """
+        Test that Thompson Sampling favours openings with wins
+        over openings with losses. When two openings are compared directly
+        (all others set to equal losses), the one with wins is favored.
+        """
+        from snowdrop_tangled_agents.matlab.matlab_strategy import AlphaQExplorerStrategy
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_path = Path(tmpdir) / "state.json"
+            strategy = AlphaQExplorerStrategy(state_path=state_path)
+
+            # Set up: E0G has 5 wins (mean=0.75), all others untried
+            strategy.openings['E0G'] = {'wins': 5, 'draws': 0, 'losses': 0}
+            for key in strategy.openings.keys():
+                if key != 'E0G':
+                    strategy.openings[key] = {'wins': 0, 'draws': 0, 'losses': 0}
+            strategy.games_played = 5
+
+            # Sample 1000 times with correct initial state (15 dashes)
+            selected = {}
+            for _ in range(1000):
+                move = strategy.calculate_move("---------------")
+                if move:
+                    edge, color, stats = move
+                    opening = f"E{edge}{color}"
+                    selected[opening] = selected.get(opening, 0) + 1
+                    strategy.current_game_opening = None  # Reset for next iteration
+
+            # E0G (mean=0.857, alpha=6, beta=1) should be favored significantly
+            # over untried openings (mean=0.5, alpha=1, beta=1).
+            # With 29 untried openings each getting ~34 selections on average,
+            # E0G should get substantially more (roughly 2-3x more per sample).
+            # Conservatively expect >150 selections out of 1000.
+            e0g_count = selected.get('E0G', 0)
+            avg_untried_count = sum(c for k, c in selected.items() if k != 'E0G') / 29 if len(selected) > 1 else 0
+            assert e0g_count > 150, \
+                f"E0G selected {e0g_count}/1000, expected >150. Avg untried: {avg_untried_count:.1f}"
+
+    def test_thompson_explores_untried(self):
+        """
+        Test that Thompson Sampling explores untried openings at a reasonable rate
+        even when all other openings have losses.
+        """
+        from snowdrop_tangled_agents.matlab.matlab_strategy import AlphaQExplorerStrategy
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_path = Path(tmpdir) / "state.json"
+            strategy = AlphaQExplorerStrategy(state_path=state_path)
+
+            # Set up: 29 openings with 10 losses each, 1 untried
+            for key in strategy.openings.keys():
+                if key != 'E0G':
+                    strategy.openings[key] = {'wins': 0, 'draws': 0, 'losses': 10}
+            strategy.openings['E0G'] = {'wins': 0, 'draws': 0, 'losses': 0}
+            strategy.games_played = 290
+
+            # Sample 1000 times with correct initial state
+            selected = {}
+            for _ in range(1000):
+                move = strategy.calculate_move("---------------")
+                if move:
+                    edge, color, stats = move
+                    opening = f"E{edge}{color}"
+                    selected[opening] = selected.get(opening, 0) + 1
+                    strategy.current_game_opening = None
+
+            # E0G (untried) should be selected >5% of the time
+            assert selected.get('E0G', 0) > 50, \
+                f"E0G selected {selected.get('E0G', 0)}/1000, expected >50"
+
+    def test_migration_v1_to_v2(self):
+        """Test migration from v1 (exploration_results) to v2 (openings counts)."""
+        from snowdrop_tangled_agents.matlab.matlab_strategy import AlphaQExplorerStrategy
+        import json
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_path = Path(tmpdir) / "state.json"
+
+            # Write v1 format state
+            v1_data = {
+                'phase': 'exploration',
+                'exploration_results': {
+                    'E0G': [
+                        {'score': 0.75, 'result': 'draw'},
+                        {'score': 0.71, 'result': 'draw'},
+                    ],
+                    'E11G': [
+                        {'score': 0.58, 'result': 'loss'},
+                        {'score': 0.60, 'result': 'loss'},
+                    ],
+                },
+                'exploitation_openings': [],
+                'exploitation_index': 0,
+            }
+            with open(state_path, 'w') as f:
+                json.dump(v1_data, f)
+
+            # Load with new code
+            strategy = AlphaQExplorerStrategy(state_path=state_path)
+
+            # Check migration
+            assert strategy.openings['E0G'] == {'wins': 0, 'draws': 2, 'losses': 0}
+            assert strategy.openings['E11G'] == {'wins': 0, 'draws': 0, 'losses': 2}
+            assert strategy.games_played == 4
+
+            # Check that state was saved in v2 format
+            with open(state_path) as f:
+                saved_data = json.load(f)
+            assert saved_data['version'] == 2
+            assert saved_data['openings']['E0G'] == {'wins': 0, 'draws': 2, 'losses': 0}
+
+    def test_migration_missing_file(self):
+        """Test that missing state file initializes all 30 openings cleanly."""
+        from snowdrop_tangled_agents.matlab.matlab_strategy import AlphaQExplorerStrategy
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_path = Path(tmpdir) / "nonexistent" / "state.json"
+            strategy = AlphaQExplorerStrategy(state_path=state_path)
+
+            # Should have 30 openings, all zeros
+            assert len(strategy.openings) == 30
+            for key, counts in strategy.openings.items():
+                assert counts == {'wins': 0, 'draws': 0, 'losses': 0}
+            assert strategy.games_played == 0
+
+    def test_end_game_normalises_none(self):
+        """Test that end_game handles None result gracefully."""
+        from snowdrop_tangled_agents.matlab.matlab_strategy import AlphaQExplorerStrategy
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_path = Path(tmpdir) / "state.json"
+            strategy = AlphaQExplorerStrategy(state_path=state_path)
+            strategy.initialize()
+
+            # Force an opening
+            strategy.current_game_opening = (0, 'G')
+
+            # Call end_game with None (should be normalized to 'draw')
+            strategy.end_game(None, 0.5)
+
+            # Check that draws incremented
+            assert strategy.openings['E0G']['draws'] == 1
+            assert strategy.openings['E0G']['wins'] == 0
+            assert strategy.openings['E0G']['losses'] == 0
+
+    def test_end_game_updates_correct_opening(self):
+        """Test that end_game updates only the correct opening."""
+        from snowdrop_tangled_agents.matlab.matlab_strategy import AlphaQExplorerStrategy
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_path = Path(tmpdir) / "state.json"
+            strategy = AlphaQExplorerStrategy(state_path=state_path)
+            strategy.initialize()
+
+            # Force E3G
+            strategy.current_game_opening = (3, 'G')
+            strategy.end_game('loss', 0.3)
+
+            # Check only E3G updated
+            assert strategy.openings['E3G']['losses'] == 1
+            for key, counts in strategy.openings.items():
+                if key != 'E3G':
+                    assert counts['losses'] == 0
+
+    def test_learning_gating(self):
+        """Test that learning is disabled until MIN_GAMES_BEFORE_LEARNING."""
+        from snowdrop_tangled_agents.matlab.matlab_strategy import AlphaQExplorerStrategy
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_path = Path(tmpdir) / "state.json"
+            strategy = AlphaQExplorerStrategy(state_path=state_path)
+            strategy.initialize()
+
+            # For games 1-9, learning_rate should be 0.0
+            for i in range(9):
+                strategy.current_game_opening = (0, 'G')
+                strategy.end_game('draw', 0.5)
+                assert strategy.solver.learning_rate == 0.0, \
+                    f"Game {i+1}: learning_rate should be 0.0, got {strategy.solver.learning_rate}"
+
+            # On game 10, learning_rate should flip to 0.03
+            strategy.current_game_opening = (0, 'G')
+            strategy.end_game('draw', 0.5)
+            assert strategy.solver.learning_rate == 0.03, \
+                f"Game 10: learning_rate should be 0.03, got {strategy.solver.learning_rate}"
+
+    def test_state_roundtrip(self):
+        """Test that state persists correctly across save/load cycles."""
+        from snowdrop_tangled_agents.matlab.matlab_strategy import AlphaQExplorerStrategy
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_path = Path(tmpdir) / "state.json"
+
+            # Create and populate first instance
+            strategy1 = AlphaQExplorerStrategy(state_path=state_path)
+            strategy1.openings['E0G'] = {'wins': 2, 'draws': 5, 'losses': 1}
+            strategy1.openings['E5P'] = {'wins': 0, 'draws': 3, 'losses': 2}
+            strategy1.games_played = 13
+            strategy1._save_state()
+
+            # Load in fresh instance
+            strategy2 = AlphaQExplorerStrategy(state_path=state_path)
+
+            # Check roundtrip
+            assert strategy2.openings['E0G'] == {'wins': 2, 'draws': 5, 'losses': 1}
+            assert strategy2.openings['E5P'] == {'wins': 0, 'draws': 3, 'losses': 2}
+            assert strategy2.games_played == 13
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])

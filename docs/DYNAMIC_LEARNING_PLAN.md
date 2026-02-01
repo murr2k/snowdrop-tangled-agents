@@ -1266,6 +1266,351 @@ end
 
 ---
 
+## Phase 7: Online REINFORCE with Closed MCTS Loop
+
+**Status**: ✅ Complete
+
+**Goal**: Close the learning loop that was left open in Phases 2–5. The PPO pipeline (Phases 2–5)
+trains a policy offline in self-play. Separately, `HybridSolverStrategy` runs a lightweight
+REINFORCE update after every live game and accumulates per-edge adjustments in Python — but those
+values were **never sent back to MATLAB**. The MCTS rollouts kept using the same static heuristic
+priors every game. This phase adds `EdgeBias` to `TangledMCTS`, wires a `setEdgeBias()` propagation
+path through `HybridTangledSolver`, and builds `AlphaQExplorerStrategy` — a two-phase
+explore/exploit wrapper that drives the closed loop against the new AlphaQ Up opponent.
+
+**Implemented / modified files:**
+
+| File | Role |
+|------|------|
+| `matlab/rl/TangledMCTS.m` | `EdgeBias` property, `setEdgeBias()`, bias applied in `computeRolloutPrior` |
+| `matlab/rl/HybridTangledSolver.m` | `EdgeBias` property, `setEdgeBias()` forwarding, bias preserved across `setPlayer()` |
+| `matlab/matlab_strategy.py` | `AlphaQExplorerStrategy` class (explore/exploit + `_push_edge_bias`) |
+| `play_tangled.py` | `"alphaq"` opponent entry, `"alphaq_explorer"` strategy wiring |
+
+---
+
+### 7.1 The Open Loop — What Was Missing
+
+Every strategy that wraps `HybridSolverStrategy` inherits its `end_game()` method, which calls
+`_learn_from_game()`. That function computes a REINFORCE update and writes it into the Python list
+`edge_adjustments`. It even persists the list to `~/.tangled/hybrid_solver_adjustments.json` so it
+survives restarts. The problem: nothing ever reads it back into MATLAB.
+
+```
+Before Phase 7 (open loop):
+
+  Game ends
+      │
+      ▼
+  _learn_from_game()          ← REINFORCE runs, updates edge_adjustments
+      │
+      ▼
+  _save_adjustments()         ← persisted to disk
+      │
+      ✗  (stops here — MATLAB never sees the update)
+
+  Next game: MCTS rollouts use the same static heuristic priors as always.
+```
+
+The adjustments accumulated silently across hundreds of games but had zero effect on play.
+
+---
+
+### 7.2 The Closed Loop — What Changed
+
+Three additions close the loop:
+
+1. **`EdgeBias` in `TangledMCTS`** — a 1×15 double vector (default zeros) that is added to the
+   heuristic prior inside `computeRolloutPrior` on every rollout action selection.
+
+2. **`setEdgeBias()` propagation chain** — `HybridTangledSolver.setEdgeBias(bias)` stores the bias
+   locally *and* forwards it to `this.MCTS.setEdgeBias(bias)`. `setPlayer()` (which creates a fresh
+   MCTS instance) re-applies any non-zero bias to the new instance, so learned state survives
+   mid-game player switches.
+
+3. **`_push_edge_bias()` in `AlphaQExplorerStrategy`** — called after every exploitation-phase
+   game. It serialises `edge_adjustments` as a MATLAB row vector literal and evals
+   `hybridSolver.setEdgeBias([...])` over the Engine API.
+
+```
+After Phase 7 (closed loop):
+
+  Game ends
+      │
+      ▼
+  _learn_from_game()          ← REINFORCE updates edge_adjustments
+      │
+      ▼
+  _save_adjustments()         ← persisted to disk
+      │
+      ▼
+  _push_edge_bias()           ← NEW: evals hybridSolver.setEdgeBias([...])
+      │
+      ▼  (crosses Python → MATLAB boundary)
+  HybridTangledSolver         ← stores bias, forwards to MCTS
+      │
+      ▼
+  TangledMCTS.EdgeBias        ← updated in place (handle class)
+      │
+      ▼
+  Next game: computeRolloutPrior adds EdgeBias(edge) to every prior.
+```
+
+---
+
+### 7.3 Sequence Diagram — One Exploitation-Phase Game
+
+The diagram below traces a single game from first move through to the bias push that feeds the
+next game. The critical asymmetry: `EdgeBias` is **read** during the game (top half) but
+**written** only after the game ends (bottom half). Learning is strictly one-game-delayed.
+
+```mermaid
+sequenceDiagram
+    participant GL as "Game Loop"
+    participant AQ as "AlphaQExplorer"
+    participant HS as "HybridSolver"
+    participant ME as "MATLAB Engine"
+    participant HTS as "HybridTangledSolver"
+    participant MCTS as "TangledMCTS"
+    participant FS as "~/.tangled/"
+
+    Note over GL,FS: Exploitation phase — single game lifecycle
+
+    GL->>AQ: calculate_move(state)
+    Note over AQ: grey == 15: pick next<br/>exploitation opening
+    AQ-->>GL: forced (edge, color)
+
+    loop Moves 2 through 15
+        GL->>AQ: calculate_move(state)
+        AQ->>HS: calculate_move(state)
+        HS->>ME: hybridSolver.solve(state)
+        ME->>HTS: solve(state)
+        HTS->>MCTS: search(state)
+        Note over MCTS: For each rollout action:<br/>prior += EdgeBias(edge)<br/>clamp to [0.001, 0.999]
+        MCTS-->>HTS: best move
+        HTS-->>ME: (edge, color)
+        ME-->>HS: (edge, color)
+        HS-->>AQ: (edge, color, stats)
+        AQ-->>GL: (edge, color, stats)
+    end
+
+    Note over GL,FS: Game over — REINFORCE fires, loop closes
+
+    GL->>AQ: end_game(result, final_score)
+    AQ->>HS: end_game(result, final_score)
+    Note over HS: Compute R from result + score<br/>For each move i on edge e:<br/>adj[e] += 0.03 * R * 0.9^(N-i-1) * 0.5<br/>clamp adj[e] to [-1, 1]
+    HS->>FS: save hybrid_solver_adjustments.json
+    HS-->>AQ: adjustments updated
+    AQ->>ME: hybridSolver.setEdgeBias(adj)
+    ME->>HTS: setEdgeBias(bias)
+    HTS->>MCTS: setEdgeBias(bias)
+    Note right of MCTS: EdgeBias = clamp(bias, -1, 1)
+    AQ->>FS: save alphaq_explorer_state.json
+
+    Note over GL,FS: Next game's MCTS rollouts use updated EdgeBias
+```
+
+---
+
+### 7.4 REINFORCE Update — Full Math
+
+#### 7.4.1 Reward Shaping
+
+The scalar reward `R` is derived from the game outcome and the final score `S`:
+
+```
+Win:   R  =  1 + min(S, 2) / 2          →  R ∈ [1.0, 2.0]
+Draw:  R  =  +0.1  if S ≥ 0             →  R ∈ {−0.1, +0.1}
+            −0.1  if S < 0
+Loss:  R  =  −1 + max(S, −2) / 2        →  R ∈ [−2.0, −1.0]
+```
+
+The score-dependent component (`min(S,2)/2` or `max(S,−2)/2`) means a narrow win produces a
+weaker signal than a blowout. Clamping at ±2 prevents outlier scores from dominating the update.
+
+#### 7.4.2 Temporal Credit Assignment
+
+A game produces N moves (our moves only — opponent moves are not recorded). Move `i` is
+0-indexed. The discount factor is γ = 0.9.
+
+```
+discount(i)  =  γ^(N − i − 1)
+```
+
+| Move index | discount | Interpretation |
+|------------|----------|----------------|
+| i = 0 (first move) | 0.9^(N−1) ≈ 0.23 for N=15 | Weakest signal |
+| i = N/2 (midgame) | 0.9^(N/2−1) ≈ 0.48 | Moderate signal |
+| i = N−1 (last move) | 0.9^0 = 1.0 | Full signal |
+
+Later moves receive stronger reinforcement. This is correct for Tangled: the endgame moves
+determine the terminal configuration and therefore the adjudicated score, so they deserve the
+strongest credit or blame.
+
+#### 7.4.3 Per-Edge Adjustment Update
+
+For each move `i` played on edge `e`, with learning rate α = 0.03:
+
+```
+Δ(e, i)  =  α  ×  R  ×  discount(i)  ×  0.5
+
+adj[e]  ←  clamp( adj[e] + Δ(e, i),  −1,  1 )
+```
+
+The factor of 0.5 is a conservatism term: it prevents a single game from swinging any edge's
+bias by more than `α × R_max × 1.0 × 0.5 = 0.03 × 2.0 × 0.5 = 0.03` per move. An edge that
+appears in multiple moves within the same game accumulates updates additively across those moves,
+but the per-move cap keeps each step small.
+
+The update is **color-blind**: the same `adj[e]` is modified regardless of whether edge `e` was
+played Green or Purple. The bias learned here is about *edge importance*, not color preference.
+Color selection is handled by the existing heuristic rules inside `computeRolloutPrior`.
+
+#### 7.4.4 Worked Example
+
+A loss with final score S = −1.4, over a game where we made N = 8 moves, and edge 12 was
+played at move i = 5:
+
+```
+R          =  −1 + max(−1.4, −2) / 2  =  −1 + (−1.4)/2  =  −1.7
+discount   =  0.9^(8 − 5 − 1)         =  0.9^2           =  0.81
+Δ(12, 5)  =  0.03 × (−1.7) × 0.81 × 0.5                 =  −0.0207
+
+adj[12]  ←  clamp( adj[12] − 0.0207,  −1, 1 )
+```
+
+Edge 12 is nudged downward by 0.021. If it started at 0.0, it becomes −0.021. After many losses
+involving edge 12, the bias becomes meaningfully negative and the MCTS rollouts will select edge
+12 less often, steering the search away from that line of play.
+
+---
+
+### 7.5 EdgeBias Application in MCTS Rollouts
+
+`computeRolloutPrior` first computes a heuristic prior `π` from the edge classification rules
+(MY_EDGES, OPP_EDGES, HUB_EDGES). The bias is then applied additively:
+
+```
+π'(e, c, turn)  =  clamp( π(e, c, turn) + EdgeBias[e],  0.001,  0.999 )
+```
+
+Key properties:
+
+- **Additive, not multiplicative.** A bias of +0.1 shifts the prior by a fixed amount regardless
+  of the base value. This keeps the update semantics uniform across edges.
+
+- **Color-blind application.** `EdgeBias[e]` is the same for both Green and Purple on edge `e`.
+  The heuristic already encodes strong color preferences (e.g. MY_EDGES Green = 0.95). The bias
+  shifts the *edge's overall attractiveness* within rollouts without overriding those preferences.
+
+- **Both turns affected.** The bias applies when it is our turn and when it is the opponent's turn.
+  On the opponent's turn, a positive bias makes the opponent *more* likely to play that edge in
+  rollouts — which is correct: if edge `e` was associated with wins, we want rollouts to explore
+  lines where the opponent also plays it, so we can see how to respond.
+
+- **Clamp bounds preserve exploration.** `[0.001, 0.999]` ensures no edge becomes deterministic
+  in rollouts. Even a maximally biased edge retains a 0.1 % chance of the opposite outcome.
+
+#### Heuristic Prior Values (before bias)
+
+For reference, the base priors that `EdgeBias` is added to:
+
+| Edge category | Our turn (Green) | Our turn (Purple) | Opp turn (Green) | Opp turn (Purple) |
+|---------------|------------------|--------------------|------------------|--------------------|
+| MY_EDGES | 0.95 | 0.05 | 0.15 | 0.85 |
+| OPP_EDGES | 0.05 | 0.95 | 0.95 | 0.05 |
+| HUB_EDGES | 0.25 | 0.75 | 0.55 | 0.45 |
+| Neutral | 0.55 | 0.45 | 0.55 | 0.45 |
+
+A bias of, say, `EdgeBias[10] = +0.3` (edge 10 is in MY_EDGES) would shift the "our turn, Green"
+prior from 0.95 to 0.999 (clamped), and the "our turn, Purple" prior from 0.05 to 0.35. The net
+effect: rollouts are more likely to play edge 10 in *either* color when it is our turn.
+
+---
+
+### 7.6 Index Alignment Across the Python–MATLAB Boundary
+
+Python lists are 0-indexed. MATLAB arrays are 1-indexed. The mapping must be exact or the bias
+lands on the wrong edges.
+
+```
+Python  edge_adjustments[0]   →  MATLAB  EdgeBias(1)   →  edge 0
+Python  edge_adjustments[1]   →  MATLAB  EdgeBias(2)   →  edge 1
+  ...
+Python  edge_adjustments[14]  →  MATLAB  EdgeBias(15)  →  edge 14
+```
+
+`_push_edge_bias()` serialises as a MATLAB row-vector literal:
+
+```python
+bias_str = ', '.join(f'{a:.6f}' for a in self.solver.edge_adjustments)
+# produces: "0.012300, -0.045600, 0.000000, ..."
+engine.eval(f"hybridSolver.setEdgeBias([{bias_str}]);")
+```
+
+MATLAB receives `[0.012300, -0.045600, ...]` as a 1×15 row vector. Index 1 = first element =
+Python's `edge_adjustments[0]`. Inside `computeRolloutPrior`, the `edge` argument comes from
+`available(i)` which is 1-indexed (the position in the state string). So `EdgeBias(edge)` correctly
+retrieves the bias for the 0-indexed edge that Python originally learned about.
+
+---
+
+### 7.7 Exploration Phase Design
+
+During exploration (games 0–29), the underlying `HybridSolverStrategy` is constructed with
+`learning_rate=0.0`. This zeroes out α in the update rule:
+
+```
+Δ(e, i)  =  0.0  ×  R  ×  discount(i)  ×  0.5  =  0
+```
+
+No adjustments are made and no bias is pushed. Every exploration game runs the MCTS with the
+same static heuristic priors, so each of the 30 openings is tested under identical solver
+conditions. The only thing that varies across games is the forced first move.
+
+When game 30 completes, `_transition_to_exploitation()` ranks all 30 openings by `(wins DESC,
+avg_score DESC)` and selects the top N (default 5). It then sets `learning_rate = 0.03` on the
+solver. From game 31 onward, every `end_game()` call triggers a live REINFORCE update and bias
+push.
+
+---
+
+### 7.8 Resume Safety
+
+Full strategy state is persisted to `~/.tangled/alphaq_explorer_state.json`:
+
+```json
+{
+  "phase": "exploitation",
+  "exploration_results": { "E0G": [...], "E0P": [...], ... },
+  "exploitation_openings": ["E14P", "E1G", "E4G", "E4P", "E12P"],
+  "exploitation_index": 7,
+  "last_updated": "2026-01-31T12:16:43"
+}
+```
+
+On resume during exploitation, `initialize()` does two things before the first game:
+
+1. Re-enables `learning_rate = 0.03` on the solver (it was constructed with 0.0 by default).
+2. Calls `_push_edge_bias()` if any adjustment is non-zero, re-syncing MATLAB with the
+   accumulated bias from the previous session.
+
+The edge adjustments themselves are persisted independently by `HybridSolverStrategy` at
+`~/.tangled/hybrid_solver_adjustments.json` and loaded at construction time.
+
+---
+
+### 7.9 Deliverables
+
+| File | What was added |
+|------|----------------|
+| `matlab/rl/TangledMCTS.m` | `EdgeBias` property; `options.EdgeBias` in constructor; `setEdgeBias()` method; two lines at end of `computeRolloutPrior` |
+| `matlab/rl/HybridTangledSolver.m` | `EdgeBias` property; `setEdgeBias()` method; bias re-application in `setPlayer()` |
+| `matlab/matlab_strategy.py` | `AlphaQExplorerStrategy` class (~300 lines) |
+| `play_tangled.py` | `"alphaq"` in OPPONENTS; import + fallback for `AlphaQExplorerStrategy`; strategy selection block; argparse choices |
+
+---
+
 ## Summary: Complete File Inventory
 
 ### Phase 2: RL Environment
@@ -1304,6 +1649,12 @@ end
 - `ABTest.m`
 - `alerting.m`
 
+### Phase 7: Closed-Loop REINFORCE
+- `TangledMCTS.m` (EdgeBias property + setEdgeBias + bias in computeRolloutPrior)
+- `HybridTangledSolver.m` (EdgeBias propagation + setPlayer preservation)
+- `matlab_strategy.py` → `AlphaQExplorerStrategy`
+- `play_tangled.py` (alphaq opponent + alphaq_explorer strategy)
+
 ---
 
 ## Dependencies
@@ -1330,5 +1681,13 @@ end
 | Phase 4 | 1 week | Phase 3 |
 | Phase 5 | 1 week | Phase 3 |
 | Phase 6 | 2 weeks | Phases 4 & 5 |
+| Phase 7 | 1 day | Phase 2 (HybridSolverStrategy + TangledMCTS) |
 
-**Total: ~7 weeks** for full implementation
+**Total: ~7 weeks** for Phases 2–6; Phase 7 is independent and was delivered in a single session.
+
+> **Note on Phase 7 vs Phases 2–6:** The PPO pipeline (Phases 2–6) and the closed-loop REINFORCE
+> (Phase 7) are two independent learning paths. PPO trains a full policy offline in self-play and
+> deploys it via compiled packages. REINFORCE learns only edge-level biases online from live games
+> and feeds them directly into the MCTS rollout priors. They target different problems: PPO builds
+> a general-purpose policy; REINFORCE adapts the existing hybrid solver to a specific opponent in
+> real time.

@@ -1496,23 +1496,21 @@ class MelissaKillerStrategy:
 
 class AlphaQExplorerStrategy:
     """
-    Two-phase strategy for defeating AlphaQ Up with a closed learning loop.
+    Thompson Sampling strategy for defeating AlphaQ Up with a closed learning loop.
 
-    Phase 1 — Exploration (games 0..29):
-        Cycles through all 30 possible first moves. The underlying solver runs
-        with learning_rate=0.0 so the exploration data is uncontaminated.
-        Results per opening are recorded for phase-2 selection.
+    Uses Thompson Sampling to dynamically select first moves, balancing exploration
+    and exploitation. The underlying solver is disabled (learning_rate=0.0) for the
+    first MIN_GAMES_BEFORE_LEARNING games to gather clean opening data, then
+    re-enabled for the rest.
 
-    Phase 2 — Exploitation (games 30+):
-        Re-enables learning_rate=0.03 on the solver. Only the top N openings
-        (by wins, then avg_score) are used. After each game, end_game() triggers
-        REINFORCE inside the solver, then _push_edge_bias() forwards the learned
-        edge_adjustments into MATLAB via hybridSolver.setEdgeBias(), closing the
-        loop so the next game's MCTS rollout priors are updated.
+    All 30 possible opening moves are tracked with win/draw/loss counts and
+    converted to Beta distribution parameters. Each game, the opening with the
+    highest Beta sample is played, ensuring safe openings (high draws, no losses)
+    are preferred while allowing untried openings to be explored.
     """
 
     NUM_EDGES = 15
-    EXPLORATION_GAMES = 30
+    MIN_GAMES_BEFORE_LEARNING = 10
 
     # All 30 possible opening moves (edge 0..14 × G/P)
     ALL_OPENINGS = [(edge, color) for edge in range(15) for color in ['G', 'P']]
@@ -1523,7 +1521,6 @@ class AlphaQExplorerStrategy:
         minimax_depth: int = 4,
         mcts_iterations: int = 5000,
         player: int = 1,
-        top_n_openings: int = 5,
         state_path: Optional[Path] = None,
     ):
         """
@@ -1534,16 +1531,14 @@ class AlphaQExplorerStrategy:
             minimax_depth: Depth for minimax in underlying solver
             mcts_iterations: MCTS iterations in underlying solver
             player: Player perspective (1 or 2)
-            top_n_openings: Number of best openings to rotate in exploitation
             state_path: Path to persist state across runs
         """
         self.time_limit = time_limit
         self.minimax_depth = minimax_depth
         self.mcts_iterations = mcts_iterations
         self.player = player
-        self.top_n_openings = top_n_openings
 
-        # Start in exploration phase with learning disabled
+        # Start with learning disabled
         self.solver = HybridSolverStrategy(
             time_limit=time_limit,
             minimax_depth=minimax_depth,
@@ -1555,49 +1550,89 @@ class AlphaQExplorerStrategy:
         # Persistent state
         self.state_path = state_path or Path.home() / ".tangled" / "alphaq_explorer_state.json"
 
-        # Phase tracking
-        self.phase = 'exploration'  # 'exploration' or 'exploitation'
-        self.exploration_results = {}  # {opening_key: [{'score': ..., 'result': ...}, ...]}
-        self.exploitation_openings = []  # Ordered list of opening keys chosen for exploitation
-        self.exploitation_index = 0
+        # Thompson sampling state: each opening tracks W/D/L
+        self.openings = {}  # {opening_key: {'wins': 0, 'draws': 0, 'losses': 0}}
+        self.games_played = 0
 
         # Current game tracking
         self.current_game_opening = None
         self.move_count = 0
-        self.games_played = 0  # Total games this session (including loaded state)
+        self.thompson_sample = 0.0  # For observability
+        self.thompson_alpha = 0.0
+        self.thompson_beta = 0.0
 
         self._load_state()
 
     def _load_state(self):
-        """Load persisted state from disk."""
+        """Load persisted state from disk. Migrate v1 format to v2."""
         try:
+            # Always initialize all 30 openings first
+            self.openings = {f"E{e}{c}": {'wins': 0, 'draws': 0, 'losses': 0}
+                             for e in range(15) for c in ['G', 'P']}
+
             if self.state_path.exists():
                 import json
                 with open(self.state_path) as f:
                     data = json.load(f)
-                self.phase = data.get('phase', 'exploration')
-                self.exploration_results = data.get('exploration_results', {})
-                self.exploitation_openings = data.get('exploitation_openings', [])
-                self.exploitation_index = data.get('exploitation_index', 0)
-                total_exploration = sum(len(v) for v in self.exploration_results.values())
-                logger.info(
-                    f"Loaded AlphaQ explorer state: phase={self.phase}, "
-                    f"{total_exploration} exploration games, "
-                    f"exploitation_openings={self.exploitation_openings}"
-                )
+
+                # Detect format version
+                if 'version' in data:
+                    # v2 format
+                    loaded_openings = data.get('openings', {})
+                    for key in self.openings:
+                        if key in loaded_openings:
+                            self.openings[key] = loaded_openings[key]
+                    self.games_played = data.get('games_played', 0)
+                    logger.info(
+                        f"Loaded AlphaQ explorer state (v2): "
+                        f"{self.games_played} games, {len([k for k, v in self.openings.items() if v['wins'] + v['draws'] + v['losses'] > 0])} tested openings"
+                    )
+                else:
+                    # v1 format: migrate
+                    logger.info("Migrating AlphaQ explorer state from v1 to v2")
+                    exploration_results = data.get('exploration_results', {})
+
+                    # Tally W/D/L for each opening
+                    for key, results in exploration_results.items():
+                        if key not in self.openings:
+                            self.openings[key] = {'wins': 0, 'draws': 0, 'losses': 0}
+                        for r in results:
+                            result_type = r['result']
+                            if result_type == 'win':
+                                self.openings[key]['wins'] += 1
+                            elif result_type == 'draw':
+                                self.openings[key]['draws'] += 1
+                            elif result_type == 'loss':
+                                self.openings[key]['losses'] += 1
+
+                    # Compute total games
+                    self.games_played = sum(
+                        v['wins'] + v['draws'] + v['losses']
+                        for v in self.openings.values()
+                    )
+                    logger.info(
+                        f"Migrated to v2: {self.games_played} games, "
+                        f"openings={[k for k, v in self.openings.items() if v['wins'] + v['draws'] + v['losses'] > 0]}"
+                    )
+                    self._save_state()
+            else:
+                # Fresh start
+                self.games_played = 0
         except Exception as e:
-            logger.warning(f"Failed to load AlphaQ explorer state: {e}")
+            logger.warning(f"Failed to load AlphaQ explorer state, starting fresh: {e}")
+            self.openings = {f"E{e}{c}": {'wins': 0, 'draws': 0, 'losses': 0}
+                             for e in range(15) for c in ['G', 'P']}
+            self.games_played = 0
 
     def _save_state(self):
-        """Persist state to disk."""
+        """Persist state to disk in v2 format."""
         try:
             import json
             self.state_path.parent.mkdir(parents=True, exist_ok=True)
             data = {
-                'phase': self.phase,
-                'exploration_results': self.exploration_results,
-                'exploitation_openings': self.exploitation_openings,
-                'exploitation_index': self.exploitation_index,
+                'version': 2,
+                'openings': self.openings,
+                'games_played': self.games_played,
                 'last_updated': __import__('datetime').datetime.now().isoformat(),
             }
             with open(self.state_path, 'w') as f:
@@ -1607,13 +1642,13 @@ class AlphaQExplorerStrategy:
 
     def initialize(self, opponent: Optional[str] = None) -> bool:
         """
-        Initialize the underlying solver and, if resuming exploitation,
-        re-enable learning and push any previously learned edge bias.
+        Initialize the underlying solver. Enable learning if we've played
+        enough games to have reliable opening data.
         """
         result = self.solver.initialize(opponent)
 
-        if self.phase == 'exploitation':
-            # Re-enable learning for exploitation phase
+        if self.games_played >= self.MIN_GAMES_BEFORE_LEARNING:
+            # Enable learning
             self.solver.learning_rate = 0.03
             # Push any previously accumulated edge bias into MATLAB
             if any(a != 0.0 for a in self.solver.edge_adjustments):
@@ -1622,10 +1657,6 @@ class AlphaQExplorerStrategy:
 
         return result
 
-    def _current_exploration_index(self) -> int:
-        """Compute which exploration opening we're on based on recorded results."""
-        return sum(len(v) for v in self.exploration_results.values())
-
     def calculate_move(
         self,
         state: str,
@@ -1633,8 +1664,8 @@ class AlphaQExplorerStrategy:
         score_history: list = None
     ) -> Optional[Tuple[int, str, dict]]:
         """
-        Calculate move. On the first move of each game, force the configured
-        opening. All subsequent moves delegate to the underlying solver.
+        Calculate move. On the first move of each game, use Thompson Sampling
+        to select an opening. All subsequent moves delegate to the underlying solver.
         """
         grey_count = state.count('-')
 
@@ -1642,88 +1673,47 @@ class AlphaQExplorerStrategy:
         if grey_count == 15:
             self.move_count = 1
 
-            if self.phase == 'exploration':
-                idx = self._current_exploration_index()
-                if idx >= self.EXPLORATION_GAMES:
-                    # All exploration games done — transition now
-                    self._transition_to_exploitation()
-                    # Fall through to exploitation logic below
-                else:
-                    opening = self.ALL_OPENINGS[idx]
-                    edge, color = opening
-                    self.current_game_opening = opening
+            # Thompson sampling: pick opening with highest Beta sample
+            import random
+            best_opening = None
+            best_sample = -1.0
 
-                    logger.info(
-                        f"AlphaQ [exploration]: Opening E{edge}{color} "
-                        f"({idx + 1}/{self.EXPLORATION_GAMES})"
-                    )
+            for key, counts in self.openings.items():
+                # Beta parameters: draws count as half-wins
+                alpha = 1 + counts['wins'] + 0.5 * counts['draws']
+                beta = 1 + counts['losses'] + 0.5 * counts['draws']
+                sample = random.betavariate(alpha, beta)
 
-                    stats = {
-                        'strategy': 'alphaq_explorer_opening',
-                        'predicted_score': 0.0,
-                        'opening_index': idx,
-                        'forced_opening': f"E{edge}{color}",
-                        'phase': 'exploration',
-                    }
-                    return (edge, color, stats)
+                if sample > best_sample:
+                    best_opening = key
+                    best_sample = sample
+                    self.thompson_alpha = alpha
+                    self.thompson_beta = beta
 
-            # Exploitation phase opening selection
-            if self.phase == 'exploitation':
-                opening_key = self.exploitation_openings[
-                    self.exploitation_index % len(self.exploitation_openings)
-                ]
-                edge = int(opening_key[1:-1])
-                color = opening_key[-1]
-                self.current_game_opening = (edge, color)
+            # Parse edge and color from opening key
+            edge = int(best_opening[1:-1])
+            color = best_opening[-1]
+            self.current_game_opening = (edge, color)
+            self.thompson_sample = best_sample
 
-                logger.info(
-                    f"AlphaQ [exploitation]: Opening {opening_key} "
-                    f"(#{self.exploitation_index % len(self.exploitation_openings) + 1}"
-                    f"/{len(self.exploitation_openings)})"
-                )
+            logger.info(
+                f"AlphaQ [thompson]: Opening {best_opening} "
+                f"(sample={best_sample:.4f}, α={self.thompson_alpha:.2f}, β={self.thompson_beta:.2f})"
+            )
 
-                stats = {
-                    'strategy': 'alphaq_explorer_opening',
-                    'predicted_score': 0.0,
-                    'forced_opening': opening_key,
-                    'phase': 'exploitation',
-                }
-                return (edge, color, stats)
+            stats = {
+                'strategy': 'alphaq_explorer_opening',
+                'predicted_score': 0.0,
+                'forced_opening': best_opening,
+                'thompson_sample': best_sample,
+                'thompson_alpha': self.thompson_alpha,
+                'thompson_beta': self.thompson_beta,
+            }
+            return (edge, color, stats)
 
         # After first move, delegate to underlying solver
         self.move_count += 1
         return self.solver.calculate_move(state, score, score_history)
-
-    def _transition_to_exploitation(self):
-        """
-        Analyse exploration results and switch to exploitation phase.
-
-        Selects top N openings ranked by (wins DESC, avg_score DESC).
-        Re-enables learning on the solver.
-        """
-        logger.info("Exploration complete. Transitioning to exploitation.")
-
-        # Score each opening
-        ranked = []
-        for key, results in self.exploration_results.items():
-            wins = sum(1 for r in results if r['result'] == 'win')
-            avg_score = sum(r['score'] for r in results) / len(results) if results else 0.0
-            ranked.append((key, wins, avg_score))
-
-        # Sort: most wins first, then highest avg_score
-        ranked.sort(key=lambda x: (x[1], x[2]), reverse=True)
-
-        self.exploitation_openings = [key for key, _, _ in ranked[:self.top_n_openings]]
-        self.exploitation_index = 0
-        self.phase = 'exploitation'
-
-        # Re-enable learning
-        self.solver.learning_rate = 0.03
-
-        logger.info(
-            f"AlphaQ exploitation openings: {self.exploitation_openings}"
-        )
-        self._save_state()
 
     def _push_edge_bias(self):
         """
@@ -1755,38 +1745,49 @@ class AlphaQExplorerStrategy:
 
     def end_game(self, result: str, final_score: float):
         """
-        Record game result. In exploration, logs and saves. In exploitation,
-        triggers REINFORCE learning on the solver and then pushes the updated
-        edge bias into MATLAB.
+        Record game result and update opening counts. Trigger learning if
+        we've passed the MIN_GAMES_BEFORE_LEARNING threshold.
         """
+        # Normalise result
+        if result not in ('win', 'loss', 'draw'):
+            result = 'draw'
+
         if self.current_game_opening:
             edge, color = self.current_game_opening
             opening_key = f"E{edge}{color}"
 
-            if opening_key not in self.exploration_results:
-                self.exploration_results[opening_key] = []
-            self.exploration_results[opening_key].append({
-                'score': final_score,
-                'result': result,
-            })
+            # Update opening counts: map result to the correct key
+            result_key_map = {'wins': 'win', 'draws': 'draw', 'losses': 'loss'}
+            for key_name, result_type in result_key_map.items():
+                if result == result_type:
+                    self.openings[opening_key][key_name] += 1
+                    break
+
+            self.games_played += 1
 
             logger.info(
-                f"AlphaQ [{self.phase}]: {opening_key} -> {result} "
-                f"(score: {final_score:+.4f})"
+                f"AlphaQ [thompson]: {opening_key} -> {result} "
+                f"(score: {final_score:+.4f}, games_played={self.games_played})"
             )
 
-        if self.phase == 'exploitation':
-            # Advance to next exploitation opening
-            self.exploitation_index += 1
+            # Learning gating
+            if self.games_played >= self.MIN_GAMES_BEFORE_LEARNING:
+                # Enable learning if this is the first game crossing the threshold
+                if self.games_played == self.MIN_GAMES_BEFORE_LEARNING:
+                    self.solver.learning_rate = 0.03
+                    logger.info(
+                        f"AlphaQ: Reached {self.MIN_GAMES_BEFORE_LEARNING} games, "
+                        f"enabling learning (learning_rate=0.03)"
+                    )
 
-            # Trigger REINFORCE learning inside the solver
-            self.solver.end_game(result, final_score)
+                # Trigger REINFORCE learning inside the solver
+                self.solver.end_game(result, final_score)
 
-            # Close the loop: push updated adjustments into MATLAB
-            self._push_edge_bias()
-        else:
-            # Exploration: no learning, just clear solver history
-            self.solver.move_history = []
+                # Close the loop: push updated adjustments into MATLAB
+                self._push_edge_bias()
+            else:
+                # Before MIN_GAMES_BEFORE_LEARNING, just clear solver history
+                self.solver.move_history = []
 
         # Save state
         self._save_state()
@@ -1796,15 +1797,30 @@ class AlphaQExplorerStrategy:
         self.move_count = 0
 
     def get_stats(self) -> dict:
-        """Return strategy statistics."""
+        """Return strategy statistics including current Thompson parameters."""
         stats = self.solver.get_stats() if hasattr(self.solver, 'get_stats') else {}
 
-        exploration_count = sum(len(v) for v in self.exploration_results.values())
+        # Compute current α/β for all openings
+        opening_stats = {}
+        for key, counts in self.openings.items():
+            alpha = 1 + counts['wins'] + 0.5 * counts['draws']
+            beta = 1 + counts['losses'] + 0.5 * counts['draws']
+            opening_stats[key] = {
+                'wins': counts['wins'],
+                'draws': counts['draws'],
+                'losses': counts['losses'],
+                'alpha': alpha,
+                'beta': beta,
+                'mean': alpha / (alpha + beta),
+            }
+
         stats['alphaq_explorer'] = {
-            'phase': self.phase,
-            'exploration_games': exploration_count,
-            'exploitation_openings': self.exploitation_openings,
-            'exploitation_index': self.exploitation_index,
+            'games_played': self.games_played,
+            'learning_enabled': self.games_played >= self.MIN_GAMES_BEFORE_LEARNING,
+            'thompson_sample': self.thompson_sample,
+            'thompson_alpha': self.thompson_alpha,
+            'thompson_beta': self.thompson_beta,
+            'openings': opening_stats,
             'edge_adjustments': self.solver.edge_adjustments,
         }
 

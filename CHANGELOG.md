@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Thompson Sampling Opening Selection for AlphaQExplorerStrategy** (`matlab_strategy.py`, `test_matlab_integration.py`)
+  - Replaced broken two-phase explore/exploit strategy with principled Bayesian opening selection
+  - **Root cause fix:** Previous greedy ranking by `(wins DESC, avg_score DESC)` degenerated to `avg_score DESC` when all openings had 0 wins, selecting E9G (89% loss rate) and E11G (100% loss rate) for exploitation
+  - **Thompson Sampling approach:** All 30 openings tracked with win/draw/loss counts, converted to Beta distribution posteriors. Each game samples from `Beta(α, β)` where `α = 1 + wins + 0.5×draws`, `β = 1 + losses + 0.5×draws`. Opening with highest sample is played. Draws count as half-wins to avoid double-penalizing safe openings in 0-win scenarios
+  - **Learning-rate gating:** REINFORCE disabled for first 10 games (MIN_GAMES_BEFORE_LEARNING) to gather clean opening data uncontaminated by solver adaptation
+  - **State versioning:** v1→v2 migration path for backward compatibility with legacy `alphaq_explorer_state.json` files
+  - **Comprehensive test suite:** 8 unit tests covering Thompson Sampling correctness, exploration dynamics, state migration, and learning gating
+  - **Full documentation:** `docs/ALPHAQ_STRATEGY.md` provides mathematical foundation, error analysis, reproduction instructions, and expected convergence metrics
+  - Expected improvement: Safe openings (0 losses) now selected 80%+; catastrophic losers selected <5%; monotonic win rate improvement over time (vs cliff failure in old strategy)
+
 - **P(win) Calibration for MCTS Terminal Evaluation** (`TangledMCTS.m`, `generate_calibration.py`)
   - Analysis of 1 511 calibrated games revealed that the displayed score on tangled-game.com does
     not reliably determine the winner: 59 % of losses show positive final scores. P(win) is a step

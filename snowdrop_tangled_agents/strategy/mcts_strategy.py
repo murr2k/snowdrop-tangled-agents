@@ -298,8 +298,8 @@ class MCTSStrategy:
 
     def __init__(
         self,
-        time_limit: float = 2.0,
-        max_iterations: int = 10000,
+        time_limit: float = 30.0,
+        max_iterations: int = 1_000_000,
         exploration: float = 1.414,
         prior_weight: float = 2.0,
         use_heuristic_rollout: bool = True
@@ -308,8 +308,10 @@ class MCTSStrategy:
         Initialize MCTS strategy.
 
         Args:
-            time_limit: Maximum time per move in seconds
-            max_iterations: Maximum MCTS iterations per move
+            time_limit: Maximum time per move in seconds (default 30s to leverage
+                       our compute advantage over opponents like Melissa)
+            max_iterations: Maximum MCTS iterations per move (set high - time is
+                           the real limit, we want to maximize iterations within budget)
             exploration: UCB1 exploration constant (sqrt(2) ≈ 1.414 is standard)
             prior_weight: Weight for heuristic prior in Progressive Bias
             use_heuristic_rollout: If True, use heuristic guidance in rollouts
@@ -505,8 +507,8 @@ class HybridStrategy:
 
     def __init__(
         self,
-        mcts_time_limit: float = 2.0,
-        mcts_iterations: int = 5000,
+        mcts_time_limit: float = 30.0,
+        mcts_iterations: int = 1_000_000,
         opening_moves: int = 4,
         prior_weight: float = 4.0
     ):
@@ -518,16 +520,16 @@ class HybridStrategy:
         )
         self.opening_moves = opening_moves
 
-        # Opening sequence: secure our edges first, then attack opponent
-        # Prioritize defense before offense for stability
-        # These are the most critical edges for Player 1 (Red)
+        # Opening sequence based on empirical results (Run 38: 400 games)
+        # E13P: 44% win rate, E12P: 37% win rate against Melissa
+        # Purple openings on outer ring edges found gaps in opponent play
         self.opening_sequence = [
-            (9, 'G'),   # E9 (4-5): MY edge - secure our spoke first
+            (13, 'P'),  # E13 (7-8): Best opening - 44% win rate vs Melissa
+            (12, 'P'),  # E12 (6-7): Second best - 37% win rate vs Melissa
             (10, 'G'),  # E10 (5-6): MY edge + HUB - critical hub control
-            (11, 'G'),  # E11 (5-9): MY edge - complete our vertex protection
+            (11, 'G'),  # E11 (5-9): MY edge - secure our vertex
+            (9, 'G'),   # E9 (4-5): MY edge - complete protection
             (5, 'P'),   # E5 (1-7): OPP edge - attack their spoke
-            (12, 'P'),  # E12 (6-7): OPP edge + HUB - attack hub connection
-            (13, 'P'),  # E13 (7-8): OPP edge - complete attack on vertex 7
         ]
 
         # Learning: track move history and outcomes

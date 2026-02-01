@@ -569,7 +569,6 @@ class WebPlayer:
                     minimax_depth=4,
                     mcts_iterations=5000,
                     player=1,
-                    top_n_openings=5,
                 )
         else:  # "heuristic" (default)
             self.strategy = PetersenStrategy(params_path=self.params_path)

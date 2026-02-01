@@ -24,6 +24,7 @@ A comprehensive framework for building intelligent agents that play [Tangled](ht
 
 ### Highlights
 
+- **Thompson Sampling Opening Selection** - Bayesian approach to exploration-exploitation in AlphaQExplorerStrategy
 - **MCTS Strategy Engine** - Monte Carlo Tree Search with 5000+ iterations per move
 - **MATLAB Integration** - High-compute search with parallel processing and neural network evaluation
 - **Live Web Play** - Automated gameplay on tangled-game.com via Playwright
