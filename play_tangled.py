@@ -745,7 +745,7 @@ class WebPlayer:
 
         # Wait for game board
         try:
-            self.page.wait_for_selector("svg line", timeout=10000)
+            self.page.wait_for_selector("svg line", timeout=30000)
             self.logger.info("Game board ready")
             return True
         except:
@@ -1610,8 +1610,15 @@ class WebPlayer:
             except Exception as e:
                 self.logger.debug(f"Pre-game init publish failed: {e}")
 
-        # Wait for initial turn
+        # Wait for initial turn (AlphaQ Up can be slow to present)
+        initial_turn_timeout = 60.0
+        initial_turn_start = time.time()
         while not self.is_our_turn() and not self.is_game_over():
+            if time.time() - initial_turn_start > initial_turn_timeout:
+                self.logger.warning(
+                    f"Initial turn not detected after {initial_turn_timeout:.0f}s — proceeding anyway"
+                )
+                break
             time.sleep(0.3)
 
         move_count = 0

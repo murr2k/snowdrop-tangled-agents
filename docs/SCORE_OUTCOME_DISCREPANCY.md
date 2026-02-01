@@ -299,6 +299,83 @@ edges that empirically maintain the positive mid-game trajectory.
 
 ---
 
+## AlphaQ Up: Calibration Does Not Transfer (Run 47, 60 games)
+
+Run 47 tested the same calibrated solver against AlphaQ Up using the
+AlphaQExplorerStrategy (30-game exploration → 30-game exploitation). The result
+was **0 wins in 60 games** (27 losses, 33 draws). AlphaQ Up is a fundamentally
+different opponent from Melissa, and the data reveals exactly why.
+
+### The solver is winning positionally; the adjudicator is not
+
+| Outcome | Avg score | Min score | Max score | n |
+|---------|-----------|-----------|-----------|---|
+| Draw | +0.437 | +0.022 | +0.780 | 33 |
+| Loss | +0.186 | −1.888 | +0.728 | 27 |
+
+Draws averaged +0.437 and losses averaged +0.186. We are consistently reaching
+positive terminal scores — the MCTS search and calibration are functioning as
+designed. The problem is not positional: it is at the adjudication stage.
+AlphaQ Up is winning (or drawing) the adjudication from states where our
+calibration curve — fitted on Melissa's adjudication — predicted a win.
+
+The most extreme case: a loss recorded at score +0.728. Against Melissa, a
+score in that range wins ~43 % of the time. Against AlphaQ Up it lost outright.
+Losses at +0.136 and draws at +0.780 are similarly inconsistent with the
+Melissa-derived calibration.
+
+### The calibration curve is opponent-specific
+
+The calibration curve in `calibration_pwin.mat` was fitted on 1,511 games
+against Melissa. It encodes Melissa's adjudication noise characteristics: the
+threshold above which scores reliably convert to wins, the width of the
+coin-flip zone, and the saturation behaviour at high scores.
+
+AlphaQ Up has a different adjudication profile. The +2 threshold that yields
+98.5 % win rate against Melissa does not hold here. Without wins to measure
+against, the exact shape of AlphaQ's P(win) curve is unknown, but the data
+shows it is shifted substantially toward higher scores — or that AlphaQ's
+adjudicator is more stochastic overall.
+
+**Implication:** To calibrate against AlphaQ Up, we need wins. The current
+calibration curve should not be trusted for this opponent.
+
+### REINFORCE degenerates without wins
+
+The closed learning loop (REINFORCE → `setEdgeBias`) requires positive reward
+signal to function. With zero wins in 60 games, every edge that appeared in a
+losing game was penalised and no edge was ever reinforced. The final bias drifted
+uniformly negative:
+
+```
+E13: −0.083   E8: −0.081   E6: −0.076   E4: −0.055
+E10: −0.053   E7: −0.049   E14: −0.040   E3: −0.038
+```
+
+This is not a learned policy — it is the expected output of a one-sided reward
+signal applied uniformly. Draws contribute zero gradient under the current
+REINFORCE formulation (only `result == 'win'` yields positive reward).
+
+To extract signal from this opponent, the reward function needs to be modified.
+Draws are not equivalent to losses here: a draw at score +0.78 is a near-miss
+that the solver almost converted, while a loss at −1.89 is a positional
+collapse. Treating them identically discards the only useful signal available.
+
+### Exploration found no exploitable openings
+
+All 30 first-move openings produced either draws or losses. The top-5 selected
+for exploitation (E9G, E0G, E11G, E7G, E6G) were chosen by average score since
+wins were zero across the board. Exploitation converged on E6G and E7G, which
+had the best draw scores (+0.506 and +0.518 respectively), but this produced
+no wins in 30 exploitation games.
+
+The absence of exploitable openings suggests AlphaQ Up's weakness — if one
+exists — is not in its response to a specific first move. It may require
+deeper positional exploitation that only emerges at moves 3–5, consistent with
+the mid-game bottleneck identified in the Melissa analysis.
+
+---
+
 ## Appendix: Raw Numbers
 
 - Total games played: 1,600
