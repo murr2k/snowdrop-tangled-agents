@@ -64,6 +64,10 @@ classdef TangledMCTS < handle
 
         % Learned edge bias from REINFORCE (1x15, default zeros)
         EdgeBias double = zeros(1, 15)
+
+        % P(win) calibration curve (maps SA score -> win probability)
+        Calibration struct                     % .scores and .pwin vectors
+        CalibrationLoaded logical = false
     end
 
     properties (Constant)
@@ -120,6 +124,9 @@ classdef TangledMCTS < handle
 
             % Load opponent model for learned rollout policy
             this.loadOpponentModel();
+
+            % Load P(win) calibration curve
+            this.loadCalibration();
         end
 
         function loadLUT(this)
@@ -249,6 +256,75 @@ classdef TangledMCTS < handle
                 warning('TangledMCTS:OpponentModelLoadError', ...
                     'Failed to load opponent model: %s. Using heuristic.', ME.message);
                 this.OpponentModelLoaded = false;
+            end
+        end
+
+        function loadCalibration(this)
+            %LOADCALIBRATION Load P(win) calibration curve from .mat file
+            %
+            %   The calibration curve maps SimulatedAnnealing predicted scores
+            %   to empirical win probabilities fitted from 1 500+ live games.
+            %   This corrects SA's systematic overconfidence: SA scores in
+            %   [+2,+5] only win ~71 % of the time, yet the MCTS previously
+            %   treated them as near-certain wins.
+            %
+            %   File: <script_dir>/data/calibration_pwin.mat
+            %     scores  — Nx1 sorted knot points
+            %     pwin    — Nx1 monotonic P(win) at each knot
+
+            scriptPath = mfilename('fullpath');
+            scriptDir  = fileparts(scriptPath);
+            calPath    = fullfile(scriptDir, 'data', 'calibration_pwin.mat');
+
+            if ~isfile(calPath)
+                altPaths = {
+                    fullfile(pwd, 'data', 'calibration_pwin.mat'),
+                    fullfile(pwd, 'snowdrop_tangled_agents', 'matlab', 'rl', 'data', 'calibration_pwin.mat')
+                };
+                for i = 1:length(altPaths)
+                    if isfile(altPaths{i})
+                        calPath = altPaths{i};
+                        break;
+                    end
+                end
+            end
+
+            if ~isfile(calPath)
+                warning('TangledMCTS:CalibrationNotFound', ...
+                    'calibration_pwin.mat not found. Using raw SA scores.');
+                this.CalibrationLoaded = false;
+                return;
+            end
+
+            try
+                data = load(calPath);
+                if isfield(data, 'scores') && isfield(data, 'pwin')
+                    this.Calibration = struct();
+                    this.Calibration.scores = double(data.scores(:));
+                    this.Calibration.pwin   = double(data.pwin(:));
+
+                    if length(this.Calibration.scores) == length(this.Calibration.pwin) ...
+                            && length(this.Calibration.scores) >= 10
+                        this.CalibrationLoaded = true;
+                        fprintf('Loaded P(win) calibration: %d knots, ' ...
+                            'score range [%.2f, %.2f]\n', ...
+                            length(this.Calibration.scores), ...
+                            this.Calibration.scores(2), ...
+                            this.Calibration.scores(end-1));
+                    else
+                        warning('TangledMCTS:CalibrationBadShape', ...
+                            'Calibration vectors malformed. Using raw SA scores.');
+                        this.CalibrationLoaded = false;
+                    end
+                else
+                    warning('TangledMCTS:CalibrationMissingField', ...
+                        'calibration_pwin.mat missing scores/pwin fields.');
+                    this.CalibrationLoaded = false;
+                end
+            catch ME
+                warning('TangledMCTS:CalibrationLoadError', ...
+                    'Failed to load calibration: %s', ME.message);
+                this.CalibrationLoaded = false;
             end
         end
 
@@ -573,12 +649,19 @@ classdef TangledMCTS < handle
         end
 
         function score = evaluateTerminal(this, state)
-            %EVALUATETERMINAL Evaluate terminal state using LUT or heuristic
+            %EVALUATETERMINAL Evaluate terminal state using LUT or heuristic,
+            %   then calibrate to P(win).
             %
-            %   If LUT is loaded, performs O(1) lookup for exact adjudicator score.
-            %   Otherwise falls back to heuristic evaluation.
+            %   Pipeline:
+            %     1. Raw SA score from LUT (or heuristic fallback)
+            %     2. Player-perspective flip (LUT is P1-centric)
+            %     3. Calibration: SA score -> P(win) -> [-1, +1]
             %
-            %   Returns score from THIS player's perspective.
+            %   The calibration step is the critical correction.  Raw SA scores
+            %   are unreliable predictors of the actual winner below +2 (see
+            %   docs/SCORE_OUTCOME_DISCREPANCY.md).  The calibrated value
+            %   represents 2*P(win)-1, so +1 = certain win, -1 = certain loss,
+            %   0 = coin flip.
 
             if this.LUTLoaded
                 % O(1) lookup in pre-computed LUT
@@ -593,6 +676,38 @@ classdef TangledMCTS < handle
                 % Fallback to heuristic
                 score = this.evaluateTerminalHeuristic(state);
             end
+
+            % Calibrate raw SA score to P(win) in [-1, +1]
+            score = this.calibrateScore(score);
+        end
+
+        function value = calibrateScore(this, sa_score)
+            %CALIBRATESCORE Map SA predicted score to calibrated value.
+            %
+            %   If calibration is loaded, interpolates the empirical P(win)
+            %   curve and returns 2*P(win) - 1, giving values in [-1, +1]:
+            %     +1  =  certain win
+            %      0  =  coin flip (50 % win probability)
+            %     -1  =  certain loss
+            %
+            %   Without calibration, falls back to a sigmoid normalisation
+            %   that approximates the same mapping.
+
+            if ~this.CalibrationLoaded
+                % Fallback sigmoid: centres on 0, saturates at ±1
+                value = tanh(sa_score * 0.4);
+                return;
+            end
+
+            % Linear interpolation with extrapolation (sentinels at ±100
+            % anchor the curve to 0 and 1 so extrapolation is safe)
+            pwin = interp1(this.Calibration.scores, ...
+                           this.Calibration.pwin, ...
+                           sa_score, 'linear', 'extrap');
+
+            % Clamp to [0, 1] and map to [-1, +1]
+            pwin  = max(0, min(1, pwin));
+            value = 2 * pwin - 1;
         end
 
         function idx = state2idx(~, state)

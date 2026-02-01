@@ -9,6 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **P(win) Calibration for MCTS Terminal Evaluation** (`TangledMCTS.m`, `generate_calibration.py`)
+  - Analysis of 1 511 calibrated games revealed that the displayed score on tangled-game.com does
+    not reliably determine the winner: 59 % of losses show positive final scores. P(win) is a step
+    function of score — below +2 the adjudicator outcome is dominated by noise (P(win) = 6 % at
+    score +0.5, 43 % at +0.8). SA predicted scores are noisier still: SA confidence in [+2, +5]
+    only wins 71 % of the time vs 98.5 % for the website score in that range.
+  - `generate_calibration.py` fits a monotonic P(win) curve via quantile-binned isotonic regression
+    on game history and saves it as `calibration_pwin.mat` (32 knots). The curve maps SA predicted
+    scores to empirical win probabilities so the MCTS search optimises for states that reliably win
+    rather than states with high expected score.
+  - `TangledMCTS.m`: `loadCalibration()` loads the curve at construction; `calibrateScore()` applies
+    `interp1` interpolation and returns `2·P(win) − 1 ∈ [−1, +1]`. `evaluateTerminal` now applies
+    calibration after the LUT lookup (or heuristic fallback). A `tanh` sigmoid fallback is used when
+    the .mat file is unavailable.
+  - `docs/SCORE_OUTCOME_DISCREPANCY.md`: full analysis of the score–outcome mismatch, two
+    hypotheses (display bug vs intentional quantum measurement stochasticity), a distinguishing
+    test for the game backend, and the impact on AI agents.
+
 - **AlphaQ Explorer Strategy with Closed Learning Loop** (`matlab_strategy.py`, `TangledMCTS.m`, `HybridTangledSolver.m`)
   - Two-phase explore/exploit strategy designed for the new "AlphaQ Up" opponent
   - **Exploration phase** (games 0–29): Cycles all 30 possible first moves with learning disabled,
