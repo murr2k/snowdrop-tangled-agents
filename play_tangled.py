@@ -1571,7 +1571,7 @@ class WebPlayer:
         self.metrics_tracker.record_snapshot()  # Capture model state at game start
 
         # Initialize MATLAB strategy with opponent model
-        if self.strategy_type == "matlab" and hasattr(self.strategy, 'initialize'):
+        if hasattr(self.strategy, 'initialize'):
             self.strategy.initialize(opponent=opponent)
 
         # Start stats tracking for this game (with model metrics and run info)
