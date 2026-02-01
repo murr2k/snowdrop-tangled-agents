@@ -434,6 +434,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added 0.5s delay after turn change detection before reading board state
   - Clarified that game is strictly turn-based (no true race conditions)
 
+### Fixed
+
+- **MATLAB string-literal concatenation in `loadCalibration`** (`TangledMCTS.m`)
+  - `fprintf` format string was split across two lines with `...` continuation. MATLAB does not
+    auto-concatenate adjacent single-quoted strings (unlike C); the second literal became a
+    separate argument, causing a parse error on every solver construction. Consolidated onto one
+    line so the calibration curve loads correctly.
+
 ## [0.0.5] - 2026-01-20
 
 ### Changed
