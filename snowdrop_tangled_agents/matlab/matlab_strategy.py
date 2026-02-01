@@ -519,6 +519,14 @@ class HybridSolverStrategy:
             )
             self.engine.addpath(rl_path, nargout=0)
 
+            # Force reload of all classdef files from disk.  A shared
+            # MATLAB session may have cached an older version of
+            # TangledMCTS (or any other class) from before a fix was
+            # committed.  `clear classes` discards those cached
+            # definitions so the next construction picks up the current
+            # .m files on the path.
+            self.engine.eval("clear classes", nargout=0)
+
             # Sanitize opponent name for safe MATLAB string embedding
             opponent_name = (opponent or '').replace("'", "''")
             self.engine.eval(
