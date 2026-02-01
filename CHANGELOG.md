@@ -17,7 +17,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **State versioning:** v1→v2 migration path for backward compatibility with legacy `alphaq_explorer_state.json` files
   - **Comprehensive test suite:** 8 unit tests covering Thompson Sampling correctness, exploration dynamics, state migration, and learning gating
   - **Full documentation:** `docs/ALPHAQ_STRATEGY.md` provides mathematical foundation, error analysis, reproduction instructions, and expected convergence metrics
-  - Expected improvement: Safe openings (0 losses) now selected 80%+; catastrophic losers selected <5%; monotonic win rate improvement over time (vs cliff failure in old strategy)
+  - **Mid-run analysis (Run 55, Game 310/500):** See `docs/ALPHAQ_THOMPSON_SAMPLING_MID_RUN_ANALYSIS.md` for critical findings on algorithm correctness and solver limitations
+
+### Analysis
+
+- **ALPHAQ_THOMPSON_SAMPLING_MID_RUN_ANALYSIS.md** (New Document)
+  - Mid-run analysis of Thompson Sampling implementation at game 310/500
+  - **Critical Finding:** Thompson Sampling is working perfectly (safe openings 6-9% frequency, risky openings 2-3% frequency, correct posterior distributions), but solver achieves 0% win rate (0 wins in 386 games) against AlphaQ Up
+  - **Root Cause Identified:** The original plan's assumption that "safe openings lead to wins" is false. Preventing bad openings prevents catastrophic failure but does not enable wins. AlphaQ Up appears to prevent all wins regardless of opening selection
+  - **Weaknesses Documented:**
+    1. Zero win rate (0/386 games) - identical to broken greedy strategy
+    2. Safe openings degrading (E0G went from 10D/0L to 10D/5L)
+    3. REINFORCE learning rate too aggressive (0.03) without validation mechanism
+    4. Original plan assumption invalidated by evidence
+  - **Recommendations:** Reduce learning rate to 0.001-0.005, add REINFORCE validation metrics, investigate E0G degradation, establish ground truth comparison (AlphaQ's win rate vs other solvers), consider architectural solver changes
+  - **Conclusion:** Thompson Sampling successfully fixed the ranking problem but could not overcome the fundamental solver weakness vs AlphaQ Up
 
 - **P(win) Calibration for MCTS Terminal Evaluation** (`TangledMCTS.m`, `generate_calibration.py`)
   - Analysis of 1 511 calibrated games revealed that the displayed score on tangled-game.com does
