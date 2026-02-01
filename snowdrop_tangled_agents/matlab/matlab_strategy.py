@@ -500,7 +500,7 @@ class HybridSolverStrategy:
         Initialize MATLAB connection and create solver instance.
 
         Args:
-            opponent: Opponent name (unused, for API compatibility)
+            opponent: Opponent name, forwarded to MATLAB for opponent-conditional calibration.
 
         Returns:
             True if MATLAB connection successful.
@@ -519,13 +519,15 @@ class HybridSolverStrategy:
             )
             self.engine.addpath(rl_path, nargout=0)
 
-            # Create solver instance in MATLAB
+            # Sanitize opponent name for safe MATLAB string embedding
+            opponent_name = (opponent or '').replace("'", "''")
             self.engine.eval(
                 f"hybridSolver = HybridTangledSolver("
                 f"'TimeLimit', {self.time_limit}, "
                 f"'MinimaxDepth', {self.minimax_depth}, "
                 f"'MCTSIterations', {self.mcts_iterations}, "
-                f"'Player', {self.player});",
+                f"'Player', {self.player}, "
+                f"'Opponent', '{opponent_name}');",
                 nargout=0
             )
 
@@ -753,13 +755,17 @@ class HybridSolverStrategy:
         if not self.move_history:
             return
 
-        # Reward signal based on result
+        # Continuous score-weighted reward.  Win and loss branches are
+        # structurally unchanged.  Draw branch replaces the flat ±0.1 with
+        # a score-proportional signal so that near-miss draws (e.g. +0.78)
+        # contribute meaningful positive gradient even when wins are absent.
+        clamped = max(-2.0, min(2.0, final_score))
         if result == 'win':
-            reward = 1.0 + min(final_score, 2.0) / 2.0  # 1.0 to 2.0
+            reward = 1.0 + clamped / 2.0                    # 1.0 to 2.0
         elif result == 'draw':
-            reward = 0.1 if final_score >= 0 else -0.1
+            reward = clamped * 0.65                          # ~[-1.3, +1.3]
         else:  # loss
-            reward = -1.0 + max(final_score, -2.0) / 2.0  # -2.0 to -1.0
+            reward = -1.0 + clamped / 2.0                   # -2.0 to -1.0
 
         # Discount factor for temporal credit assignment
         gamma = 0.9

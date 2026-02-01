@@ -64,6 +64,9 @@ classdef HybridTangledSolver < handle
 
         % Learned edge bias from REINFORCE (1x15, default zeros)
         EdgeBias double = zeros(1, 15)
+
+        % Opponent name for conditional calibration (empty = generic)
+        OpponentName char = ''
     end
 
     methods
@@ -78,12 +81,14 @@ classdef HybridTangledSolver < handle
                 options.MinimaxDepth int32 = 4
                 options.MCTSIterations int32 = 5000
                 options.Player int32 = 1
+                options.Opponent char = ''
             end
 
             this.TimeLimit = options.TimeLimit;
             this.MinimaxDepth = options.MinimaxDepth;
             this.MCTSIterations = options.MCTSIterations;
             this.PlayerPerspective = options.Player;
+            this.OpponentName = options.Opponent;
 
             % Initialize component solvers
             this.initializeSolvers();
@@ -108,7 +113,8 @@ classdef HybridTangledSolver < handle
             mctsTime = this.TimeLimit * this.MCTSTimeFraction;
             this.MCTS = TangledMCTS('Iterations', this.MCTSIterations, ...
                                     'TimeLimit', mctsTime, ...
-                                    'Player', this.PlayerPerspective);
+                                    'Player', this.PlayerPerspective, ...
+                                    'Opponent', this.OpponentName);
         end
 
         function loadLUT(this)
@@ -440,7 +446,8 @@ classdef HybridTangledSolver < handle
             mctsTime = this.TimeLimit * this.MCTSTimeFraction;
             this.MCTS = TangledMCTS('Iterations', this.MCTSIterations, ...
                                     'TimeLimit', mctsTime, ...
-                                    'Player', player);
+                                    'Player', player, ...
+                                    'Opponent', this.OpponentName);
 
             % Re-apply any previously set edge bias to new MCTS instance
             if any(this.EdgeBias ~= 0)

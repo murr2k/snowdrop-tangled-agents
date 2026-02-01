@@ -366,6 +366,57 @@ cat ~/.tangled/alphaq_explorer_state.json
 cat ~/.tangled/hybrid_solver_adjustments.json
 ```
 
+### 11. Score-Weighted Draw Reward + Opponent-Conditional Calibration (January 2026)
+
+Two fixes targeting the learning stall observed in Run 47 (0W/27L/33D vs AlphaQ Up).
+
+**Fix 1 — Score-weighted draw reward**
+
+Against strong opponents wins are rare; most games end in draws.  The old REINFORCE reward for a
+draw was a flat ±0.1 regardless of the final score, which gave the policy gradient almost no signal.
+The draw reward is now `score × 0.65`, so a near-miss draw at +0.78 produces reward +0.507 instead
+of +0.1.  The multiplier 0.65 is chosen so that the maximum realistic draw reward (+0.65 at score
++1.0) stays below the minimum win reward (1.0), preserving the win > draw > loss ordering.  Win and
+loss branches are unchanged.
+
+| Scenario | Old reward | New reward |
+|----------|-----------|-----------|
+| Win at +2.0 | 2.0 | 2.0 |
+| Draw at +0.78 | +0.1 | **+0.507** |
+| Draw at 0.0 | +0.1 | 0.0 |
+| Draw at −0.5 | −0.1 | −0.325 |
+| Loss at −1.89 | −1.945 | −1.945 |
+
+**Fix 2 — Opponent-conditional calibration**
+
+The P(win) calibration curve was fitted on Melissa game data.  Loading it for every opponent made the
+solver complacent at moderate scores against opponents with different noise profiles.  `loadCalibration()`
+now follows a two-phase lookup:
+
+```
+Named opponent with fitted curve  →  load calibration_<name>.mat
+Named opponent, no fitted curve   →  tanh sigmoid fallback
+No opponent name (legacy path)    →  load calibration_pwin.mat
+```
+
+`calibration_melissa.mat` is shipped alongside `calibration_pwin.mat` so Melissa resolves correctly.
+New per-opponent curves can be added by dropping a `calibration_<name>.mat` into `data/` — the
+sanitisation rule is: lowercase, replace non-`[a-z0-9]` with `_`, collapse runs, strip trailing `_`.
+
+**Verification (Run 50, 10 games vs AlphaQ Up):**
+- Tanh fallback fires correctly (no `calibration_alphaq_up.mat` exists)
+- Draw rewards: 0.34–0.50 per game (vs flat 0.1 previously)
+- Final edge adjustments are non-uniform: +0.035 on edges played in good draws, −0.081 on edges
+  associated with losses
+
+```bash
+# Play with the updated solver
+python play_tangled.py --strategy alphaq_explorer --opponent alphaq --run 10
+
+# Inspect learned bias
+cat ~/.tangled/hybrid_solver_adjustments.json
+```
+
 ### Documentation
 
 - `docs/THEORY_OF_OPERATION.md` - Comprehensive system documentation

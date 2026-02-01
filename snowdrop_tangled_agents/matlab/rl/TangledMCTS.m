@@ -68,6 +68,7 @@ classdef TangledMCTS < handle
         % P(win) calibration curve (maps SA score -> win probability)
         Calibration struct                     % .scores and .pwin vectors
         CalibrationLoaded logical = false
+        OpponentName char = ''                 % Opponent name for conditional calibration
     end
 
     properties (Constant)
@@ -95,6 +96,7 @@ classdef TangledMCTS < handle
                 options.UseParallel logical = true
                 options.Player int32 = 1
                 options.EdgeBias double = zeros(1, 15)
+                options.Opponent char = ''
             end
 
             this.Iterations = options.Iterations;
@@ -105,6 +107,7 @@ classdef TangledMCTS < handle
             this.UseParallel = options.UseParallel;
             this.PlayerPerspective = options.Player;
             this.EdgeBias = options.EdgeBias;
+            this.OpponentName = options.Opponent;
 
             % Set edge classifications based on player perspective
             if this.PlayerPerspective == 1
@@ -260,21 +263,58 @@ classdef TangledMCTS < handle
         end
 
         function loadCalibration(this)
-            %LOADCALIBRATION Load P(win) calibration curve from .mat file
+            %LOADCALIBRATION Load P(win) calibration curve (opponent-conditional)
             %
-            %   The calibration curve maps SimulatedAnnealing predicted scores
-            %   to empirical win probabilities fitted from 1 500+ live games.
-            %   This corrects SA's systematic overconfidence: SA scores in
-            %   [+2,+5] only win ~71 % of the time, yet the MCTS previously
-            %   treated them as near-certain wins.
+            %   Two-phase lookup:
+            %     Phase 1 — Named opponent: search for calibration_<name>.mat.
+            %                If found, load it.  If not found, leave
+            %                CalibrationLoaded = false so calibrateScore falls
+            %                back to the tanh sigmoid.  Never loads the generic
+            %                curve for a named opponent.
+            %     Phase 2 — No opponent name (legacy path): load
+            %                calibration_pwin.mat exactly as before.
             %
-            %   File: <script_dir>/data/calibration_pwin.mat
-            %     scores  — Nx1 sorted knot points
-            %     pwin    — Nx1 monotonic P(win) at each knot
+            %   File layout:
+            %     calibration_<sanitized>.mat   — per-opponent fitted curve
+            %     calibration_pwin.mat          — generic fallback (legacy)
+            %   Both contain: scores (Nx1) and pwin (Nx1).
 
             scriptPath = mfilename('fullpath');
             scriptDir  = fileparts(scriptPath);
-            calPath    = fullfile(scriptDir, 'data', 'calibration_pwin.mat');
+
+            if ~isempty(this.OpponentName)
+                % ---- Phase 1: opponent-specific calibration ----
+                sanitized = this.sanitizeOpponentName(this.OpponentName);
+                calFile   = ['calibration_' sanitized '.mat'];
+                calPath   = fullfile(scriptDir, 'data', calFile);
+
+                if ~isfile(calPath)
+                    altPaths = {
+                        fullfile(pwd, 'data', calFile),
+                        fullfile(pwd, 'snowdrop_tangled_agents', 'matlab', 'rl', 'data', calFile)
+                    };
+                    for i = 1:length(altPaths)
+                        if isfile(altPaths{i})
+                            calPath = altPaths{i};
+                            break;
+                        end
+                    end
+                end
+
+                if ~isfile(calPath)
+                    % No fitted curve for this opponent — tanh fallback
+                    fprintf('TangledMCTS: no calibration file for opponent ''%s'' (%s). Using tanh fallback.\n', ...
+                        this.OpponentName, calFile);
+                    this.CalibrationLoaded = false;
+                    return;
+                end
+
+                this.loadCalibrationFile(calPath);
+                return;
+            end
+
+            % ---- Phase 2: generic (legacy) calibration ----
+            calPath = fullfile(scriptDir, 'data', 'calibration_pwin.mat');
 
             if ~isfile(calPath)
                 altPaths = {
@@ -295,6 +335,14 @@ classdef TangledMCTS < handle
                 this.CalibrationLoaded = false;
                 return;
             end
+
+            this.loadCalibrationFile(calPath);
+        end
+
+        function loadCalibrationFile(this, calPath)
+            %LOADCALIBRATIONFILE Load and validate a calibration .mat file
+            %
+            %   Shared by both the opponent-specific and generic paths.
 
             try
                 data = load(calPath);
@@ -317,7 +365,7 @@ classdef TangledMCTS < handle
                     end
                 else
                     warning('TangledMCTS:CalibrationMissingField', ...
-                        'calibration_pwin.mat missing scores/pwin fields.');
+                        '%s missing scores/pwin fields.', calPath);
                     this.CalibrationLoaded = false;
                 end
             catch ME
@@ -908,6 +956,14 @@ classdef TangledMCTS < handle
                 info.maxScore = NaN;
                 info.meanScore = NaN;
             end
+        end
+
+        function safe = sanitizeOpponentName(~, name)
+            %SANITIZEOPPPONENTNAME Sanitize opponent name for use as filename
+            safe = lower(name);
+            safe = regexprep(safe, '[^a-z0-9]', '_');
+            safe = regexprep(safe, '_+', '_');
+            safe = regexprep(safe, '_$', '');
         end
     end
 

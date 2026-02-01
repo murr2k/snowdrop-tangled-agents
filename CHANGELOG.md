@@ -434,6 +434,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added 0.5s delay after turn change detection before reading board state
   - Clarified that game is strictly turn-based (no true race conditions)
 
+- **Score-Weighted Draw Reward + Opponent-Conditional Calibration** (`matlab_strategy.py`, `TangledMCTS.m`, `HybridTangledSolver.m`)
+  - Motivated by Run 47 (0W/27L/33D vs AlphaQ Up): wins are rare enough that the flat ±0.1 draw
+    reward starves the REINFORCE loop of gradient.  The draw branch now returns `score × 0.65`,
+    giving near-miss draws (e.g. +0.78 → reward +0.507) meaningful positive signal while staying
+    below the minimum win reward (1.0).  Win and loss branches are structurally unchanged.
+  - `loadCalibration()` is now opponent-conditional.  When an opponent name is provided, the solver
+    looks for `calibration_<sanitized_name>.mat` first.  If no per-opponent file exists it falls back
+    to the `tanh` sigmoid rather than loading the generic (Melissa-fitted) curve — this prevents
+    Melissa's noise profile from biasing the solver against other opponents.  The generic
+    `calibration_pwin.mat` path is only taken when no opponent name is supplied (legacy behaviour).
+  - `calibration_melissa.mat` added (copy of `calibration_pwin.mat`) so Melissa as a named opponent
+    resolves to the existing fitted curve.
+  - `OpponentName` threaded from Python through `HybridTangledSolver` into `TangledMCTS` via a new
+    `'Opponent'` constructor argument on both classes.
+  - Verified: Run 50 vs AlphaQ Up produced non-uniform edge adjustments (+0.035 on good-draw edges,
+    −0.081 on loss-associated edges) and draw rewards of 0.34–0.50 (vs flat 0.1 previously).
+
 ### Fixed
 
 - **MATLAB string-literal concatenation in `loadCalibration`** (`TangledMCTS.m`)
