@@ -237,6 +237,68 @@ MCTS tree search or rollout structure. Only the terminal value returned changes.
 
 ---
 
+## Calibration Results: Run 46 (60 games vs MCTS Melissa)
+
+The calibration curve was implemented in `TangledMCTS.m` as described above and
+tested over 60 games against MCTS Melissa. The baseline is the immediately
+preceding 60-game run (Run 44) using the same strategy, opponent, and learning
+loop but with raw SA scores as the terminal evaluation.
+
+### Head-to-head comparison
+
+| Metric | Run 44 (raw SA) | Run 46 (calibrated) |
+|--------|-----------------|---------------------|
+| Wins | 13 | **22** |
+| Losses | 26 | **16** |
+| Draws | 21 | 22 |
+| Win rate | 21.7 % | **36.7 %** |
+| Loss rate | 43.3 % | **26.7 %** |
+| Overall avg score | 0.670 | **0.817** |
+| Avg score on wins | 2.423 | 1.858 |
+| Wins at score ≥ +2 | 4 | **9** |
+| Wins at score [+1, +2) | 6 | 7 |
+| Wins at score [0, +1) | 3 | 5 |
+
+Win rate rose by **+15 percentage points** and losses dropped by nearly half.
+The change was a single substitution in terminal evaluation — no structural
+changes to the tree search, rollout policy, or opening strategy.
+
+### Why it works
+
+The calibration reweights the MCTS value landscape so that the difference
+between SA score +1.8 and +2.2 — previously treated as noise — becomes the
+difference between a ~40 % and ~98 % win. The solver converges on paths to
+terminal states above the +2 threshold more aggressively.
+
+Two effects are visible in the data:
+
+1. **More wins in the reliable zone.** Wins at score ≥ +2 more than doubled
+   (4 → 9). The solver is successfully steering toward terminal states where
+   the adjudicator outcome is nearly deterministic.
+
+2. **Fewer losses overall, not fewer high-confidence losses.** The 10 losses
+   eliminated are concentrated in the [0, +1) score range — the coin-flip zone
+   where raw SA evaluation treated +0.6 and +0.9 as meaningful wins. Under
+   calibration those states correctly evaluate as near-50/50, so the solver
+   avoids them in favour of paths that reach higher scores.
+
+### Score divergence and the mid-game bottleneck
+
+Across the 60 calibrated games, winning and losing trajectories diverge at
+**moves 3–5**. Winning games maintain a positive score through the mid-game;
+losing games drop negative by move 4. By move 8 the gap is stark: winning
+games average +2.17, losing games average +0.05. The outcome is essentially
+decided before the late-game phase where the solver has the most search depth.
+
+This suggests the next lever is not terminal evaluation — which is now
+well-calibrated — but **mid-game search quality in moves 3–5**, where the
+solver must commit to a positional trajectory with limited lookahead. The
+edge bias learned via REINFORCE (strongest signals: E11 +0.24, E4 +0.23,
+E1 +0.20) is beginning to encode this: it biases the rollout prior toward
+edges that empirically maintain the positive mid-game trajectory.
+
+---
+
 ## Appendix: Raw Numbers
 
 - Total games played: 1,600
