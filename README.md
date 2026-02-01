@@ -492,6 +492,7 @@ The Thompson Sampling approach generalizes to any opening-selection problem in T
 
 ### Documentation
 
+- `docs/DEPENDENCY_REPOSITORIES.md` - Complete documentation of the three dependency repos (game engine, adjudicators, tangled-adjudicate)
 - `docs/ALPHAQ_STRATEGY.md` - Thompson Sampling mathematical foundation, test results, reproduction guide
 - `docs/THEORY_OF_OPERATION.md` - Comprehensive system documentation
 - `docs/MATLAB_INTEGRATION.md` - Complete MATLAB integration guide
