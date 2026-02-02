@@ -414,7 +414,7 @@ The Nash Equilibrium we discovered is mathematically robust, empirically validat
 **Computational Investment:** ~300 hours MATLAB + MCTS
 **Key Innovation:** Ground-truth Schrödinger terminal evaluation
 
-**Contact for Questions:** murray.kopit@[domain]
+**Contact for Questions:** murr2k@gmail.com
 
 ---
 
