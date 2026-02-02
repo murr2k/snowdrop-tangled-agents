@@ -48,11 +48,63 @@ We reverse-engineer the `SchrodingerEquationAdjudicator` from the `snowdrop-adju
 
 Tangled is a two-player graph-coloring game created by Geordie Rose where players alternately color edges as **green** (ferromagnetic, J = −1), **purple** (antiferromagnetic, J = +1), or **grey** (uncoupled, J = 0). When all edges are colored, the resulting configuration defines an Ising spin-glass problem:
 
-```
-H = Σ_{(i,j) ∈ E} J_ij σ_z^i σ_z^j
-```
+
+$$
+H = \sum_{(i,j)\in E} J_{ij}\,\sigma_{z}^{(i)}\,\sigma_{z}^{(j)}
+$$
+
+To include the transverse-field driver term used in the Schrödinger adjudicator, the extended Hamiltonian can be written as:
+
+$$
+H(s) = -\Delta(s)\sum_i \sigma_x^{(i)} + A(s)\left(\sum_i h_i \sigma_z^{(i)} + \sum_{i<j} J_{ij}\sigma_z^{(i)}\sigma_z^{(j)}\right)
+$$
+
+This form aligns cleanly with both our solver analysis and D-Wave’s standard annealing Hamiltonian.
 
 The winner is determined by which player "owns" more **influence** after quantum annealing: vertices with strong positive correlations to their neighbors contribute to their owner's score. The adjudicator simulates D-Wave quantum annealing to compute these correlations and determine the outcome.
+
+
+Recent work has explored reinforcement learning agents whose terminal state evaluations are supplied by quantum annealers or quantum-inspired solvers, with the goal of identifying computational advantages arising from access to quantum hardware. In particular, Reinforcement Learning Agents With and Without Access to Quantum Computation demonstrates that agents trained with access to quantum annealing evaluations can exhibit different learning dynamics and performance characteristics than agents trained purely on classical approximations. This result establishes a compelling empirical foundation: the physical process used to adjudicate terminal states can shape downstream learning behavior.
+
+However, existing analyses largely treat the quantum adjudicator as a black box that supplies ground-truth labels. The internal numerical structure of the quantum dynamics simulation itself, and how its approximations propagate into the reinforcement learning pipeline, are rarely examined. As a consequence, a critical question remains underexplored:
+
+**How do numerical and physical approximations inside quantum-inspired adjudicators influence reward signals, and in turn, shape the behavior and convergence properties of learning agents?**
+
+In this work, we address this question through a detailed, source-level analysis of the SchrödingerEquationAdjudicator used within the Tangled game environment. We show that the adjudicator is not merely a high-level surrogate for quantum annealing, but an explicit simulation of adiabatic quantum evolution based on exact diagonalization and eigenstate expansion in the full Hilbert space of the problem Hamiltonian. This enables direct inspection of:
+
+* The time-integration method used to evolve the wavefunction
+* The dimensionality and scaling behavior of the Hilbert space
+* The annealing schedule imported from D-Wave Advantage hardware
+* The construction of transverse-field Ising Hamiltonians
+* The mapping from quantum correlations to game scores
+
+By reconstructing the complete algorithmic pathway from Hamiltonian construction to final influence-vector scoring, we establish a transparent model of how terminal evaluations are produced.
+
+Building on this foundation, we connect the adjudicator’s numerical properties to observed learning behavior in AlphaZero-style agents trained on Tangled. In particular, we show that small systematic biases, discretization effects, and adaptive stepping heuristics inside the Schrödinger solver can produce tightly bounded terminal scores, which in turn compress reward variance. This compression alters the effective signal-to-noise ratio seen by policy-gradient updates, encouraging convergence toward highly periodic, equilibrium-like play.
+
+A useful way to contextualize this contribution is through the chain of dependencies that governs learning in hybrid quantum–classical agents:
+
+**Quantum dynamics fidelity
+→ terminal state labels
+→ reward signal
+→ policy gradient
+→ agent behavior**
+
+Most existing work on quantum-enhanced reinforcement learning concentrates on the first link in this chain, emphasizing improvements in physical optimization or quantum sampling fidelity. Other work focuses primarily on learning architectures and exploration strategies while assuming reward labels are reliable. In contrast, the present work explicitly traces and empirically validates the full dependency chain, showing how numerical properties of quantum dynamics simulation propagate upward to shape learning dynamics and final agent behavior.
+
+This system-level perspective reveals failure modes that are invisible when any single layer is analyzed in isolation. Rather than viewing quantum adjudication as an oracle, we treat it as a dynamical subsystem whose approximations, thresholds, and numerical heuristics participate directly in the learning loop.
+
+The primary contributions of this paper are:
+
+1. A complete algorithmic reconstruction of the SchrödingerEquationAdjudicator, including its time integration scheme, adaptive stepping logic, Hamiltonian construction, and correlation-based scoring.
+
+2. Identification of numerical mechanisms that compress terminal score distributions and promote equilibrium convergence in self-play.
+
+3. Empirical linkage between quantum-dynamics-level approximations and macroscopic agent behavior.
+
+4. A methodological framework for auditing quantum-inspired adjudicators as part of reinforcement learning system design.
+
+Together, these results extend prior demonstrations of quantum-assisted learning by exposing the internal pathways through which quantum dynamics influence reinforcement learning, and by providing tools for designing adjudicators whose numerical behavior is intentionally aligned with learning objectives.
 
 ### 1.2 The Adjudication Problem
 

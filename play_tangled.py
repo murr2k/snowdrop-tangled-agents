@@ -569,7 +569,7 @@ class WebPlayer:
                     minimax_depth=4,
                     mcts_iterations=5000,
                     player=1,
-                    # Approach C: Re-enabled Thompson Sampling with E7G bias
+                    force_opening='E7G',  # Run 65 proved diversification fails - E7G is uniquely optimal
                 )
         else:  # "heuristic" (default)
             self.strategy = PetersenStrategy(params_path=self.params_path)

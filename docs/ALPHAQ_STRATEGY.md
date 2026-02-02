@@ -38,14 +38,14 @@ For binary outcomes (win/loss), the Beta distribution is the conjugate prior to 
 
 For each opening i with W_i wins, D_i draws, L_i losses:
 
-```
-α_i = 1 + W_i + 0.5 * D_i
-β_i = 1 + L_i + 0.5 * D_i
-```
+
+$$α_i = 1 + W_i + 0.5 * D_i$$  
+$$β_i = 1 + L_i + 0.5 * D_i$$
+
 
 The posterior distribution is Beta(α_i, β_i), with:
-- **Mean:** μ_i = α_i / (α_i + β_i)
-- **Variance:** σ²_i = α_i β_i / ((α_i + β_i)² (α_i + β_i + 1))
+- **Mean:** $$μ_i = α_i / (α_i + β_i)$$
+- **Variance:** $$σ²_i = α_i β_i / ((α_i + β_i)² (α_i + β_i + 1))$$
 
 **Why draws count as half-wins:**
 
@@ -59,12 +59,13 @@ This parameterization is theoretically motivated: each draw represents partial s
 
 Each game, we sample:
 
-```
-sample_i = Beta_rv.betavariate(α_i, β_i) for all i
-opening_selected = arg_max(sample_i)
-```
 
-Python's `random.betavariate(α, β)` uses the algorithm of Choi and Nam (2017), which is numerically stable for α, β ≥ 0.1. Our minimum values are α ≥ 1, β ≥ 1, well within the stable regime.
+sample_i = Beta_rv.betavariate($$α_i, β_i$$) for all i  
+opening_selected = arg_max($$sample_i$$)
+
+
+Python's random.betavariate($$α, β$$) uses the algorithm of Choi and Nam (2017), which is numerically stable for α, β ≥ 0.1.  
+Our minimum values are α ≥ 1, β ≥ 1, well within the stable regime.
 
 ---
 
@@ -881,33 +882,43 @@ faster than the Python `eigh`-based approach.
 #### Why Python is slow
 
 The Python `SchrodingerEquationAdjudicator` performs **full diagonalisation**
-(`la.eigh`) of the 1024×1024 Hamiltonian at every time step — the developer's
+(`la.eigh`) of the 1024×1024 Hamiltonian at every time step! The developer's
 own comment on line 140 reads *"this is taking up most of the time!!!"*.
 With ~2000 adaptive steps that is O(2^{3n}) total work at n = 10 qubits.
 Additional overhead: a 1024-iteration Python loop for wavefunction
 reconstruction (should be a single matrix multiply), and correlation-matrix
-computation at every step (only the final value is used).  Measured:
->180 s per state (timed out before completing).
+computation at every step (only the final value is used).    
+* Measured: 180 s per state (timed out before completing).
 
 #### MATLAB split-operator solver
 
 The D-Wave annealing Hamiltonian separates into two terms with special
 structure:
 
-```
-H(s) = −Δ(s)·Σ_i σ_x^i              ← driver:  commuting single-qubit rotations
-      + A(s)·Σ_{i<j} J_ij σ_z^i σ_z^j  ← problem: diagonal in computational basis
-```
+$$
+\begin{aligned}
+H(s) &= -\Delta(s)\sum_i \sigma_x^{(i)}
+      &&\text{driver: commuting single-qubit rotations} \\
+     &\quad + A(s)\sum_{i<j} J_{ij}\,\sigma_z^{(i)}\sigma_z^{(j)}
+      &&\text{problem: diagonal in computational basis}
+\end{aligned}
+$$
+
 
 Strang splitting exploits this:
 
-```
-U(ds) ≈ U_prob(ds/2) · U_drv(ds) · U_prob(ds/2)
-```
+$$
+U(\mathrm{d}s)
+\;\approx\;
+U_{\text{prob}}\!\left(\tfrac{\mathrm{d}s}{2}\right) ·
+\; U_{\text{drv}}(\mathrm{d}s) ·
+\; U_{\text{prob}}\!\left(\tfrac{\mathrm{d}s}{2}\right)
+$$
 
-* `U_prob` = elementwise phase on the 1024-element state vector → O(2^n)
-* `U_drv` = n independent 2×2 rotations applied via reshape butterfly → O(n·2^n)
-* Total per step: **O(n·2^n) ≈ 10 K flops** vs O(2^{3n}) ≈ 10^9 flops
+
+* $$U_{prob}$$ = elementwise phase on the 1024-element state vector → O(2^n)
+* $$U_{drv}$$ = n independent 2×2 rotations applied via reshape butterfly → O(n·2^n)
+* Total per step: **O(n·2^n^) ≈ 10^3^ flops** vs. O(2^3n^) ≈ 10^9^ flops
 
 Implementation: `benchmark_schrodinger_matlab.m` (benchmark) and
 `generate_petersen_lut_schrodinger.m` (full LUT generator).
@@ -997,10 +1008,12 @@ Concretely, this means several of the 30 openings are equivalent and should shar
 posterior.  If openings A, B, and C are in the same equivalence class, their W/D/L counts
 should be pooled before computing Beta parameters:
 
-```
-alpha_class = 1 + (W_A + W_B + W_C) + 0.5 * (D_A + D_B + D_C)
-beta_class  = 1 + (L_A + L_B + L_C) + 0.5 * (D_A + D_B + D_C)
-```
+$$
+\begin{aligned}
+\alpha_{\text{class}} &= 1 + (W_A + W_B + W_C) + \tfrac{1}{2}(D_A + D_B + D_C) \\
+\beta_{\text{class}}  &= 1 + (L_A + L_B + L_C) + \tfrac{1}{2}(D_A + D_B + D_C)
+\end{aligned}
+$$
 
 Each class accumulates data k times faster (k = class size).  The effective number of
 arms drops from 30 to the number of distinct equivalence classes.
@@ -1035,7 +1048,7 @@ board's "momentum."  The influence vector tells us which vertex is winning given
 already played.
 
 More importantly, individual entries tell us which *uncoloured* edges are strategically
-important.  An uncoloured edge (i, j) where the correlation ⟨σ_i σ_j⟩ is large and
+important.  An uncoloured edge $$(i, j)$$ where the correlation $$⟨σ_i σ_j⟩$$ is large and
 positive means colouring that edge FM (J = −1) will shift the ground state significantly.
 An edge where the correlation is near zero has little strategic value regardless of colour.
 
@@ -1271,7 +1284,7 @@ class AlphaQExplorerStrategy:
 
 ---
 
-**Document Version:** 2.1
+**Document Version:** 2.2
 **Last Updated:** February 2026
 **Status:** Part 11 added — improvement avenues pending implementation
 
