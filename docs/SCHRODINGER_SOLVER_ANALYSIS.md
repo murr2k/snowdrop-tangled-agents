@@ -59,6 +59,9 @@ $$
 H(s) = -\Delta(s)\sum_i \sigma_x^{(i)} + A(s)\left(\sum_i h_i \sigma_z^{(i)} + \sum_{i<j} J_{ij}\sigma_z^{(i)}\sigma_z^{(j)}\right)
 $$
 
+$$
+H(s)=-\Delta(s)\sum_i\sigma_x^{(i)}+A(s)\Big[\sum_i h_i\sigma_z^{(i)}+\sum_{i<j}J_{ij}\sigma_z^{(i)}\sigma_z^{(j)}\Big]
+$$
 
 This form aligns cleanly with both our solver analysis and D-Wave’s standard annealing Hamiltonian.
 
