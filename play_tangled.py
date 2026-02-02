@@ -1862,6 +1862,27 @@ class WebPlayer:
                     solver_stats={'opponent_think_time': opponent_think_time}
                 )
 
+                # Record to opponent_history table for pattern analysis
+                our_prev_edge = None
+                our_prev_color = None
+                if self.score_history:
+                    last_move = self.score_history[-1]
+                    our_prev_edge = last_move[0]
+                    our_prev_color = last_move[1]
+
+                self.stats_collector.record_opponent_move(
+                    opponent_name=self.opponent,
+                    game_id=self.current_game_id,
+                    move_number=move_count,
+                    board_state_before=our_post_move_state,
+                    edge=opponent_edge,
+                    color=opponent_color,
+                    score_before=new_score,
+                    score_after=opponent_score,
+                    our_prev_edge=our_prev_edge,
+                    our_prev_color=our_prev_color
+                )
+
                 # Publish opponent move to live dashboard
                 publisher = get_publisher()
                 if publisher.is_configured():
