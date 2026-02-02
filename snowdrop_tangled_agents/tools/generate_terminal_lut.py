@@ -1,205 +1,507 @@
 """
 Generate Terminal State Lookup Table (LUT) for MATLAB MCTS.
 
-Enumerates all 2^15 = 32,768 possible terminal states and evaluates each
-using the SimulatedAnnealingAdjudicator. Results are saved as a MATLAB .mat
-file for O(1) lookup during MCTS rollouts.
+Enumerates all 2^E possible terminal states for a given graph and evaluates
+each one.  Results are saved as a MATLAB .mat file for O(1) lookup during
+MCTS rollouts.
 
-Usage:
-    python snowdrop_tangled_agents/tools/generate_terminal_lut.py
+Scorer selection
+----------------
+SchrodingerEquationAdjudicator produces ground-truth scores but scales
+super-exponentially with vertex count (~7s at 4 vertices, ~108s at 7
+vertices, >3 min at 10 vertices).  SimulatedAnnealingAdjudicator is fast
+(~50ms per state at 10K reads) but has documented systematic errors on
+frustrated ground states — it can return the wrong winner on graphs 12, 18,
+and 19, and returns inaccurate scores on graph 5 (Petersen).
 
-Output:
+The script auto-selects the scorer based on vertex count:
+
+    vertices <= 5  →  Schrödinger  (sequential, finishes in minutes)
+    vertices <= 7  →  Schrödinger  (multiprocessing, finishes in hours)
+    vertices >= 8  →  SA at 100K reads + optional Schrödinger validation sample
+
+Use --scorer to override the automatic selection.
+
+Usage
+-----
+    # Auto-select scorer, generate LUT for graph 5 (Petersen)
+    python snowdrop_tangled_agents/tools/generate_terminal_lut.py --graph 5
+
+    # Force Schrödinger on a small graph (ground truth)
+    python snowdrop_tangled_agents/tools/generate_terminal_lut.py --graph 20 --scorer schrodinger
+
+    # SA LUT for Petersen with a 50-state Schrödinger validation sample
+    python snowdrop_tangled_agents/tools/generate_terminal_lut.py --graph 5 --validate 50
+
+    # Dry run: print what would be generated without running
+    python snowdrop_tangled_agents/tools/generate_terminal_lut.py --graph 5 --dry-run
+
+Output
+------
     snowdrop_tangled_agents/matlab/rl/data/terminal_scores.mat
+
+    Fields in the .mat file:
+        terminal_scores   — float32 array of length 2^E, indexed by bit-packed state
+        num_states        — total number of terminal states (2^E)
+        num_edges         — number of edges E
+        graph_id          — graph number used
+        scorer            — 'schrodinger' or 'simulated_annealing'
+        num_reads         — SA num_reads (0 if Schrödinger was used)
+        generation_time_sec
+        description       — human-readable summary
 """
 
-import os
-import sys
+import argparse
+import random
 import time
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
 from scipy.io import savemat
 from tqdm import tqdm
 
-from snowdrop_adjudicators import SimulatedAnnealingAdjudicator
+from snowdrop_adjudicators import (
+    SchrodingerEquationAdjudicator,
+    SimulatedAnnealingAdjudicator,
+)
+from snowdrop_tangled_game_engine import GraphProperties
 from snowdrop_tangled_game_engine.game import Edge
 
 
-# Petersen graph structure
-PETERSEN_EDGES = [
-    (0, 2), (0, 3), (0, 6), (1, 3), (1, 4),
-    (1, 7), (2, 4), (2, 8), (3, 9), (4, 5),
-    (5, 6), (5, 9), (6, 7), (7, 8), (8, 9),
-]
-
-NUM_VERTICES = 10
-NUM_EDGES = 15
-MY_VERTEX = 5
-OPP_VERTEX = 7
+# ---------------------------------------------------------------------------
+# Scorer selection thresholds
+# ---------------------------------------------------------------------------
+# Schrödinger is ground truth but impractical above this vertex count for a
+# full LUT.  At 7 vertices (~108s/state, 2048 states) multiprocessing makes
+# it feasible in hours.  At 10 vertices it is not feasible at any parallelism.
+SCHRODINGER_FAST_VERTEX_LIMIT = 5    # sequential, minutes
+SCHRODINGER_SLOW_VERTEX_LIMIT = 7    # multiprocessing, hours
+SA_NUM_READS = 100_000               # high read count for stable SA scores
 
 
-def idx_to_state(idx: int) -> str:
+# ---------------------------------------------------------------------------
+# State encoding  (shared with MATLAB side)
+# ---------------------------------------------------------------------------
+def idx_to_state(idx: int, num_edges: int) -> str:
     """
-    Convert a 0-based index to a 15-char state string.
+    Convert a 0-based index to an E-char state string.
 
-    Index i: bit j = 1 means edge j is 'G' (green/FM), 0 means 'P' (purple/AFM)
-
-    Args:
-        idx: Integer in range [0, 32767]
-
-    Returns:
-        15-char string of 'G' and 'P'
+    Bit j of idx: 1 → 'G' (green / FM), 0 → 'P' (purple / AFM).
     """
-    state = []
-    for j in range(NUM_EDGES):
-        if (idx >> j) & 1:
-            state.append('G')
-        else:
-            state.append('P')
-    return ''.join(state)
+    return ''.join('G' if (idx >> j) & 1 else 'P' for j in range(num_edges))
 
 
 def state_to_idx(state: str) -> int:
-    """
-    Convert a 15-char state string to a 0-based index.
-
-    Args:
-        state: 15-char string of 'G' and 'P'
-
-    Returns:
-        Integer in range [0, 32767]
-    """
+    """Convert an E-char state string back to a 0-based index."""
     idx = 0
-    for j in range(NUM_EDGES):
-        if state[j] == 'G':
+    for j, ch in enumerate(state):
+        if ch == 'G':
             idx |= (1 << j)
     return idx
 
 
-def evaluate_state(state: str, adj: SimulatedAnnealingAdjudicator) -> float:
+# ---------------------------------------------------------------------------
+# Game-state builder  (shared by both scorers)
+# ---------------------------------------------------------------------------
+def build_game_state(state_str: str, edge_list, num_vertices: int,
+                     graph_id: int, p1_node: int, p2_node: int) -> dict:
     """
-    Evaluate a terminal state using the SimulatedAnnealingAdjudicator.
-
-    Args:
-        state: 15-char string of 'G' and 'P'
-        adj: Pre-initialized adjudicator instance
-
-    Returns:
-        Score from Player 1's perspective
+    Convert a terminal state string to a GameState dict accepted by any
+    adjudicator.
     """
-    # Build edge list for adjudicator
     edges = []
-    for i, (v1, v2) in enumerate(PETERSEN_EDGES):
-        color = state[i]
-        edge_state = Edge.State.FM.value if color == 'G' else Edge.State.AFM.value
+    for i, (v1, v2) in enumerate(edge_list):
+        edge_state = Edge.State.FM.value if state_str[i] == 'G' else Edge.State.AFM.value
         edges.append((v1, v2, edge_state))
 
-    # Create game state dict
-    game_state = {
-        'num_nodes': NUM_VERTICES,
-        'edges': edges,
-        'graph_id': 11,  # Petersen graph
-        'player1_id': 'p1',
-        'player2_id': 'p2',
-        'turn_count': NUM_EDGES,
+    return {
+        'num_nodes':            num_vertices,
+        'edges':                edges,
+        'graph_id':             graph_id,
+        'player1_id':           'p1',
+        'player2_id':           'p2',
+        'turn_count':           len(edge_list),
         'current_player_index': 2,
-        'player1_node': MY_VERTEX,
-        'player2_node': OPP_VERTEX
+        'player1_node':         p1_node,
+        'player2_node':         p2_node,
     }
 
+
+# ---------------------------------------------------------------------------
+# Per-state evaluation functions  (top-level so they are picklable for
+# multiprocessing)
+# ---------------------------------------------------------------------------
+def _eval_schrodinger(args):
+    """Evaluate one state with Schrödinger.  Designed for ProcessPoolExecutor."""
+    idx, state_str, edge_list, num_vertices, graph_id, p1_node, p2_node, epsilon, anneal_time = args
+
+    adj = SchrodingerEquationAdjudicator()
+    adj.setup(epsilon=epsilon, anneal_time=anneal_time)
+
+    game_state = build_game_state(state_str, edge_list, num_vertices,
+                                  graph_id, p1_node, p2_node)
     result = adj.adjudicate(game_state)
-    return float(result['score'])
+    return idx, float(result['score'])
 
 
-def generate_lut(output_path: Path, num_reads: int = 10000) -> np.ndarray:
-    """
-    Generate the full terminal state LUT.
+def _eval_sa(args):
+    """Evaluate one state with SA.  Designed for ProcessPoolExecutor."""
+    idx, state_str, edge_list, num_vertices, graph_id, p1_node, p2_node, num_reads = args
 
-    Args:
-        output_path: Path to save the .mat file
-        num_reads: Number of SA reads for more stable results
-
-    Returns:
-        Array of 32768 scores
-    """
-    total_states = 2 ** NUM_EDGES  # 32768
-    scores = np.zeros(total_states, dtype=np.float32)
-
-    # Initialize adjudicator once
     adj = SimulatedAnnealingAdjudicator()
     adj.setup(epsilon=0.0, num_reads=num_reads)
 
-    print(f"Generating LUT for {total_states:,} terminal states...")
-    print(f"Using SimulatedAnnealingAdjudicator with num_reads={num_reads}")
+    game_state = build_game_state(state_str, edge_list, num_vertices,
+                                  graph_id, p1_node, p2_node)
+    result = adj.adjudicate(game_state)
+    return idx, float(result['score'])
 
-    start_time = time.time()
 
-    for idx in tqdm(range(total_states), desc="Evaluating states"):
-        state = idx_to_state(idx)
-        scores[idx] = evaluate_state(state, adj)
+# ---------------------------------------------------------------------------
+# LUT generation  — Schrödinger path
+# ---------------------------------------------------------------------------
+def generate_lut_schrodinger(num_edges: int, edge_list, num_vertices: int,
+                             graph_id: int, p1_node: int, p2_node: int,
+                             epsilon: float, anneal_time: float,
+                             num_workers: int) -> np.ndarray:
+    """Generate the full LUT using SchrodingerEquationAdjudicator."""
+    total_states = 2 ** num_edges
+    scores = np.zeros(total_states, dtype=np.float32)
 
-    elapsed = time.time() - start_time
-    print(f"Generation complete in {elapsed:.1f}s ({elapsed/total_states*1000:.2f}ms per state)")
+    use_pool = (num_vertices > SCHRODINGER_FAST_VERTEX_LIMIT)
 
-    # Save as MATLAB .mat file
-    # Note: MATLAB uses 1-based indexing, but we save with 0-based values
-    # MATLAB will load and add 1 to indices when looking up
-    mat_data = {
-        'terminal_scores': scores,
-        'num_states': total_states,
-        'num_edges': NUM_EDGES,
-        'generation_time_sec': elapsed,
-        'num_reads': num_reads,
-        'description': 'Terminal state scores for Petersen graph (graph 11). '
-                       'Index i corresponds to state where bit j=1 means edge j is G (green/FM). '
-                       'Scores are from Player 1 perspective.'
-    }
-
-    savemat(output_path, mat_data)
-    print(f"Saved LUT to {output_path}")
-
-    # Print some statistics
-    print(f"\nStatistics:")
-    print(f"  Min score: {scores.min():.3f}")
-    print(f"  Max score: {scores.max():.3f}")
-    print(f"  Mean score: {scores.mean():.3f}")
-    print(f"  Std dev: {scores.std():.3f}")
-
-    # Count win/loss/draw states
-    wins = np.sum(scores > 0.5)
-    losses = np.sum(scores < -0.5)
-    draws = total_states - wins - losses
-    print(f"\n  States favorable to P1 (score > 0.5): {wins:,} ({wins/total_states*100:.1f}%)")
-    print(f"  States favorable to P2 (score < -0.5): {losses:,} ({losses/total_states*100:.1f}%)")
-    print(f"  Balanced states: {draws:,} ({draws/total_states*100:.1f}%)")
+    if use_pool:
+        print(f"  Schrödinger with {num_workers} workers (estimated hours)...")
+        work = [
+            (idx,
+             idx_to_state(idx, num_edges),
+             edge_list, num_vertices, graph_id, p1_node, p2_node,
+             epsilon, anneal_time)
+            for idx in range(total_states)
+        ]
+        with ProcessPoolExecutor(max_workers=num_workers) as pool:
+            futures = {pool.submit(_eval_schrodinger, w): w[0] for w in work}
+            for future in tqdm(as_completed(futures), total=total_states,
+                               desc="Schrödinger (parallel)"):
+                idx, score = future.result()
+                scores[idx] = score
+    else:
+        print(f"  Schrödinger sequential ({total_states} states)...")
+        adj = SchrodingerEquationAdjudicator()
+        adj.setup(epsilon=epsilon, anneal_time=anneal_time)
+        for idx in tqdm(range(total_states), desc="Schrödinger"):
+            state_str = idx_to_state(idx, num_edges)
+            game_state = build_game_state(state_str, edge_list, num_vertices,
+                                          graph_id, p1_node, p2_node)
+            result = adj.adjudicate(game_state)
+            scores[idx] = float(result['score'])
 
     return scores
 
 
-def main():
-    """Main entry point."""
-    # Determine output path
-    script_dir = Path(__file__).parent
-    project_root = script_dir.parent.parent
-    output_path = project_root / "snowdrop_tangled_agents" / "matlab" / "rl" / "data" / "terminal_scores.mat"
+# ---------------------------------------------------------------------------
+# LUT generation  — SA path
+# ---------------------------------------------------------------------------
+def generate_lut_sa(num_edges: int, edge_list, num_vertices: int,
+                    graph_id: int, p1_node: int, p2_node: int,
+                    num_reads: int, num_workers: int) -> np.ndarray:
+    """Generate the full LUT using SimulatedAnnealingAdjudicator."""
+    total_states = 2 ** num_edges
+    scores = np.zeros(total_states, dtype=np.float32)
 
-    # Ensure output directory exists
+    print(f"  SA with {num_reads:,} reads, {num_workers} workers...")
+    work = [
+        (idx,
+         idx_to_state(idx, num_edges),
+         edge_list, num_vertices, graph_id, p1_node, p2_node,
+         num_reads)
+        for idx in range(total_states)
+    ]
+    with ProcessPoolExecutor(max_workers=num_workers) as pool:
+        futures = {pool.submit(_eval_sa, w): w[0] for w in work}
+        for future in tqdm(as_completed(futures), total=total_states,
+                           desc="SA (parallel)"):
+            idx, score = future.result()
+            scores[idx] = score
+
+    return scores
+
+
+# ---------------------------------------------------------------------------
+# Schrödinger validation sample  — spot-checks SA scores against ground truth
+# ---------------------------------------------------------------------------
+def run_validation_sample(n_samples: int, scores_sa: np.ndarray,
+                          num_edges: int, edge_list, num_vertices: int,
+                          graph_id: int, p1_node: int, p2_node: int,
+                          epsilon: float, anneal_time: float) -> dict:
+    """
+    Pick n_samples random terminal states, score them with Schrödinger, and
+    compare against the SA scores already in scores_sa.
+
+    Returns a dict with:
+        indices         — which states were sampled
+        sa_scores       — SA scores for those states
+        schrodinger_scores — Schrödinger scores for those states
+        winner_flips    — count of states where SA and Schrödinger disagree on winner
+        mean_abs_error  — mean |SA − Schrödinger| across the sample
+    """
+    total_states = 2 ** num_edges
+    sample_indices = sorted(random.sample(range(total_states), n_samples))
+
+    print(f"  Running Schrödinger validation on {n_samples} sampled states...")
+    adj = SchrodingerEquationAdjudicator()
+    adj.setup(epsilon=epsilon, anneal_time=anneal_time)
+
+    sa_scores = []
+    se_scores = []
+    winner_flips = 0
+
+    for i, idx in enumerate(tqdm(sample_indices, desc="Validation")):
+        state_str = idx_to_state(idx, num_edges)
+        game_state = build_game_state(state_str, edge_list, num_vertices,
+                                      graph_id, p1_node, p2_node)
+
+        result = adj.adjudicate(game_state)
+        se_score = float(result['score'])
+        sa_score = float(scores_sa[idx])
+
+        sa_scores.append(sa_score)
+        se_scores.append(se_score)
+
+        # Winner flip: signs disagree beyond epsilon on both sides
+        sa_winner = 'red' if sa_score > epsilon else ('blue' if sa_score < -epsilon else 'draw')
+        se_winner = 'red' if se_score > epsilon else ('blue' if se_score < -epsilon else 'draw')
+        if sa_winner != se_winner:
+            winner_flips += 1
+            print(f"    FLIP idx={idx}: SA={sa_score:+.4f} ({sa_winner}) "
+                  f"vs SE={se_score:+.4f} ({se_winner})")
+
+    sa_arr = np.array(sa_scores)
+    se_arr = np.array(se_scores)
+
+    return {
+        'indices':            np.array(sample_indices),
+        'sa_scores':          sa_arr,
+        'schrodinger_scores': se_arr,
+        'winner_flips':       winner_flips,
+        'mean_abs_error':     float(np.mean(np.abs(sa_arr - se_arr))),
+        'max_abs_error':      float(np.max(np.abs(sa_arr - se_arr))),
+        'flip_rate':          winner_flips / n_samples,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Statistics and save
+# ---------------------------------------------------------------------------
+def print_statistics(scores: np.ndarray, epsilon: float, scorer: str):
+    """Print summary statistics for the generated LUT."""
+    total = len(scores)
+    wins   = int(np.sum(scores >  epsilon))
+    losses = int(np.sum(scores < -epsilon))
+    draws  = total - wins - losses
+
+    print(f"\n  Statistics ({scorer}):")
+    print(f"    Min score:  {scores.min():+.4f}")
+    print(f"    Max score:  {scores.max():+.4f}")
+    print(f"    Mean score: {scores.mean():+.4f}")
+    print(f"    Std dev:    {scores.std():.4f}")
+    print(f"    P1 wins (score > {epsilon}):   {wins:>6,} ({100*wins/total:.1f}%)")
+    print(f"    P2 wins (score < -{epsilon}):  {losses:>6,} ({100*losses/total:.1f}%)")
+    print(f"    Draws:                          {draws:>6,} ({100*draws/total:.1f}%)")
+
+
+def save_lut(scores: np.ndarray, output_path: Path, graph_id: int,
+             num_edges: int, scorer: str, num_reads: int, elapsed: float,
+             validation: dict | None = None):
+    """Save the LUT and metadata as a MATLAB .mat file."""
+    mat_data = {
+        'terminal_scores':      scores,
+        'num_states':           len(scores),
+        'num_edges':            num_edges,
+        'graph_id':             graph_id,
+        'scorer':               scorer,
+        'num_reads':            num_reads,
+        'generation_time_sec':  elapsed,
+        'generated_at':         datetime.now(timezone.utc).isoformat(),
+        'description': (
+            f"Terminal state scores for graph {graph_id} ({scorer}). "
+            f"Index i: bit j=1 means edge j is G (green/FM), 0 means P (purple/AFM). "
+            f"Scores are from Player 1 perspective."
+        ),
+    }
+
+    if validation is not None:
+        mat_data['validation_indices']            = validation['indices']
+        mat_data['validation_sa_scores']          = validation['sa_scores']
+        mat_data['validation_schrodinger_scores'] = validation['schrodinger_scores']
+        mat_data['validation_winner_flips']       = validation['winner_flips']
+        mat_data['validation_mean_abs_error']     = validation['mean_abs_error']
+        mat_data['validation_max_abs_error']      = validation['max_abs_error']
+        mat_data['validation_flip_rate']          = validation['flip_rate']
+
+    savemat(output_path, mat_data)
+    print(f"\n  Saved LUT to {output_path}")
+
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+def main():
+    parser = argparse.ArgumentParser(
+        description="Generate terminal-state LUT for MATLAB MCTS solver."
+    )
+    parser.add_argument(
+        '--graph', type=int, default=5,
+        help='Graph number from GraphProperties (default: 5, Petersen).'
+    )
+    parser.add_argument(
+        '--scorer', choices=['auto', 'schrodinger', 'simulated_annealing'],
+        default='auto',
+        help='Scorer to use.  "auto" selects based on vertex count.'
+    )
+    parser.add_argument(
+        '--validate', type=int, default=0, metavar='N',
+        help='Run Schrödinger on N randomly sampled states to validate SA scores. '
+             'Only meaningful when scorer is SA.'
+    )
+    parser.add_argument(
+        '--workers', type=int, default=8,
+        help='Number of parallel workers (default: 8).'
+    )
+    parser.add_argument(
+        '--dry-run', action='store_true',
+        help='Print plan without running any adjudication.'
+    )
+    args = parser.parse_args()
+
+    # ---------------------------------------------------------------------------
+    # Load graph metadata from GraphProperties
+    # ---------------------------------------------------------------------------
+    gp = GraphProperties()
+
+    if args.graph not in gp.graph_database:
+        print(f"ERROR: graph {args.graph} not in graph_database. "
+              f"Available: {list(gp.graph_database.keys())}")
+        return
+
+    g = gp.graph_database[args.graph]
+    edge_list     = g['edge_list']
+    num_vertices  = g['num_nodes']
+    num_edges     = len(edge_list)
+    p1_node       = g['player1_node']
+    p2_node       = g['player2_node']
+    total_states  = 2 ** num_edges
+
+    # epsilon and anneal_time are parallel lists indexed by position in allowed_graphs
+    if args.graph in gp.allowed_graphs:
+        idx       = gp.allowed_graphs.index(args.graph)
+        epsilon   = gp.epsilon_values[idx]
+        anneal_time = gp.anneal_times[idx]
+    else:
+        epsilon     = 0.5       # safe default
+        anneal_time = 350.0     # safe default
+
+    # ---------------------------------------------------------------------------
+    # Scorer selection
+    # ---------------------------------------------------------------------------
+    if args.scorer == 'auto':
+        if num_vertices <= SCHRODINGER_SLOW_VERTEX_LIMIT:
+            scorer = 'schrodinger'
+        else:
+            scorer = 'simulated_annealing'
+    else:
+        scorer = args.scorer
+
+    num_reads = SA_NUM_READS if scorer == 'simulated_annealing' else 0
+
+    # ---------------------------------------------------------------------------
+    # Plan
+    # ---------------------------------------------------------------------------
+    print("=" * 70)
+    print("TERMINAL STATE LUT GENERATOR")
+    print("=" * 70)
+    print(f"  Graph:            {args.graph}")
+    print(f"  Vertices:         {num_vertices}")
+    print(f"  Edges:            {num_edges}")
+    print(f"  Terminal states:  {total_states:,}")
+    print(f"  P1 vertex:        {p1_node}")
+    print(f"  P2 vertex:        {p2_node}")
+    print(f"  Epsilon:          {epsilon}")
+    print(f"  Anneal time:      {anneal_time} ns")
+    print(f"  Scorer:           {scorer}")
+    if scorer == 'simulated_annealing':
+        print(f"  SA num_reads:     {num_reads:,}")
+    print(f"  Workers:          {args.workers}")
+    if args.validate > 0:
+        print(f"  Validation sample:{args.validate} states (Schrödinger)")
+    print()
+
+    if args.dry_run:
+        print("  [DRY RUN — no adjudication will be performed]")
+        return
+
+    # ---------------------------------------------------------------------------
+    # Output path
+    # ---------------------------------------------------------------------------
+    script_dir   = Path(__file__).parent
+    project_root = script_dir.parent.parent
+    output_path  = (project_root / "snowdrop_tangled_agents"
+                    / "matlab" / "rl" / "data" / "terminal_scores.mat")
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Generate LUT
-    scores = generate_lut(output_path)
+    # ---------------------------------------------------------------------------
+    # Generate
+    # ---------------------------------------------------------------------------
+    print("Generating LUT...")
+    start_time = time.time()
 
-    # Verify a few states
-    print("\nVerification (sample states):")
-    test_indices = [0, 32767, 16384, 12345]
-    adj = SimulatedAnnealingAdjudicator()
-    adj.setup(epsilon=0.0)
+    if scorer == 'schrodinger':
+        scores = generate_lut_schrodinger(
+            num_edges, edge_list, num_vertices, args.graph,
+            p1_node, p2_node, epsilon, anneal_time, args.workers
+        )
+    else:
+        scores = generate_lut_sa(
+            num_edges, edge_list, num_vertices, args.graph,
+            p1_node, p2_node, num_reads, args.workers
+        )
 
-    for idx in test_indices:
-        state = idx_to_state(idx)
-        lut_score = scores[idx]
-        live_score = evaluate_state(state, adj)
-        print(f"  idx={idx:5d} state={state} LUT={lut_score:+.3f} live={live_score:+.3f} diff={abs(lut_score-live_score):.3f}")
+    elapsed = time.time() - start_time
+    print(f"  Generation complete in {elapsed:.1f}s "
+          f"({elapsed / total_states * 1000:.2f} ms/state)")
+
+    # ---------------------------------------------------------------------------
+    # Statistics
+    # ---------------------------------------------------------------------------
+    print_statistics(scores, epsilon, scorer)
+
+    # ---------------------------------------------------------------------------
+    # Validation sample (SA path only)
+    # ---------------------------------------------------------------------------
+    validation = None
+    if scorer == 'simulated_annealing' and args.validate > 0:
+        print(f"\nRunning Schrödinger validation ({args.validate} states)...")
+        val_start = time.time()
+        validation = run_validation_sample(
+            args.validate, scores,
+            num_edges, edge_list, num_vertices, args.graph,
+            p1_node, p2_node, epsilon, anneal_time
+        )
+        val_elapsed = time.time() - val_start
+
+        print(f"\n  Validation results ({val_elapsed:.0f}s):")
+        print(f"    Mean |SA - SE| error: {validation['mean_abs_error']:.4f}")
+        print(f"    Max  |SA - SE| error: {validation['max_abs_error']:.4f}")
+        print(f"    Winner flips:         {validation['winner_flips']} / {args.validate} "
+              f"({100 * validation['flip_rate']:.1f}%)")
+
+    # ---------------------------------------------------------------------------
+    # Save
+    # ---------------------------------------------------------------------------
+    save_lut(scores, output_path, args.graph, num_edges, scorer,
+             num_reads, elapsed, validation)
 
 
 if __name__ == "__main__":
