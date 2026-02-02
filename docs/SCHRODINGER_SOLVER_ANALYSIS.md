@@ -49,8 +49,9 @@ We reverse-engineer the `SchrodingerEquationAdjudicator` from the `snowdrop-adju
 Tangled is a two-player graph-coloring game created by Geordie Rose where players alternately color edges as **green** (ferromagnetic, J = −1), **purple** (antiferromagnetic, J = +1), or **grey** (uncoupled, J = 0). When all edges are colored, the resulting configuration defines an Ising spin-glass problem:
 
 $$
-H(s) = -\Delta(s)\sum_i \sigma_x^i + A(s)(\sum_i h_i \sigma_z^i + \sum_{i<j} J_{ij}\sigma_z^i\sigma_z^j)
+H(s) = -\Delta(s) \sum_i \sigma_x^i + A(s) ( \sum_i h_i \sigma_z^i + \sum_{i<j} J_{ij} \sigma_z^i \sigma_z^j )
 $$
+
 
 This form aligns cleanly with both our solver analysis and D-Wave’s standard annealing Hamiltonian.
 
