@@ -1722,7 +1722,7 @@ class AlphaQExplorerStrategy:
                 'strategy': 'alphaq_explorer_opening',
                 'predicted_score': 0.0,
                 'forced_opening': best_opening,
-                'thompson_sample': best_sample,
+                'thompson_sample': self.thompson_sample,
                 'thompson_alpha': self.thompson_alpha,
                 'thompson_beta': self.thompson_beta,
             }
