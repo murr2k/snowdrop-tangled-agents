@@ -59,38 +59,41 @@ function generate_expanded_lut_parallel()
 
     tic;
 
-    numOneGrey = 32768 * 15;
-    oneGreyScores = zeros(numOneGrey, 1, 'single');
+    % Use 2D array for parfor compatibility (each row is independent)
+    oneGreyScoresMatrix = zeros(32768, 15, 'single');
 
     % Parallel over base indices
     parfor baseIdx = 1:32768
-        localScores = zeros(15, 1, 'single');
-        baseState = idx2state_local(baseIdx);
+        baseIdx0 = baseIdx - 1;  % 0-based for bit operations
+        rowScores = zeros(1, 15, 'single');
 
         for greyPos = 1:15
-            % Green completion
-            greenState = baseState;
-            greenState(greyPos) = 'G';
-            greenScore = terminalLUT(state2idx_local(greenState));
+            bitMask = 2^(greyPos-1);
 
-            % Purple completion
-            purpleState = baseState;
-            purpleState(greyPos) = 'P';
-            purpleScore = terminalLUT(state2idx_local(purpleState));
+            % Green completion: set bit at greyPos-1
+            greenIdx0 = bitor(baseIdx0, bitMask);
+            greenScore = terminalLUT(greenIdx0 + 1);
+
+            % Purple completion: clear bit at greyPos-1
+            % Create complement mask: all bits except greyPos-1
+            clearMask = bitxor(32767, bitMask);  % 32767 = 2^15 - 1 (all 15 bits set)
+            purpleIdx0 = bitand(baseIdx0, clearMask);
+            purpleScore = terminalLUT(purpleIdx0 + 1);
 
             % Opponent minimizes
-            localScores(greyPos) = min(greenScore, purpleScore);
+            rowScores(greyPos) = min(greenScore, purpleScore);
         end
 
-        % Store results (parfor slicing)
-        startIdx = (baseIdx - 1) * 15 + 1;
-        endIdx = baseIdx * 15;
-        oneGreyScores(startIdx:endIdx) = localScores;
+        % Store entire row (parfor recognizes this pattern)
+        oneGreyScoresMatrix(baseIdx, :) = rowScores;
     end
+
+    % Flatten to column vector
+    oneGreyScores = reshape(oneGreyScoresMatrix', [], 1);
 
     elapsed = toc;
     fprintf('    Completed 491,520 states in %.1f seconds (%.0f states/sec)\n', ...
-        elapsed, numOneGrey/elapsed);
+        elapsed, length(oneGreyScores)/elapsed);
     fprintf('    Score range: [%.3f, %.3f]\n', min(oneGreyScores), max(oneGreyScores));
 
     %% Phase 3: States with 2 grey edges (depth-2 minimax) - PARALLEL
@@ -104,12 +107,13 @@ function generate_expanded_lut_parallel()
 
     tic;
 
-    twoGreyScores = zeros(numTwoGrey, 1, 'single');
+    % Use 2D array for parfor compatibility (each row is independent)
+    twoGreyScoresMatrix = zeros(32768, numPairs, 'single');
 
     % Parallel over base indices
     parfor baseIdx = 1:32768
-        localScores = zeros(numPairs, 1, 'single');
-        baseState = idx2state_local(baseIdx);
+        baseIdx0 = baseIdx - 1;  % 0-based for bit operations
+        rowScores = zeros(1, numPairs, 'single');
 
         for pairIdx = 1:numPairs
             pos1 = greyPairs(pairIdx, 1);
@@ -120,9 +124,16 @@ function generate_expanded_lut_parallel()
 
             % Try all 4 first moves (2 positions x 2 colors)
             for ourPos = [pos1, pos2]
-                for ourColor = ['G', 'P']
-                    afterOur = baseState;
-                    afterOur(ourPos) = ourColor;
+                for ourColorBit = [0, 1]  % 0=Purple (clear), 1=Green (set)
+                    ourBitMask = 2^(ourPos-1);
+
+                    % Apply our move
+                    if ourColorBit == 1
+                        afterOurIdx0 = bitor(baseIdx0, ourBitMask);
+                    else
+                        clearMask = bitxor(32767, ourBitMask);
+                        afterOurIdx0 = bitand(baseIdx0, clearMask);
+                    end
 
                     % Remaining position for opponent
                     if ourPos == pos1
@@ -131,32 +142,36 @@ function generate_expanded_lut_parallel()
                         oppPos = pos1;
                     end
 
+                    oppBitMask = 2^(oppPos-1);
+
+                    % Opponent tries Green
+                    oppGreenIdx0 = bitor(afterOurIdx0, oppBitMask);
+                    scoreG = terminalLUT(oppGreenIdx0 + 1);
+
+                    % Opponent tries Purple
+                    oppClearMask = bitxor(32767, oppBitMask);
+                    oppPurpleIdx0 = bitand(afterOurIdx0, oppClearMask);
+                    scoreP = terminalLUT(oppPurpleIdx0 + 1);
+
                     % Opponent minimizes
-                    oppGreen = afterOur;
-                    oppGreen(oppPos) = 'G';
-                    scoreG = terminalLUT(state2idx_local(oppGreen));
-
-                    oppPurple = afterOur;
-                    oppPurple(oppPos) = 'P';
-                    scoreP = terminalLUT(state2idx_local(oppPurple));
-
                     worstForUs = min(scoreG, scoreP);
                     bestScore = max(bestScore, worstForUs);
                 end
             end
 
-            localScores(pairIdx) = bestScore;
+            rowScores(pairIdx) = bestScore;
         end
 
-        % Store results
-        startIdx = (baseIdx - 1) * numPairs + 1;
-        endIdx = baseIdx * numPairs;
-        twoGreyScores(startIdx:endIdx) = localScores;
+        % Store entire row (parfor recognizes this pattern)
+        twoGreyScoresMatrix(baseIdx, :) = rowScores;
     end
+
+    % Flatten to column vector
+    twoGreyScores = reshape(twoGreyScoresMatrix', [], 1);
 
     elapsed = toc;
     fprintf('    Completed %d states in %.1f seconds (%.0f states/sec)\n', ...
-        numTwoGrey, elapsed, numTwoGrey/elapsed);
+        length(twoGreyScores), elapsed, length(twoGreyScores)/elapsed);
     fprintf('    Score range: [%.3f, %.3f]\n', min(twoGreyScores), max(twoGreyScores));
 
     %% Save expanded LUT
