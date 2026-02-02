@@ -48,19 +48,8 @@ We reverse-engineer the `SchrodingerEquationAdjudicator` from the `snowdrop-adju
 
 Tangled is a two-player graph-coloring game created by Geordie Rose where players alternately color edges as **green** (ferromagnetic, J = −1), **purple** (antiferromagnetic, J = +1), or **grey** (uncoupled, J = 0). When all edges are colored, the resulting configuration defines an Ising spin-glass problem:
 
-
 $$
-H = \sum_{(i,j)\in E} J_{ij}\,\sigma_{z}^{(i)}\,\sigma_{z}^{(j)}
-$$
-
-To include the transverse-field driver term used in the Schrödinger adjudicator, the extended Hamiltonian can be written as:
-
-$$
-H(s) = -\Delta(s)\sum_i \sigma_x^{(i)} + A(s)\left(\sum_i h_i \sigma_z^{(i)} + \sum_{i<j} J_{ij}\sigma_z^{(i)}\sigma_z^{(j)}\right)
-$$
-
-$$
-H(s)=-\Delta(s)\sum_i\sigma_x^{(i)}+A(s)\Big[\sum_i h_i\sigma_z^{(i)}+\sum_{i<j}J_{ij}\sigma_z^{(i)}\sigma_z^{(j)}\Big]
+H(s) = -\Delta(s)\sum_i \sigma_x^i + A(s)(\sum_i h_i \sigma_z^i + \sum_{i<j} J_{ij}\sigma_z^i\sigma_z^j)
 $$
 
 This form aligns cleanly with both our solver analysis and D-Wave’s standard annealing Hamiltonian.
