@@ -1699,6 +1699,12 @@ class AlphaQExplorerStrategy:
                     # Beta parameters: draws count as half-wins
                     alpha = 1 + counts['wins'] + 0.5 * counts['draws']
                     beta = 1 + counts['losses'] + 0.5 * counts['draws']
+
+                    # Approach C: E7G bias - add virtual draws to favor proven best opening
+                    if key == 'E7G':
+                        alpha += 25  # Equivalent to 50 virtual draws (50 * 0.5 = 25)
+                        beta += 25   # Keep ratio balanced
+
                     sample = random.betavariate(alpha, beta)
 
                     if sample > best_sample:
@@ -1730,7 +1736,45 @@ class AlphaQExplorerStrategy:
 
         # After first move, delegate to underlying solver
         self.move_count += 1
-        return self.solver.calculate_move(state, score, score_history)
+
+        # Approach E: Winning-push heuristic
+        # When score >0.75, we're in winning territory - be more careful/thorough
+        if score > 0.75:
+            # Save original MCTS iterations
+            original_iterations = self.solver.mcts_iterations
+
+            # Increase MCTS iterations by 50% for critical winning positions
+            boosted_iterations = int(original_iterations * 1.5)
+            self.solver.mcts_iterations = boosted_iterations
+
+            # Update MATLAB solver with boosted iterations
+            if self.solver.solver_initialized and self.solver.engine:
+                try:
+                    self.solver.engine.eval(
+                        f"hybridSolver.MCTSIterations = {boosted_iterations};",
+                        nargout=0
+                    )
+                    logger.info(f"AlphaQ [winning-push]: Score {score:+.3f} >0.75, boosted MCTS {original_iterations} → {boosted_iterations}")
+                except Exception as e:
+                    logger.warning(f"Failed to boost MCTS iterations: {e}")
+
+            # Calculate move with boosted iterations
+            result = self.solver.calculate_move(state, score, score_history)
+
+            # Restore original iterations
+            self.solver.mcts_iterations = original_iterations
+            if self.solver.solver_initialized and self.solver.engine:
+                try:
+                    self.solver.engine.eval(
+                        f"hybridSolver.MCTSIterations = {original_iterations};",
+                        nargout=0
+                    )
+                except Exception:
+                    pass
+
+            return result
+        else:
+            return self.solver.calculate_move(state, score, score_history)
 
     def _push_edge_bias(self):
         """
