@@ -74,8 +74,10 @@ from snowdrop_tangled_game_engine.game import Edge
 # Scorer selection thresholds
 # ---------------------------------------------------------------------------
 # Schrödinger is ground truth but impractical above this vertex count for a
-# full LUT.  At 7 vertices (~108s/state, 2048 states) multiprocessing makes
-# it feasible in hours.  At 10 vertices it is not feasible at any parallelism.
+# full LUT *using this Python solver*.  At 7 vertices (~108s/state, 2048
+# states) multiprocessing makes it feasible in hours.  At 10 vertices the
+# Python eigh-based solver is too slow; use the MATLAB split-operator solver
+# instead (generate_petersen_lut_schrodinger.m, ~0.7 s/state).
 SCHRODINGER_FAST_VERTEX_LIMIT = 5    # sequential, minutes
 SCHRODINGER_SLOW_VERTEX_LIMIT = 7    # multiprocessing, hours
 SA_NUM_READS = 100_000               # high read count for stable SA scores
