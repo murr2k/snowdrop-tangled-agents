@@ -55,9 +55,8 @@ $$
 To include the transverse-field driver term used in the Schrödinger adjudicator, the extended Hamiltonian can be written as:
 
 $$
-H(s) = -\Delta(s)\sum_i \sigma_x^{(i)} + A(s)\left(\sum_i h_i \sigma_z^{(i)} + \sum_{i{<}j} J_{ij}\sigma_z^{(i)}\sigma_z^{(j)}\right)
+H(s) = -\Delta(s)\sum_i \sigma_x^i + A(s)\left(\sum_i h_i \sigma_z^i + \sum_{i{<}j} J_{ij}\sigma_z^i\sigma_z^j\right)
 $$
-
 
 This form aligns cleanly with both our solver analysis and D-Wave’s standard annealing Hamiltonian.
 
