@@ -7,6 +7,47 @@
 
 ---
 
+## Table of Contents
+
+1. [Executive Summary](#executive-summary)
+2. [Background: Our Analysis Journey](#background-our-analysis-journey)
+3. [Key Findings: The Nash Equilibrium](#key-findings-the-nash-equilibrium)
+   - [The Dominant Pattern](#the-dominant-pattern-90-of-games)
+   - [Statistical Evidence](#statistical-evidence)
+   - [Why This is Nash Equilibrium](#why-this-is-nash-equilibrium)
+4. [Risk Assessment: Could Someone Win?](#risk-assessment-could-someone-win)
+   - [Scenario Analysis](#scenario-analysis)
+   - [Detailed Risk Analysis](#detailed-risk-analysis)
+     - [Risk 1: Different Graph (HIGH)](#risk-1-different-graph-high---30-40)
+     - [Risk 2: AlphaQ Uses SA (MEDIUM)](#risk-2-alphaq-uses-sa-medium---15-20)
+     - [Risk 3: Extreme Computational Resources (MEDIUM)](#risk-3-extreme-computational-resources-medium---10-15)
+     - [Risk 4: Undiscovered Tactical Sequence (LOW)](#risk-4-undiscovered-tactical-sequence-low---5-10)
+     - [Risk 5: AlphaQ Bug (VERY LOW)](#risk-5-alphaq-bug-very-low---1-5)
+     - [Risk 6: Perfect Play Beyond Our Search (VERY LOW)](#risk-6-perfect-play-beyond-our-search-very-low---5)
+5. [Recommendations: How to Secure the Bounty](#recommendations-how-to-secure-the-bounty)
+   - [Option 1: Maximum Security (Recommended)](#option-1-maximum-security-recommended)
+   - [Option 2: Moderate Security](#option-2-moderate-security)
+   - [Option 3: High Risk (Not Recommended)](#option-3-high-risk-not-recommended)
+6. [Mathematical Confidence](#mathematical-confidence)
+   - [Bayesian Analysis](#bayesian-analysis)
+   - [Statistical Significance](#statistical-significance)
+7. [Comparison: Other Game-Theoretic Bounties](#comparison-other-game-theoretic-bounties)
+8. [Technical Appendix](#technical-appendix)
+   - [Our Strategy Components](#our-strategy-components)
+   - [Run History Summary](#run-history-summary)
+   - [Opponent Response Data](#opponent-response-data)
+9. [Addendum: "Have We Built a Player as Good as AlphaQ Up?"](#addendum-have-we-built-a-player-as-good-as-alphaq-up)
+   - [Evidence We're Equal to AlphaQ Up](#evidence-were-equal-to-alphaq-up)
+   - [Evidence We Might Be Slightly Better](#evidence-we-might-be-slightly-better)
+   - [The Nuanced Assessment](#the-nuanced-assessment)
+   - [Comparison to Other AI Achievements](#comparison-to-other-ai-achievements)
+   - [The Achievement in Context](#the-achievement-in-context)
+   - [Strategic Implications for the Bounty](#strategic-implications-for-the-bounty)
+   - [Final Verdict](#final-verdict)
+10. [Conclusion](#conclusion)
+
+---
+
 ## Executive Summary
 
 **Question:** Is your $10,000 bounty safe?
