@@ -2,7 +2,7 @@
 
 **Status:** Implemented and Verified
 **Date:** February 2026
-**Version:** 2.0
+**Version:** 2.2
 **Game Creator:** Geordie Rose ([tangled-game.com](https://tangled-game.com))
 
 ## Executive Summary
@@ -855,23 +855,77 @@ LUT during MCTS rollouts.  REINFORCE then updates edge biases based on these cor
 scores.  This is a concrete, testable mechanism for why 376 games of REINFORCE produced
 zero improvement and why safe openings degraded.
 
-**The fix:** Regenerate the LUT using `SchrodingerEquationAdjudicator`, which produces
-ground-truth results on all tested X-Prize graphs.  32,768 states is tractable — the
-Schrödinger solver is slow per state but the problem is embarrassingly parallel.
+#### Pipeline architecture
 
-```python
-from snowdrop_adjudicators import SchrodingerEquationAdjudicator
-from snowdrop_tangled_game_engine import GraphProperties
+The LUT has two stages, handled by different tools:
 
-graph = GraphProperties(graph_number=COMPETITION_GRAPH)
-adj = SchrodingerEquationAdjudicator()
-adj.setup(epsilon=graph.epsilon, anneal_time=graph.anneal_time)
-
-for idx in range(2**NUM_EDGES):          # 32,768 iterations
-    state = idx_to_terminal_state(idx)   # existing utility
-    result = adj.adjudicate(state)
-    lut[idx] = result['score']           # ground-truth score
 ```
+Stage 1 — Terminal scores (Python)
+    generate_terminal_lut.py  →  terminal_scores.mat   (32,768 entries)
+    Uses SchrodingerEquationAdjudicator or SimulatedAnnealingAdjudicator.
+    This is where the scorer choice lives.  All Schrödinger computation
+    happens here.
+
+Stage 2 — Minimax extension (MATLAB)
+    generate_expanded_lut.m  →  expanded_lut.mat       (~4 M entries)
+    Pure table lookups: for each 1/2/3-grey state, enumerate the 2–8
+    terminal completions, take min/max.  No adjudication calls.
+    Serial: 10–30 min.  Parallel (parfor): 2–5 min.
+    Cost is independent of scorer choice — it only reads terminal_scores.mat.
+```
+
+MATLAB does not contain a Schrödinger solver.  The feasibility question is
+entirely about Stage 1: can we score 32,768 terminal states with
+`SchrodingerEquationAdjudicator`?
+
+#### Feasibility analysis — Petersen (10 vertices, 15 edges)
+
+Empirical Schrödinger timing on this machine (Python /
+`snowdrop-adjudicators`):
+
+| Vertices | Edges | States | Measured time/state | Source |
+|----------|-------|--------|---------------------|--------|
+| 4 | 5 | 32 | ~7 s | Diamond (graph 20), full run |
+| 7 | 11 | 2048 | ~108 s | Moser Spindle (graph 12), sampled |
+| 10 | 15 | 32768 | >180 s (incomplete) | Petersen, single-state timeout |
+
+Growth rate between 4 and 7 vertices: 2.46× per vertex (empirical).
+Extrapolated at 10 vertices: **~27 min per state**.
+
+| Workers | Wall-clock for 32,768 states | Feasible here? |
+|---------|------------------------------|----------------|
+| 1 | ~24 days | No |
+| 8 | ~3 days | No |
+| 128 | ~4.5 hrs | Possible (cloud) |
+| 1024 | ~34 min | Yes (cloud, ~$140 spot) |
+
+**Full Schrödinger on Petersen is not feasible on a single development
+machine but is feasible as a cloud batch job at moderate cost.**
+
+Stage 2 (MATLAB minimax extension) adds only 2–30 min after Stage 1
+completes, regardless of how Stage 1 was run.
+
+#### Recommended path: validate first, then decide
+
+Before committing to a cloud run, the `--validate` flag on the rewritten
+`generate_terminal_lut.py` provides a cheap diagnostic:
+
+```bash
+# Score all 32,768 states with SA (100K reads, ~hours locally),
+# then spot-check 10 against Schrödinger ground truth.
+poetry run python snowdrop_tangled_agents/tools/generate_terminal_lut.py \
+    --graph 5 --validate 10
+```
+
+This answers two questions at minimal cost:
+1. **Does SA flip any winners on Petersen?** (10 states is enough to detect
+   systematic flips if the error rate is >10 %.)
+2. **How far off are SA scores near the draw boundary?** (States scoring
+   near ±epsilon are the ones that matter for MCTS move ordering.)
+
+If flips or significant rank scrambling are found, proceed to the cloud
+batch run.  If SA scores are close and no flips appear, SA at 100K reads
+may be adequate and the full Schrödinger run can be deferred.
 
 **Expected impact:** Eliminates SA bias from the entire MCTS evaluation tree.  REINFORCE
 receives a clean reward signal for the first time.  This is likely the single highest-value
@@ -887,7 +941,7 @@ while regenerating the others.
 
 ### 11.2 Graph Automorphism Pooling in Thompson Sampling
 
-**Enabled by:** `find_graph_automorphisms.py` in `tangled-adjudicate`
+**Enabled by:** `find_graph_automorphisms.py` in `tangled-adjudicate`  
 **Problem it addresses:** Slow posterior convergence; redundancy in the 30-arm bandit
 
 **Current state:** Thompson Sampling maintains 30 independent posteriors (15 edges ×
@@ -926,7 +980,7 @@ win) becomes possible much sooner.
 
 ### 11.3 Correlation-Matrix-Guided Move Selection
 
-**Enabled by:** `AdjudicationResult['correlation_matrix']` in `snowdrop-adjudicators`
+**Enabled by:** `AdjudicationResult['correlation_matrix']` in `snowdrop-adjudicators`  
 **Problem it addresses:** The solver produces zero wins — mid-game move selection is the
 true bottleneck
 
@@ -973,7 +1027,7 @@ ordering dominates search efficiency.
 
 ### 11.4 Full Game Transcript Recording
 
-**Enabled by:** `Game.get_game_state()` serialisation in `snowdrop-tangled-game-engine`
+**Enabled by:** `Game.get_game_state()` serialisation in `snowdrop-tangled-game-engine`  
 **Problem it addresses:** Cannot diagnose where in the game losses occur
 
 **Current state:** `end_game()` records only: opening move, final result, and final score.
@@ -1007,7 +1061,7 @@ This is prerequisite for any targeted solver improvement.
 
 ### 11.5 SA Bias as a Concrete Failure Mechanism
 
-**Enabled by:** Documented known errors in `snowdrop-adjudicators`
+**Enabled by:** Documented known errors in `snowdrop-adjudicators`  
 **Problem it addresses:** Explains *why* REINFORCE appears to learn in the wrong direction
 
 **Current state:** The mid-run analysis concluded that REINFORCE with learning_rate = 0.03
@@ -1042,7 +1096,7 @@ appropriate again.
 ### 11.6 Partial-State Mid-Game Evaluation
 
 **Enabled by:** Ising model mapping (J = 0 for grey edges) documented in
-`DEPENDENCY_REPOSITORIES.md`; `adjudicate()` accepts any valid `GameState`
+`DEPENDENCY_REPOSITORIES.md`; `adjudicate()` accepts any valid `GameState`  
 **Problem it addresses:** MCTS rollouts are expensive; mid-game pruning and static
 evaluation are possible
 
@@ -1080,7 +1134,7 @@ computation that can be redirected to promising lines.
 
 | Rank | Avenue | Dependency Source | Core Mechanism | Effort |
 |------|--------|-------------------|----------------|--------|
-| 1 | Regenerate LUT with ground truth | `snowdrop-adjudicators` Schrödinger | Eliminates SA bias from reward signal | Medium (parallelisable batch job) |
+| 1 | Regenerate LUT with ground truth | `snowdrop-adjudicators` Schrödinger | Eliminates SA bias from reward signal | Medium (validate locally, cloud batch if flips confirmed; MATLAB extension adds 2–30 min) |
 | 2 | SA bias diagnostic test | `snowdrop-adjudicators` documentation | Confirms whether REINFORCE is harmful | Minimal (flip learning_rate to 0) |
 | 3 | Full game transcript recording | `snowdrop-tangled-game-engine` serialisation | Enables diagnosis of where losses occur | Low (append GameState per move) |
 | 4 | Correlation-matrix move guidance | `snowdrop-adjudicators` correlation_matrix | Physics-informed move priorities | Medium |
