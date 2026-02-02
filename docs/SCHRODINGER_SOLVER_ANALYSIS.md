@@ -1,19 +1,44 @@
 # Reverse-Engineering and Optimizing an Adiabatic Schrödinger Adjudicator for Quantum Game AI
 
-**Authors:** Analysis conducted in collaboration with Claude Sonnet 4.5
-**Date:** February 2026
+**Author:** Murray Kopit  
+**Contact:** github@linknode.com  
+**Repository:** https://github.com/murr2k/snowdrop-tangled-agents  
+**Date:** February 2026 
 **Version:** 1.0
 
 ## Abstract
 
-We reverse-engineer the `SchrodingerEquationAdjudicator` from the `snowdrop-adjudicators` package, revealing it to be a small-scale **adiabatic quantum dynamics simulator** rather than a classical energy minimizer. The adjudicator performs instantaneous exact diagonalization at each time step, evolving a wavefunction through a real D-Wave Advantage2 annealing schedule via eigenstate expansion. We identify a critical performance bottleneck in the Python implementation (O(2^{3n}) per-state cost due to repeated dense matrix diagonalization) and develop a MATLAB split-operator solver that exploits the Hamiltonian's tensor-product structure, achieving a **>260× speedup** (0.685 s/state vs >180 s/state). Cross-validation against simulated annealing reveals systematic winner flips near the draw boundary, confirming that SA bias corrupts the reinforcement learning signal in game-playing agents. The optimized solver makes ground-truth terminal state lookup table generation feasible on standard hardware (47 minutes for 32,768 Petersen graph states with 8 workers), eliminating a major bottleneck in training quantum game AI.
+We reverse-engineer the `SchrodingerEquationAdjudicator` from the `snowdrop-adjudicators` package, revealing it to be a small-scale **adiabatic quantum dynamics simulator** rather than a classical energy minimizer. The adjudicator performs instantaneous exact diagonalization at each time step, evolving a wavefunction through a real D-Wave Advantage2 annealing schedule via eigenstate expansion. We identify a critical performance bottleneck in the Python implementation O(2^3n^) per-state cost due to repeated dense matrix diagonalization) and develop a MATLAB split-operator solver that exploits the Hamiltonian's tensor-product structure, achieving a **>260× speedup** (0.685 s/state vs >180 s/state). Cross-validation against simulated annealing reveals systematic winner flips near the draw boundary, confirming that SA bias corrupts the reinforcement learning signal in game-playing agents. The optimized solver makes ground-truth terminal state lookup table generation feasible on standard hardware (47 minutes for 32,768 Petersen graph states with 8 workers), eliminating a major bottleneck in training quantum game AI.
 
 **Key Contributions:**
 1. First detailed analysis of the adjudicator as an adiabatic quantum simulator
-2. Identification of the O(2^{3n}) bottleneck in the eigenstate expansion loop
+2. Identification of the O(2^3n^) bottleneck in the eigenstate expansion loop
 3. Split-operator MATLAB implementation exploiting Hamiltonian structure
 4. Empirical confirmation of SA winner flips on Petersen graph terminal states
 5. Demonstration of practical ground-truth LUT generation on commodity hardware
+
+---
+
+## Implementation Status: Complete ✅
+
+**Full LUT Pipeline Successfully Generated (February 2026)**
+
+| Stage | Method | States | Time | Output |
+|-------|--------|--------|------|--------|
+| Terminal LUT | Schrödinger (split-operator) | 32,768 | 1.52 hrs | terminal_scores.mat |
+| Expanded LUT | Minimax depth-2 (parallel) | 3,964,928 | 31 sec | expanded_lut.mat |
+
+**Key Achievements:**
+- ✅ Eliminated SA systematic bias (state 30000 winner flip confirmed)
+- ✅ >260× speedup vs Python Schrödinger solver
+- ✅ Ground-truth quantum adjudication for REINFORCE learning
+- ✅ Minimax endgame oracle for MCTS acceleration
+- ✅ Production-ready LUTs for AlphaQ strategies on Petersen graph
+
+**Files Generated:**
+- `snowdrop_tangled_agents/matlab/rl/generate_petersen_lut_schrodinger.m` — Terminal LUT generator
+- `snowdrop_tangled_agents/matlab/rl/data/terminal_scores.mat` — 32,768 ground-truth scores
+- `snowdrop_tangled_agents/matlab/rl/data/expanded_lut.mat` — 3.96M minimax entries (0/1/2-grey states)
 
 ---
 
@@ -527,11 +552,11 @@ This analysis was conducted during AlphaQ strategy development for the Tangled q
 
 ## Appendix B: Benchmark Hardware
 
-- CPU: AMD Ryzen / Intel Xeon (details TBD)
-- RAM: ≥16 GB
+- CPU: Intel(R) Core(TM) Ultra 7 155H (3.80 GHz)
+- RAM: 32 GB
 - MATLAB: R2026a with Parallel Computing Toolbox
 - Python: 3.10+ with scipy 1.11.4, numpy 1.26.2
-- OS: Windows 11
+- OS: Windows 11 Home Version 24H2
 
 ---
 
