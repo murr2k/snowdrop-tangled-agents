@@ -569,6 +569,7 @@ class WebPlayer:
                     minimax_depth=4,
                     mcts_iterations=5000,
                     player=1,
+                    force_opening='E7G',  # Approach A: Force E7G for learning phase
                 )
         else:  # "heuristic" (default)
             self.strategy = PetersenStrategy(params_path=self.params_path)

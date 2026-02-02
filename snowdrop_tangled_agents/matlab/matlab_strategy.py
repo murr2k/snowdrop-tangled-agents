@@ -1522,6 +1522,7 @@ class AlphaQExplorerStrategy:
         mcts_iterations: int = 5000,
         player: int = 1,
         state_path: Optional[Path] = None,
+        force_opening: Optional[str] = None,
     ):
         """
         Initialize AlphaQExplorerStrategy.
@@ -1532,11 +1533,13 @@ class AlphaQExplorerStrategy:
             mcts_iterations: MCTS iterations in underlying solver
             player: Player perspective (1 or 2)
             state_path: Path to persist state across runs
+            force_opening: Force specific opening (e.g., 'E7G') to override Thompson Sampling
         """
         self.time_limit = time_limit
         self.minimax_depth = minimax_depth
         self.mcts_iterations = mcts_iterations
         self.player = player
+        self.force_opening = force_opening
 
         # Start with learning disabled
         self.solver = HybridSolverStrategy(
@@ -1673,33 +1676,47 @@ class AlphaQExplorerStrategy:
         if grey_count == 15:
             self.move_count = 1
 
-            # Thompson sampling: pick opening with highest Beta sample
-            import random
-            best_opening = None
-            best_sample = -1.0
+            # Check for forced opening override
+            if self.force_opening:
+                best_opening = self.force_opening
+                # Get stats for the forced opening if it exists
+                if best_opening in self.openings:
+                    counts = self.openings[best_opening]
+                    self.thompson_alpha = 1 + counts['wins'] + 0.5 * counts['draws']
+                    self.thompson_beta = 1 + counts['losses'] + 0.5 * counts['draws']
+                else:
+                    self.thompson_alpha = 1.0
+                    self.thompson_beta = 1.0
+                self.thompson_sample = 1.0
+                logger.info(f"AlphaQ [forced]: Opening {best_opening} (FORCED)")
+            else:
+                # Thompson sampling: pick opening with highest Beta sample
+                import random
+                best_opening = None
+                best_sample = -1.0
 
-            for key, counts in self.openings.items():
-                # Beta parameters: draws count as half-wins
-                alpha = 1 + counts['wins'] + 0.5 * counts['draws']
-                beta = 1 + counts['losses'] + 0.5 * counts['draws']
-                sample = random.betavariate(alpha, beta)
+                for key, counts in self.openings.items():
+                    # Beta parameters: draws count as half-wins
+                    alpha = 1 + counts['wins'] + 0.5 * counts['draws']
+                    beta = 1 + counts['losses'] + 0.5 * counts['draws']
+                    sample = random.betavariate(alpha, beta)
 
-                if sample > best_sample:
-                    best_opening = key
-                    best_sample = sample
-                    self.thompson_alpha = alpha
-                    self.thompson_beta = beta
+                    if sample > best_sample:
+                        best_opening = key
+                        best_sample = sample
+                        self.thompson_alpha = alpha
+                        self.thompson_beta = beta
+
+                self.thompson_sample = best_sample
+                logger.info(
+                    f"AlphaQ [thompson]: Opening {best_opening} "
+                    f"(sample={best_sample:.4f}, α={self.thompson_alpha:.2f}, β={self.thompson_beta:.2f})"
+                )
 
             # Parse edge and color from opening key
             edge = int(best_opening[1:-1])
             color = best_opening[-1]
             self.current_game_opening = (edge, color)
-            self.thompson_sample = best_sample
-
-            logger.info(
-                f"AlphaQ [thompson]: Opening {best_opening} "
-                f"(sample={best_sample:.4f}, α={self.thompson_alpha:.2f}, β={self.thompson_beta:.2f})"
-            )
 
             stats = {
                 'strategy': 'alphaq_explorer_opening',
