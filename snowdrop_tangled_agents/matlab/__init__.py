@@ -1,7 +1,7 @@
 """
 MATLAB Integration for Tangled Game Strategy.
 
-Provides bridge to MATLAB R2026a toolboxes for enhanced game analysis:
+Provides bridge to MATLAB toolboxes for enhanced game analysis:
 - Deep Learning Toolbox for value/policy neural networks
 - Statistics and Machine Learning Toolbox for opponent modeling
 - Database Toolbox for direct MATLAB-SQLite access
@@ -12,6 +12,12 @@ Architecture supports three backend modes:
 2. MATLAB Engine API (full functionality, requires license)
 3. Pure Python heuristics (always available)
 
+MATLAB Installation Detection:
+- Automatically detects MATLAB in common locations
+- Supports Windows, macOS, and Linux
+- Override with MATLAB_ROOT environment variable
+- Checks R2026a through R2022a versions
+
 Usage:
     from snowdrop_tangled_agents.matlab import get_unified_bridge
 
@@ -21,6 +27,15 @@ Usage:
     value, policy = bridge.evaluate_position(state, is_our_turn=True)
 """
 
+from .matlab_config import (
+    find_matlab_installation,
+    get_matlab_paths,
+    setup_matlab_path,
+    get_matlab_drive,
+    get_strategies_dir,
+    get_parallel_config,
+    get_gpu_config,
+)
 from .bridge import MatlabBridge, get_bridge
 from .compiled_bridge import CompiledMatlabBridge, get_compiled_bridge, packages_available
 from .unified_bridge import UnifiedMatlabBridge, get_unified_bridge
@@ -32,6 +47,14 @@ from .training import (
 )
 
 __all__ = [
+    # Configuration and detection
+    'find_matlab_installation',
+    'get_matlab_paths',
+    'setup_matlab_path',
+    'get_matlab_drive',
+    'get_strategies_dir',
+    'get_parallel_config',
+    'get_gpu_config',
     # Original bridge
     'MatlabBridge',
     'get_bridge',

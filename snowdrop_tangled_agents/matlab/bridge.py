@@ -13,21 +13,24 @@ import os
 from typing import Optional
 from pathlib import Path
 
+from .matlab_config import (
+    get_cached_matlab_paths,
+    setup_matlab_path,
+    get_matlab_drive,
+    get_strategies_dir
+)
+
 logger = logging.getLogger(__name__)
 
-# Add MATLAB to PATH before importing engine
-_MATLAB_ROOT = Path(r"C:\Program Files\MATLAB\R2026a")
-_MATLAB_BIN = _MATLAB_ROOT / "bin" / "win64"
-_MATLAB_RUNTIME = _MATLAB_ROOT / "runtime" / "win64"
+# Setup MATLAB paths automatically
+setup_matlab_path()
 
-if str(_MATLAB_BIN) not in os.environ.get('PATH', ''):
-    os.environ['PATH'] = str(_MATLAB_BIN) + os.pathsep + os.environ.get('PATH', '')
-if str(_MATLAB_RUNTIME) not in os.environ.get('PATH', ''):
-    os.environ['PATH'] = str(_MATLAB_RUNTIME) + os.pathsep + os.environ.get('PATH', '')
+# Get MATLAB installation paths
+_MATLAB_ROOT, _MATLAB_BIN, _MATLAB_RUNTIME = get_cached_matlab_paths()
 
 # MATLAB shared directory
-MATLAB_DRIVE = Path(r"C:\Users\murr2\MATLAB Drive")
-STRATEGIES_DIR = MATLAB_DRIVE / "tangled_strategies"
+MATLAB_DRIVE = get_matlab_drive()
+STRATEGIES_DIR = get_strategies_dir()
 
 # Singleton bridge instance
 _bridge_instance: Optional['MatlabBridge'] = None
@@ -122,7 +125,7 @@ class MatlabBridge:
                 logger.info("New MATLAB instance started successfully")
 
             # Add strategies directory to path
-            if STRATEGIES_DIR.exists():
+            if STRATEGIES_DIR and STRATEGIES_DIR.exists():
                 self.engine.addpath(str(STRATEGIES_DIR), nargout=0)
                 logger.info(f"Added {STRATEGIES_DIR} to MATLAB path")
 

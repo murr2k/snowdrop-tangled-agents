@@ -27,8 +27,8 @@ class MCTSParams:
     """Tunable MCTS parameters."""
 
     # Search parameters
-    iterations: int = 5000
-    time_limit: float = 20.0  # Match Melissa's ~20-25s compute
+    iterations: int = 500000
+    time_limit: float = float('inf')  # Unlimited time budget
     exploration: float = 1.414
     prior_weight: float = 2.0
 

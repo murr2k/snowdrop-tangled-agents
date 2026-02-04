@@ -35,24 +35,26 @@ def pytest_configure(config):
 
 def find_matlab() -> Optional[str]:
     """Find MATLAB executable on the system."""
-    # Check environment variable first
+    # Import centralized config
+    from snowdrop_tangled_agents.matlab.matlab_config import get_matlab_paths
+
+    # Check environment variable first (for explicit override)
     matlab_path = os.environ.get('MATLAB_PATH')
     if matlab_path and Path(matlab_path).exists():
         return matlab_path
 
-    # Check common locations
-    if os.name == 'nt':  # Windows
-        common_paths = [
-            r'C:\Program Files\MATLAB\R2026a\bin\matlab.exe',
-            r'C:\Program Files\MATLAB\R2025b\bin\matlab.exe',
-            r'C:\Program Files\MATLAB\R2025a\bin\matlab.exe',
-            r'C:\Program Files\MATLAB\R2024b\bin\matlab.exe',
-        ]
-        for path in common_paths:
-            if Path(path).exists():
-                return path
+    # Use centralized detection
+    matlab_root, matlab_bin, _ = get_matlab_paths()
+    if matlab_root and matlab_bin:
+        if os.name == 'nt':
+            matlab_exe = matlab_bin.parent / 'matlab.exe'  # bin\matlab.exe
+        else:
+            matlab_exe = matlab_bin.parent / 'matlab'
 
-    # Try PATH
+        if matlab_exe.exists():
+            return str(matlab_exe)
+
+    # Try PATH as fallback
     matlab = shutil.which('matlab')
     if matlab:
         return matlab

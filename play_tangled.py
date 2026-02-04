@@ -440,8 +440,8 @@ class WebPlayer:
         headless: bool = False,
         slow_mo: int = 100,
         strategy_type: str = "heuristic",
-        mcts_time: float = 30.0,
-        mcts_iterations: int = 1_000_000,
+        mcts_time: float = float('inf'),
+        mcts_iterations: int = 500_000,
         use_nn: bool = True,
         adapt_opponent: bool = True,
     ):
@@ -509,7 +509,7 @@ class WebPlayer:
         elif strategy_type == "matlab_mcts":
             if not MATLAB_MCTS_AVAILABLE or MatlabMCTSStrategy is None:
                 self.logger.warning("MATLAB MCTS strategy unavailable, falling back to python mcts")
-                self.strategy = MCTSStrategy(time_limit=5.0, max_iterations=10000)
+                self.strategy = MCTSStrategy(time_limit=float('inf'), max_iterations=500000)
             else:
                 # Create params with high compute (match Melissa's ~20-25s)
                 mcts_params_path = Path.home() / ".tangled" / "matlab_mcts_params.json"
@@ -520,54 +520,54 @@ class WebPlayer:
         elif strategy_type == "hybrid_solver":
             if not MATLAB_AVAILABLE or HybridSolverStrategy is None:
                 self.logger.warning("Hybrid solver unavailable, falling back to python mcts")
-                self.strategy = MCTSStrategy(time_limit=10.0, max_iterations=10000)
+                self.strategy = MCTSStrategy(time_limit=float('inf'), max_iterations=500000)
             else:
                 self.strategy = HybridSolverStrategy(
-                    time_limit=10.0,
+                    time_limit=float('inf'),
                     minimax_depth=4,
-                    mcts_iterations=5000,
+                    mcts_iterations=500000,
                     player=1,
                 )
         elif strategy_type == "amara_explorer":
             if not MATLAB_AVAILABLE or AmaraExplorerStrategy is None:
-                self.strategy = MCTSStrategy(time_limit=10.0, max_iterations=10000)
+                self.strategy = MCTSStrategy(time_limit=float('inf'), max_iterations=500000)
             else:
                 self.strategy = AmaraExplorerStrategy(
-                    time_limit=10.0,
+                    time_limit=float('inf'),
                     minimax_depth=4,
-                    mcts_iterations=5000,
+                    mcts_iterations=500000,
                     player=1,
                 )
         elif strategy_type == "amara_killer":
             if not MATLAB_AVAILABLE or AmaraKillerStrategy is None:
-                self.strategy = MCTSStrategy(time_limit=10.0, max_iterations=10000)
+                self.strategy = MCTSStrategy(time_limit=float('inf'), max_iterations=500000)
             else:
                 self.strategy = AmaraKillerStrategy(
-                    time_limit=10.0,
+                    time_limit=float('inf'),
                     minimax_depth=4,
-                    mcts_iterations=5000,
+                    mcts_iterations=500000,
                     player=1,
                     opening_mode='best',  # Always use E14P (highest win score)
                 )
         elif strategy_type == "melissa_killer":
             if not MATLAB_AVAILABLE or MelissaKillerStrategy is None:
-                self.strategy = MCTSStrategy(time_limit=10.0, max_iterations=10000)
+                self.strategy = MCTSStrategy(time_limit=float('inf'), max_iterations=500000)
             else:
                 self.strategy = MelissaKillerStrategy(
-                    time_limit=10.0,
+                    time_limit=float('inf'),
                     minimax_depth=4,
-                    mcts_iterations=5000,
+                    mcts_iterations=500000,
                     player=1,
                     opening_mode='cycle',  # Cycle through E9G, E12P, E13P
                 )
         elif strategy_type == "alphaq_explorer":
             if not MATLAB_AVAILABLE or AlphaQExplorerStrategy is None:
-                self.strategy = MCTSStrategy(time_limit=30.0, max_iterations=1_000_000)
+                self.strategy = MCTSStrategy(time_limit=float('inf'), max_iterations=500000)
             else:
                 self.strategy = AlphaQExplorerStrategy(
-                    time_limit=30.0,
+                    time_limit=float('inf'),
                     minimax_depth=4,
-                    mcts_iterations=5000,
+                    mcts_iterations=500000,
                     player=1,
                     force_opening='E7G',  # Run 65 proved diversification fails - E7G is uniquely optimal
                 )
@@ -2021,10 +2021,10 @@ def main():
                         help="Seconds to keep browser open after last game (0 to close immediately)")
     parser.add_argument("--strategy", "-s", choices=["heuristic", "mcts", "hybrid", "matlab", "rl", "ensemble", "matlab_mcts", "hybrid_solver", "amara_explorer", "amara_killer", "melissa_killer", "alphaq_explorer"], default="hybrid_solver",
                         help="Strategy to use: hybrid_solver (DEFAULT: D-Wave inspired minimax+MCTS+learning), alphaq_explorer (explore/exploit vs AlphaQ Up with closed learning loop), amara_killer (uses E14P against Amara), melissa_killer (cycles E12P/E13P against Melissa - 40%% win rate), amara_explorer (cycles all 30 openings), hybrid (MCTS with opening), mcts (Monte Carlo, 30s/move), heuristic (fast), matlab (MATLAB-enhanced), rl (trained PPO), ensemble (RL + MC rollouts), matlab_mcts (MATLAB MCTS)")
-    parser.add_argument("--mcts-time", type=float, default=30.0,
-                        help="MCTS time limit per move in seconds (default 30s to leverage compute advantage)")
-    parser.add_argument("--mcts-iterations", type=int, default=1000000,
-                        help="Maximum MCTS iterations per move (default 1M - time is the real limit)")
+    parser.add_argument("--mcts-time", type=float, default=float('inf'),
+                        help="MCTS time limit per move in seconds (default unlimited)")
+    parser.add_argument("--mcts-iterations", type=int, default=500000,
+                        help="Maximum MCTS iterations per move (default 500K for optimal quality)")
     parser.add_argument("--stats", action="store_true",
                         help="Show statistics summary and exit (no games played)")
     parser.add_argument("--calibration", action="store_true",

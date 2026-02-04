@@ -3,16 +3,38 @@
 
 import os
 import sys
+from pathlib import Path
 
-# Add MATLAB to PATH before importing
-matlab_bin = r"C:\Program Files\MATLAB\R2026a\bin\win64"
-matlab_runtime = r"C:\Program Files\MATLAB\R2026a\runtime\win64"
+# Add project to path
+sys.path.insert(0, str(Path(__file__).parent))
 
-if matlab_bin not in os.environ.get('PATH', ''):
-    os.environ['PATH'] = matlab_bin + os.pathsep + os.environ.get('PATH', '')
-if matlab_runtime not in os.environ.get('PATH', ''):
-    os.environ['PATH'] = matlab_runtime + os.pathsep + os.environ.get('PATH', '')
+from snowdrop_tangled_agents.matlab.matlab_config import (
+    find_matlab_installation,
+    setup_matlab_path,
+    get_matlab_paths,
+    get_strategies_dir
+)
 
+# Detect and setup MATLAB paths
+matlab_root, matlab_bin, matlab_runtime = get_matlab_paths()
+
+if not matlab_root:
+    print("ERROR: MATLAB installation not found!")
+    print("\nSearched locations:")
+    print("  - Environment variable MATLAB_ROOT")
+    print("  - C:\\Program Files\\MATLAB\\R20XXx")
+    print("  - PATH for matlab executable")
+    print("\nTo fix:")
+    print("  1. Set MATLAB_ROOT environment variable, OR")
+    print("  2. Ensure MATLAB is installed in a standard location")
+    sys.exit(1)
+
+print(f"Found MATLAB installation: {matlab_root}")
+print(f"  Bin: {matlab_bin}")
+print(f"  Runtime: {matlab_runtime}")
+
+# Add to PATH
+setup_matlab_path()
 print(f"MATLAB paths added to PATH")
 
 try:
@@ -39,8 +61,12 @@ if sessions:
 
         # Test our strategy functions if available
         try:
-            eng.addpath(r"C:\Users\murr2\MATLAB Drive\tangled_strategies", nargout=0)
-            print("Added tangled_strategies to path")
+            strategies_dir = get_strategies_dir()
+            if strategies_dir:
+                eng.addpath(str(strategies_dir), nargout=0)
+                print(f"Added tangled_strategies to path: {strategies_dir}")
+            else:
+                print("Warning: tangled_strategies directory not found")
 
             # Test evaluate_position
             import matlab

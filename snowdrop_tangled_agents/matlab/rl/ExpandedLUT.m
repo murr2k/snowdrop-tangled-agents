@@ -22,14 +22,18 @@ classdef ExpandedLUT < handle
         OneGreyScores       % 491520x1 single
         TwoGreyScores       % 3440640x1 single
         ThreeGreyScores     % 14909440x1 single
+        FourGreyScores      % 44748800x1 single
         GreyPairs           % 105x2 - pairs of grey positions
         GreyTriples         % 455x3 - triples of grey positions
+        GreyQuads           % 1365x4 - quads of grey positions
         GreyPairIndex       % Map from (pos1,pos2) to pair index
         GreyTripleIndex     % Map from (pos1,pos2,pos3) to triple index
+        GreyQuadIndex       % Map from (pos1,pos2,pos3,pos4) to quad index
 
         Loaded logical = false
         HasExpandedData logical = false
         HasThreeGreyData logical = false
+        HasFourGreyData logical = false
 
         % Metadata
         Version char = ''
@@ -43,6 +47,7 @@ classdef ExpandedLUT < handle
         NUM_ONE_GREY = 491520
         NUM_TWO_GREY = 3440640
         NUM_THREE_GREY = 14909440
+        NUM_FOUR_GREY = 44748800
     end
 
     methods
@@ -102,6 +107,21 @@ classdef ExpandedLUT < handle
                     end
 
                     this.HasThreeGreyData = true;
+                end
+
+                % Load four-grey data if available
+                if isfield(data, 'fourGreyScores')
+                    this.FourGreyScores = single(data.fourGreyScores(:));
+                    this.GreyQuads = data.greyQuads;
+
+                    % Build grey quad index for fast lookup
+                    this.GreyQuadIndex = containers.Map('KeyType', 'char', 'ValueType', 'uint32');
+                    for i = 1:size(this.GreyQuads, 1)
+                        key = sprintf('%d_%d_%d_%d', this.GreyQuads(i,1), this.GreyQuads(i,2), this.GreyQuads(i,3), this.GreyQuads(i,4));
+                        this.GreyQuadIndex(key) = i;
+                    end
+
+                    this.HasFourGreyData = true;
                 end
 
                 if isfield(data, 'metadata')
@@ -183,8 +203,16 @@ classdef ExpandedLUT < handle
                         score = this.evaluateHeuristic(state, greyPositions);
                     end
 
+                case 4
+                    % Four grey edges
+                    if this.HasFourGreyData
+                        score = this.lookupFourGrey(state, greyPositions);
+                    else
+                        score = this.evaluateHeuristic(state, greyPositions);
+                    end
+
                 otherwise
-                    % 4+ grey edges - use heuristic
+                    % 5+ grey edges - use heuristic
                     score = this.evaluateHeuristic(state, greyPositions);
             end
         end
@@ -293,6 +321,32 @@ classdef ExpandedLUT < handle
             score = bestScore;
         end
 
+        function score = lookupFourGrey(this, state, greyPositions)
+            %LOOKUPFOURGREY O(1) lookup for four-grey state
+
+            sortedPos = sort(greyPositions);
+            pos1 = sortedPos(1);
+            pos2 = sortedPos(2);
+            pos3 = sortedPos(3);
+            pos4 = sortedPos(4);
+
+            % Get base pattern (with all grey positions as 'P')
+            baseState = state;
+            baseState(pos1) = 'P';
+            baseState(pos2) = 'P';
+            baseState(pos3) = 'P';
+            baseState(pos4) = 'P';
+            baseIdx = this.state2idx(baseState);
+
+            % Find quad index
+            key = sprintf('%d_%d_%d_%d', pos1, pos2, pos3, pos4);
+            quadIdx = this.GreyQuadIndex(key);
+
+            % Linear index into fourGreyScores
+            linearIdx = (baseIdx - 1) * 1365 + quadIdx;
+            score = double(this.FourGreyScores(linearIdx));
+        end
+
         function score = evaluateHeuristic(this, state, greyPositions)
             %EVALUATEHEURISTIC Heuristic for states with 3+ grey edges
             %
@@ -345,6 +399,7 @@ classdef ExpandedLUT < handle
             info.loaded = this.Loaded;
             info.hasExpandedData = this.HasExpandedData;
             info.hasThreeGreyData = this.HasThreeGreyData;
+            info.hasFourGreyData = this.HasFourGreyData;
             info.totalEntries = this.TotalEntries;
             info.version = this.Version;
             info.generated = this.Generated;
@@ -363,6 +418,11 @@ classdef ExpandedLUT < handle
                 if this.HasThreeGreyData
                     info.threeGreyCount = length(this.ThreeGreyScores);
                     info.threeGreyRange = [min(this.ThreeGreyScores), max(this.ThreeGreyScores)];
+                end
+
+                if this.HasFourGreyData
+                    info.fourGreyCount = length(this.FourGreyScores);
+                    info.fourGreyRange = [min(this.FourGreyScores), max(this.FourGreyScores)];
                 end
             end
         end
