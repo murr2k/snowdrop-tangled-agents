@@ -1645,10 +1645,15 @@ Through Thompson Sampling across 500 games (Run 60), we discovered a clear optim
 
 **Nash Equilibrium Definition**:
 
-For a two-player zero-sum game, a strategy profile $(s_1^*, s_2^*)$ is a Nash Equilibrium if:
+For a two-player zero-sum game, a strategy profile $(s_{1}^{\ast}, s_{2}^{\ast})$ is a Nash Equilibrium if:
 
-$$u_1(s_1^*, s_2^*) \geq u_1(s_1, s_2^*) \quad \forall s_1 \in S_1$$
-$$u_2(s_1^*, s_2^*) \geq u_2(s_1^*, s_2) \quad \forall s_2 \in S_2$$
+$$
+u_{1}(s_{1}^{\ast}, s_{2}^{\ast}) \ge u_{1}(s_{1}, s_{2}^{\ast}) \quad \forall s_{1} \in S_{1}
+$$
+
+$$
+u_{2}(s_{1}^{\ast}, s_{2}^{\ast}) \ge u_{2}(s_{1}^{\ast}, s_{2}) \quad \forall s_{2} \in S_{2}
+$$
 
 In other words: **Neither player can improve their outcome by unilaterally changing strategy.**
 
