@@ -368,7 +368,13 @@ def backpropagate(node, value):
 
 The heuristic strategy scores each available edge:
 
-$$\text{Score}(e) = w_{\text{cat}(e)} + \text{hub\_bonus}(e) + \text{momentum} \cdot w_m + \text{learned}(e)$$
+$$
+\mathrm{Score}(e) =
+w_{\mathrm{cat}(e)} +
+\mathrm{hub\_bonus}(e) +
+\mathrm{momentum} \cdot w_{m} +
+\mathrm{learned}(e)
+$$
 
 Where:
 - w_{cat(e)} = category weight (MY_EDGE: 10, OPP_EDGE: 8, HUB_EDGE: 5, NEUTRAL: 1)
@@ -1288,7 +1294,12 @@ end
 
 For a position with $k$ grey edges at indices $G = \{g_1, ..., g_k\}$, the minimax value is:
 
-$$V(s) = \max_{\substack{c_1 \in \{G,P\} \\ \text{(our move)}}} \min_{\substack{c_2 \in \{G,P\} \\ \text{(opp move)}}} \cdots \text{terminal\_value}(s')$$
+$$
+V(s) =
+\max_{c_{1} \in \{G,P\},\ \mathrm{(our\ move)}}
+\min_{c_{2} \in \{G,P\},\ \mathrm{(opp\ move)}}
+\cdots \mathrm{terminal\_value}(s')
+$$
 
 Where the max/min alternate based on whose turn it is.
 
