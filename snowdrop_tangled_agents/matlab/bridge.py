@@ -16,7 +16,6 @@ from pathlib import Path
 from .matlab_config import (
     get_cached_matlab_paths,
     setup_matlab_path,
-    get_matlab_drive,
     get_strategies_dir
 )
 
@@ -28,8 +27,7 @@ setup_matlab_path()
 # Get MATLAB installation paths
 _MATLAB_ROOT, _MATLAB_BIN, _MATLAB_RUNTIME = get_cached_matlab_paths()
 
-# MATLAB shared directory
-MATLAB_DRIVE = get_matlab_drive()
+# MATLAB strategies directory (repo-local: snowdrop_tangled_agents/matlab/rl/)
 STRATEGIES_DIR = get_strategies_dir()
 
 # Singleton bridge instance

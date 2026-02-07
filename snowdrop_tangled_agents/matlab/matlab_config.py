@@ -151,44 +151,23 @@ def setup_matlab_path() -> bool:
     return True
 
 
-def get_matlab_drive() -> Optional[Path]:
-    """
-    Get MATLAB Drive path.
-
-    Returns:
-        Path to MATLAB Drive, or None if not found
-    """
-    # Common MATLAB Drive locations
-    candidates = [
-        Path.home() / "MATLAB Drive",
-        Path.home() / "Documents" / "MATLAB Drive",
-    ]
-
-    for candidate in candidates:
-        if candidate.exists():
-            logger.info(f"Found MATLAB Drive: {candidate}")
-            return candidate
-
-    logger.debug("MATLAB Drive not found")
-    return None
-
-
 def get_strategies_dir() -> Optional[Path]:
     """
-    Get tangled_strategies directory path.
+    Get the MATLAB strategies directory (contains .m files for MCTS, solver, etc.).
+
+    Returns the ``matlab/rl/`` directory inside this repository.  All MATLAB
+    source files live here — no external MATLAB Drive folder is required.
 
     Returns:
         Path to strategies directory, or None if not found
     """
-    matlab_drive = get_matlab_drive()
-    if not matlab_drive:
-        return None
+    # Canonical location: <repo>/snowdrop_tangled_agents/matlab/rl/
+    repo_strategies = Path(__file__).resolve().parent / "rl"
+    if repo_strategies.exists():
+        logger.debug(f"Using repo strategies dir: {repo_strategies}")
+        return repo_strategies
 
-    strategies_dir = matlab_drive / "tangled_strategies"
-    if strategies_dir.exists():
-        return strategies_dir
-
-    logger.debug(f"Strategies directory not found: {strategies_dir}")
+    logger.warning(f"Strategies directory not found: {repo_strategies}")
     return None
 
 

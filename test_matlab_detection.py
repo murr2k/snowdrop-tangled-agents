@@ -37,16 +37,8 @@ print("\n3. Setting up MATLAB PATH...")
 success = matlab_config.setup_matlab_path()
 print(f"   {'[OK] Success' if success else '[FAIL] Failed'}")
 
-# Test MATLAB Drive
-print("\n4. Finding MATLAB Drive...")
-matlab_drive = matlab_config.get_matlab_drive()
-if matlab_drive:
-    print(f"   [OK] Found: {matlab_drive}")
-else:
-    print("   [SKIP] Not found (optional)")
-
 # Test strategies directory
-print("\n5. Finding strategies directory...")
+print("\n4. Finding strategies directory...")
 strategies_dir = matlab_config.get_strategies_dir()
 if strategies_dir:
     print(f"   [OK] Found: {strategies_dir}")
