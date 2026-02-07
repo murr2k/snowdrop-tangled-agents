@@ -168,15 +168,13 @@ if MATLAB_IMPORTS_AVAILABLE:
     try:
         import matlab.engine
         MATLAB_ENGINE_AVAILABLE = True
-        # Check for shared sessions
+        # Check for shared sessions first
         try:
             MATLAB_SESSIONS = list(matlab.engine.find_matlab())
-            if MATLAB_SESSIONS:
-                MATLAB_AVAILABLE = True
-            else:
-                MATLAB_UNAVAILABLE_REASON = "No shared MATLAB sessions found. Run 'matlab.engine.shareEngine' in MATLAB."
-        except Exception as e:
-            MATLAB_UNAVAILABLE_REASON = f"Could not find MATLAB sessions: {e}"
+        except Exception:
+            MATLAB_SESSIONS = []
+        # Engine API available = MATLAB available (bridge will start one if no shared session)
+        MATLAB_AVAILABLE = True
     except ImportError:
         MATLAB_UNAVAILABLE_REASON = "MATLAB Engine API not installed. Run: pip install matlabengine"
         # Check for compiled packages as fallback
@@ -330,9 +328,11 @@ def check_matlab_availability() -> bool:
         if MATLAB_SESSIONS:
             print(f"  Status: AVAILABLE")
             print(f"  Sessions: {', '.join(MATLAB_SESSIONS)}")
-            print(f"  MATLAB strategies (hybrid_solver, matlab_mcts) are enabled")
+        elif MATLAB_ENGINE_AVAILABLE:
+            print(f"  Status: AVAILABLE (will start engine on demand)")
         else:
             print(f"  Status: AVAILABLE (compiled packages)")
+        print(f"  MATLAB strategies (hybrid_solver, matlab_mcts) are enabled")
         print("=" * 60 + "\n")
         return True
 
@@ -510,6 +510,7 @@ class WebPlayer:
         mcts_iterations: int = 500_000,
         use_nn: bool = True,
         adapt_opponent: bool = True,
+        opening_mode: Optional[str] = None,
     ):
         self.username = os.getenv("TANGLED_USERNAME")
         self.password = os.getenv("TANGLED_PASSWORD")
@@ -520,6 +521,7 @@ class WebPlayer:
         # Store options for MATLAB strategy
         self._use_nn = use_nn
         self._adapt_opponent = adapt_opponent
+        self._opening_mode = opening_mode
 
         self.playwright = None
         self.browser = None
@@ -630,12 +632,21 @@ class WebPlayer:
             if not MATLAB_AVAILABLE or AlphaQExplorerStrategy is None:
                 self.strategy = MCTSStrategy(time_limit=float('inf'), max_iterations=mcts_iterations)
             else:
+                opening_mode = getattr(self, '_opening_mode', None)
+                if opening_mode == 'round_robin':
+                    force_opening = None
+                elif opening_mode == 'thompson':
+                    force_opening = None
+                else:
+                    # Default: forced E7G (historical best)
+                    force_opening = 'E7G'
                 self.strategy = AlphaQExplorerStrategy(
                     time_limit=mcts_time,
                     minimax_depth=4,
                     mcts_iterations=mcts_iterations,
                     player=1,
-                    force_opening='E7G',  # Run 65 proved diversification fails - E7G is uniquely optimal
+                    force_opening=force_opening,
+                    opening_mode=opening_mode or 'forced',
                 )
         else:  # "heuristic" (default)
             self.strategy = PetersenStrategy(params_path=self.params_path)
@@ -2115,6 +2126,12 @@ def main():
                         help="Number of opponent clusters (default: 3)")
 
     # Neural network and opponent adaptation options
+    parser.add_argument("--opening-mode", choices=["thompson", "forced", "round_robin"],
+                        default=None,
+                        help="Opening selection mode for alphaq_explorer: "
+                             "thompson (default, Beta sampling), "
+                             "forced (always E7G), "
+                             "round_robin (cycle all 30 openings for systematic exploration)")
     parser.add_argument("--use-nn", action="store_true",
                         help="Use neural network priors with matlab strategy")
     parser.add_argument("--adapt-opponent", action="store_true",
@@ -2307,7 +2324,11 @@ def main():
     publisher = get_publisher()
     if publisher.is_configured():
         publisher.set_session_info(run_id=run_id, planned_games=total_planned)
-        logging.getLogger(__name__).info("Live stats publishing enabled")
+        status = publisher.get_status()
+        logging.getLogger(__name__).info(
+            f"Live stats publishing enabled (url={status['url']}, "
+            f"connected={status['connected']}, connecting={status['connecting']})"
+        )
     else:
         logging.getLogger(__name__).debug("Live stats publishing not configured (set TANGLED_DASHBOARD_URL and TANGLED_DASHBOARD_API_KEY)")
 
@@ -2338,6 +2359,7 @@ def main():
             mcts_iterations=args.mcts_iterations,
             use_nn=args.use_nn,
             adapt_opponent=args.adapt_opponent,
+            opening_mode=getattr(args, 'opening_mode', None),
         ) as player:
             player.login()
 
