@@ -9,6 +9,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **ANALYSIS_OF_GEORDIE_ROSE_FEEDBACK.md** (New Document)
+  - Comprehensive 11,500-word technical analysis of Geordie Rose's feedback on Schrödinger adjudicator optimization work
+  - Validates Rose's core claims: 20-vertex limit for exact methods, tensor networks as state-of-the-art, exponential scaling barriers
+  - Identifies undervalued contributions: algorithm documentation, SA bias discovery, RL implications
+  - Provides strategic roadmap: hybrid approach using exact methods for validation (≤12 vertices), tensor networks for scaling (15-20+ vertices)
+  - 18 citations from quantum annealing and tensor network literature
+
+- **MCTS Parameter Documentation** (`play_tangled.py`)
+  - Updated module docstring to include usage examples for `--mcts-iterations` and `--mcts-time` parameters
+  - Added guidance: 100K for faster/lower quality, 500K default for optimal quality, 1M shows diminishing returns
+  - Documented all current strategies with hybrid_solver as default
+
+### Changed
+
+- **Markdown Style Compliance** (`docs/THE_MATHEMATICS_OF_TANGLED_GAME.md`, `docs/ANALYSIS_OF_GEORDIE_ROSE_FEEDBACK.md`)
+  - Fixed all ordered lists to use `1.` for every item per MARKDOWN_STYLE.md ruleset (80+ items updated)
+  - Removed unintentional indentation from document title
+  - Ensures consistent rendering across Markdown Monster and GitHub
+
+### Fixed
+
+- **setup_env.py Installation Robustness**
+  - Added missing `websocket-client>=1.6.0` package (was in pyproject.toml but missing from pip install list)
+  - Now upgrades pip, setuptools, and wheel before installing packages to ensure proper pyproject.toml handling
+  - Enhanced verification to explicitly test all 7 core packages with checkmarks
+  - Added helpful error message with install command if imports fail
+  - Fixes installation failures in fresh environments where coloredlogs, python-dotenv, playwright, and websocket-client were not being installed properly
+
+### Added
+
 - **Thompson Sampling Opening Selection for AlphaQExplorerStrategy** (`matlab_strategy.py`, `test_matlab_integration.py`)
   - Replaced broken two-phase explore/exploit strategy with principled Bayesian opening selection
   - **Root cause fix:** Previous greedy ranking by `(wins DESC, avg_score DESC)` degenerated to `avg_score DESC` when all openings had 0 wins, selecting E9G (89% loss rate) and E11G (100% loss rate) for exploitation

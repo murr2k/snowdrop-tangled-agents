@@ -9,16 +9,22 @@ Uses the same robust DOM interaction patterns:
 - Text-based turn/game-over detection
 
 Strategies:
+- hybrid_solver: D-Wave inspired minimax+MCTS+learning (DEFAULT)
+- alphaq_explorer: Explore/exploit vs AlphaQ Up with closed learning loop
+- melissa_killer: Cycles E12P/E13P against Melissa (40% win rate)
+- amara_killer: Uses E14P against Amara
+- amara_explorer: Cycles all 30 openings
+- mcts: Monte Carlo Tree Search
 - heuristic: Fast parameterized strategy with learning
-- mcts: Monte Carlo Tree Search (fight fire with fire!)
-- hybrid: MCTS with heuristic opening book
 
 Usage:
-    python play_tangled.py                        # Play 5 games vs Melissa (heuristic)
-    python play_tangled.py --strategy mcts        # Use MCTS strategy
-    python play_tangled.py --strategy hybrid      # Use hybrid strategy
-    python play_tangled.py --opponent randy       # Play vs Randy
-    python play_tangled.py --games 10             # Play 10 games
+    python play_tangled.py                                    # Play 5 games vs Melissa (hybrid_solver)
+    python play_tangled.py --strategy alphaq_explorer         # Use AlphaQ Explorer strategy
+    python play_tangled.py --opponent alphaq                  # Play vs AlphaQ Up
+    python play_tangled.py --games 10                         # Play 10 games
+    python play_tangled.py --mcts-iterations 100000           # Use 100K iterations (faster, lower quality)
+    python play_tangled.py --mcts-iterations 1000000          # Use 1M iterations (slower, diminishing returns)
+    python play_tangled.py --mcts-time 30                     # Limit thinking time to 30 seconds per move
 """
 
 import argparse

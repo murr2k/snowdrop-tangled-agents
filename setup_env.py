@@ -90,7 +90,14 @@ def install_with_pip(dev: bool = False):
     """Install dependencies using pip."""
     print_step("Installing dependencies with pip...")
 
-    # Core dependencies
+    # First, ensure pip and build tools are up to date
+    print_step("Upgrading pip and build tools...")
+    subprocess.run(
+        [sys.executable, "-m", "pip", "install", "--upgrade", "pip", "setuptools", "wheel"],
+        capture_output=True  # Suppress output for this step
+    )
+
+    # Core dependencies (must match pyproject.toml)
     packages = [
         "snowdrop-tangled-game-engine>=1.1.0",
         "snowdrop-adjudicators>=0.1.0",
@@ -98,6 +105,7 @@ def install_with_pip(dev: bool = False):
         "coloredlogs>=15.0.1",
         "playwright>=1.40.0",
         "python-dotenv>=1.0.0",
+        "websocket-client>=1.6.0",
     ]
 
     if dev:
@@ -107,6 +115,7 @@ def install_with_pip(dev: bool = False):
         ])
 
     # Install packages
+    print_step(f"Installing {len(packages)} core packages...")
     cmd = [sys.executable, "-m", "pip", "install", "--upgrade"] + packages
     result = subprocess.run(cmd, capture_output=False)
 
@@ -195,13 +204,24 @@ def verify_installation():
     print_step("Verifying installation...")
 
     try:
-        # Test imports
+        # Test critical imports
+        print_step("Testing imports...")
         import snowdrop_tangled_game_engine
         import snowdrop_adjudicators
         import playwright
         import coloredlogs
+        import dotenv
+        import websocket
+
+        print_success("  ✓ snowdrop-tangled-game-engine")
+        print_success("  ✓ snowdrop-adjudicators")
+        print_success("  ✓ playwright")
+        print_success("  ✓ coloredlogs")
+        print_success("  ✓ python-dotenv")
+        print_success("  ✓ websocket-client")
 
         # Test our package
+        print_step("Testing package imports...")
         from snowdrop_tangled_agents.strategy.mcts_strategy import evaluate_terminal_state
 
         # Quick sanity check
@@ -213,6 +233,7 @@ def verify_installation():
 
     except ImportError as e:
         print_error(f"Import failed: {e}")
+        print_error("Try running: pip install coloredlogs playwright python-dotenv websocket-client")
         return False
     except Exception as e:
         print_error(f"Verification failed: {e}")
