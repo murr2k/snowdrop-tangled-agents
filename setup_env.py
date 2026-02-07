@@ -11,6 +11,9 @@ Usage:
 Options:
     --no-browsers   Skip Playwright browser installation
     --dev           Install development dependencies (pytest, etc.)
+
+Requires Poetry (https://python-poetry.org/).  If not found, the script
+will attempt to install it via pipx or pip.
 """
 
 import subprocess
@@ -86,55 +89,34 @@ def install_with_poetry(dev: bool = False):
     return True
 
 
-def install_with_pip(dev: bool = False):
-    """Install dependencies using pip."""
-    print_step("Installing dependencies with pip...")
+def install_poetry():
+    """Install Poetry using pipx (or pip as fallback)."""
+    print_step("Poetry not found. Installing Poetry...")
 
-    # First, ensure pip and build tools are up to date
-    print_step("Upgrading pip and build tools...")
-    subprocess.run(
-        [sys.executable, "-m", "pip", "install", "--upgrade", "pip", "setuptools", "wheel"],
-        capture_output=True  # Suppress output for this step
-    )
+    # Try pipx first (recommended)
+    pipx = shutil.which("pipx")
+    if pipx:
+        result = subprocess.run(["pipx", "install", "poetry"], capture_output=False)
+        if result.returncode == 0:
+            print_success("Poetry installed via pipx")
+            return True
 
-    # Core dependencies (must match pyproject.toml)
-    packages = [
-        "snowdrop-tangled-game-engine>=1.1.0",
-        "snowdrop-adjudicators>=0.1.0",
-        "scipy>=1.16.2",
-        "coloredlogs>=15.0.1",
-        "playwright>=1.40.0",
-        "python-dotenv>=1.0.0",
-        "websocket-client>=1.6.0",
-    ]
-
-    if dev:
-        packages.extend([
-            "pytest>=8.4.1",
-            "pytest-cov>=7.0.0",
-        ])
-
-    # Install packages
-    print_step(f"Installing {len(packages)} core packages...")
-    cmd = [sys.executable, "-m", "pip", "install", "--upgrade"] + packages
-    result = subprocess.run(cmd, capture_output=False)
-
-    if result.returncode != 0:
-        print_error("pip install failed")
-        return False
-
-    # Install the package itself in editable mode
-    print_step("Installing snowdrop-tangled-agents in editable mode...")
+    # Fallback: pip install
+    print_step("pipx not available, installing Poetry via pip...")
     result = subprocess.run(
-        [sys.executable, "-m", "pip", "install", "-e", "."],
+        [sys.executable, "-m", "pip", "install", "poetry"],
         capture_output=False
     )
+    if result.returncode == 0:
+        print_success("Poetry installed via pip")
+        return True
 
-    if result.returncode != 0:
-        print_warning("Editable install failed (non-critical)")
-
-    print_success("Dependencies installed with pip")
-    return True
+    print_error(
+        "Could not install Poetry automatically.\n"
+        "  Install manually: https://python-poetry.org/docs/#installation\n"
+        "  Or run: pipx install poetry"
+    )
+    return False
 
 
 def install_playwright_browsers():
@@ -184,14 +166,17 @@ def create_env_template():
         return True
 
     template = """# Tangled Game Configuration
-# Copy this file to .env and fill in your credentials
+# Copy this file to .env and fill in your values.
 
-# tangled-game.com login credentials (required for web play)
-TANGLED_EMAIL=your_email@example.com
+# tangled-game.com credentials (required for web play)
+# Sign up at https://tangled-game.com to create an account.
+TANGLED_USERNAME=your_email@example.com
 TANGLED_PASSWORD=your_password
 
-# Optional: anthropic API key for Claude-based agents
-# ANTHROPIC_API_KEY=your_api_key
+# Live stats dashboard (optional)
+# Deploy your own from: https://github.com/murr2k/tangled-workspace/tree/main/tangled-stats-dashboard
+# TANGLED_DASHBOARD_URL=wss://your-dashboard.fly.dev/ws/publish
+# TANGLED_DASHBOARD_API_KEY=your_api_key
 """
 
     env_example.write_text(template)
@@ -254,11 +239,6 @@ def main():
         action="store_true",
         help="Install development dependencies"
     )
-    parser.add_argument(
-        "--pip",
-        action="store_true",
-        help="Force pip installation (skip Poetry)"
-    )
     args = parser.parse_args()
 
     print_header("Snowdrop Tangled Agents Setup")
@@ -266,18 +246,17 @@ def main():
     # Check Python version
     check_python_version()
 
-    # Install dependencies
-    if not args.pip and check_poetry():
-        print_success("Poetry found")
-        if not install_with_poetry(dev=args.dev):
-            print_warning("Poetry failed, falling back to pip")
-            if not install_with_pip(dev=args.dev):
-                sys.exit(1)
-    else:
-        if not args.pip:
-            print_warning("Poetry not found, using pip")
-        if not install_with_pip(dev=args.dev):
+    # Ensure Poetry is available
+    if not check_poetry():
+        if not install_poetry():
             sys.exit(1)
+    else:
+        print_success("Poetry found")
+
+    # Install dependencies with Poetry (single source of truth: pyproject.toml + poetry.lock)
+    if not install_with_poetry(dev=args.dev):
+        print_error("Poetry install failed")
+        sys.exit(1)
 
     # Install Playwright browsers
     if not args.no_browsers:
@@ -298,13 +277,17 @@ def main():
         print("""
 Next steps:
   1. Copy .env.example to .env and add your tangled-game.com credentials
-  2. Run a test game: python play_tangled.py --games 1
-  3. View statistics: python play_tangled.py --stats
-  4. View calibration: python play_tangled.py --calibration
+     (sign up at https://tangled-game.com)
+  2. Install MATLAB Engine API (see README → MATLAB Setup)
+  3. Verify MATLAB: poetry run python test_matlab_detection.py
+  4. Run a test game:
+       poetry run python play_tangled.py --strategy alphaq_explorer \\
+         --opponent alphaq --games 1 --mcts-iterations 5000
+  5. View statistics: poetry run python play_tangled.py --stats
 
 For development:
-  - Run tests: pytest
-  - Run tournament: python snowdrop_tangled_agents/playing_games/run_local_parallel_tournament.py
+  - Run tests: poetry run pytest
+  - Run tournament: poetry run python snowdrop_tangled_agents/playing_games/run_local_parallel_tournament.py
 """)
     else:
         print_header("Setup Incomplete")
