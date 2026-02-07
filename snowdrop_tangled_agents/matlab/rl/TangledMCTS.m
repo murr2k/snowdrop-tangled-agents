@@ -464,6 +464,45 @@ classdef TangledMCTS < handle
             maxDepth = 0;
             lastReportTime = tic;
 
+            % Pre-pack simulation context for parfor workers (read-only data)
+            useParBatch = this.UseParallel && this.PoolInitialized;
+            if useParBatch
+                nRollouts = double(this.NumWorkers);
+            end
+
+            % Safe defaults for potentially uninitialized properties
+            if this.OpponentModelLoaded
+                oppModelData = this.OpponentModel;
+            else
+                oppModelData = struct('response_probs', [], 'phase_probs', [], ...
+                    'total_moves', 0, 'response_totals', []);
+            end
+            if this.LUTLoaded
+                lutData = this.TerminalScoreLUT;
+            else
+                lutData = [];
+            end
+            if this.CalibrationLoaded
+                calData = this.Calibration;
+            else
+                calData = struct('scores', [], 'pwin', []);
+            end
+
+            simContext = struct( ...
+                'useHeuristic', this.UseHeuristicRollout, ...
+                'useOppModel', this.UseOpponentModel, ...
+                'oppModelLoaded', this.OpponentModelLoaded, ...
+                'oppModel', oppModelData, ...
+                'myEdges', this.MyEdges, ...
+                'oppEdges', this.OppEdges, ...
+                'hubEdges', this.HubEdges, ...
+                'edgeBias', this.EdgeBias, ...
+                'lutLoaded', this.LUTLoaded, ...
+                'lut', lutData, ...
+                'player', this.PlayerPerspective, ...
+                'calLoaded', this.CalibrationLoaded, ...
+                'calibration', calData);
+
             try
                 while iterations < this.Iterations
                     % Progress reporting every 10 seconds
@@ -497,7 +536,20 @@ classdef TangledMCTS < handle
                     % Simulation: rollout to terminal state
                     if node.isTerminal()
                         value = this.evaluateTerminal(node.State);
+                    elseif useParBatch
+                        % Parallel batch: run NumWorkers rollouts and average
+                        values = zeros(nRollouts, 1);
+                        nodeState = node.State;
+                        nodeIsOurTurn = node.IsOurTurn;
+                        ctx = simContext;
+                        parfor r = 1:nRollouts
+                            values(r) = TangledMCTS.parallelSimulate( ...
+                                nodeState, nodeIsOurTurn, ctx);
+                        end
+                        value = mean(values);
+                        simulations = simulations + nRollouts;
                     else
+                        % Serial fallback
                         value = this.simulate(node.State, node.IsOurTurn);
                         simulations = simulations + 1;
                     end
@@ -1037,6 +1089,229 @@ classdef TangledMCTS < handle
 
             mcts = TangledMCTS();
             score = mcts.evaluateTerminal(state);
+        end
+
+        function idx = stateToIndexStatic(state)
+            %STATETOINDEXSTATIC Convert state string to 1-based LUT index (static)
+            idx = 1;
+            for j = 1:15
+                if state(j) == 'G'
+                    idx = idx + 2^(j-1);
+                end
+            end
+        end
+
+        function phaseIdx = greyToPhaseIdxStatic(greyCount)
+            %GREYTOPHASEIDXSTATIC Convert grey count to phase index (1-4)
+            if greyCount >= 12
+                phaseIdx = 1;
+            elseif greyCount >= 8
+                phaseIdx = 2;
+            elseif greyCount >= 4
+                phaseIdx = 3;
+            else
+                phaseIdx = 4;
+            end
+        end
+
+        function prior = computeRolloutPriorStatic(edge, isGreen, isOurTurn, ...
+                myEdges, oppEdges, hubEdges, edgeBias)
+            %COMPUTEROLLOUTPRIORSTATIC Compute rollout prior without handle access
+            prior = 0.5;
+
+            if isOurTurn
+                if ismember(edge, myEdges)
+                    prior = 0.95 * isGreen + 0.05 * ~isGreen;
+                elseif ismember(edge, oppEdges)
+                    prior = 0.05 * isGreen + 0.95 * ~isGreen;
+                elseif ismember(edge, hubEdges)
+                    prior = 0.25 * isGreen + 0.75 * ~isGreen;
+                else
+                    prior = 0.55 * isGreen + 0.45 * ~isGreen;
+                end
+            else
+                if ismember(edge, oppEdges)
+                    prior = 0.95 * isGreen + 0.05 * ~isGreen;
+                elseif ismember(edge, myEdges)
+                    prior = 0.15 * isGreen + 0.85 * ~isGreen;
+                elseif ismember(edge, hubEdges)
+                    prior = 0.55 * isGreen + 0.45 * ~isGreen;
+                else
+                    prior = 0.55 * isGreen + 0.45 * ~isGreen;
+                end
+            end
+
+            prior = prior + edgeBias(edge);
+            prior = max(0.001, min(0.999, prior));
+        end
+
+        function [edge, color] = heuristicActionStatic(state, available, isOurTurn, ...
+                useOppModel, oppModelLoaded, oppModel, ...
+                myEdges, oppEdges, hubEdges, edgeBias)
+            %HEURISTICACTIONSTATIC Action selection without handle access
+
+            nActions = length(available) * 2;
+            actions = zeros(nActions, 2);
+            weights = zeros(nActions, 1);
+
+            useOpp = ~isOurTurn && useOppModel && oppModelLoaded;
+
+            if useOpp
+                greyCount = sum(state == '-');
+                phaseIdx = TangledMCTS.greyToPhaseIdxStatic(greyCount);
+                phaseProbs = oppModel.phase_probs(phaseIdx, :);
+            end
+
+            idx = 1;
+            for i = 1:length(available)
+                e = available(i);
+                for c = 1:2
+                    actions(idx, :) = [e, c];
+
+                    if useOpp
+                        moveIdx = (e - 1) * 2 + (c - 1) + 1;
+                        prior = phaseProbs(moveIdx);
+                    else
+                        prior = TangledMCTS.computeRolloutPriorStatic( ...
+                            e, c == 1, isOurTurn, myEdges, oppEdges, hubEdges, edgeBias);
+                    end
+
+                    weights(idx) = prior + 0.001;
+                    idx = idx + 1;
+                end
+            end
+
+            weights = weights / sum(weights);
+            cumWeights = cumsum(weights);
+            r = rand();
+            selectedIdx = find(cumWeights >= r, 1);
+
+            edge = actions(selectedIdx, 1);
+            color = char('G' + (actions(selectedIdx, 2) - 1) * ('P' - 'G'));
+        end
+
+        function value = evaluateTerminalStatic(state, lutLoaded, lut, ...
+                player, calLoaded, calibration)
+            %EVALUATETERMINALSTATIC Terminal evaluation without handle access
+
+            if lutLoaded
+                idx = TangledMCTS.stateToIndexStatic(state);
+                score = lut(idx);
+
+                if player == 2
+                    score = -score;
+                end
+            else
+                score = TangledMCTS.evaluateTerminalHeuristicStatic(state);
+            end
+
+            % Calibrate raw SA score to P(win)
+            if calLoaded
+                pwin = interp1(calibration.scores, calibration.pwin, ...
+                    score, 'linear', 'extrap');
+                pwin = max(0, min(1, pwin));
+                value = 2 * pwin - 1;
+            else
+                value = tanh(score * 0.4);
+            end
+        end
+
+        function score = evaluateTerminalHeuristicStatic(state)
+            %EVALUATETERMINALHEURISTICSTATIC Heuristic terminal eval (static)
+            %   Simplified version for use in parfor workers.
+
+            myEdges = [10, 11, 12];
+            oppEdges = [6, 13, 14];
+            hubEdges = [3, 11, 13];
+
+            score = 0;
+            scored = false(1, 15);
+
+            for e = myEdges
+                if state(e) == 'G'
+                    score = score + 1.2;
+                elseif state(e) == 'P'
+                    score = score - 1.0;
+                end
+                scored(e) = true;
+            end
+
+            for e = oppEdges
+                if scored(e), continue; end
+                if state(e) == 'P'
+                    if e == 6
+                        score = score + 0.25;
+                    elseif e == 14
+                        score = score + 0.35;
+                    else
+                        score = score + 0.15;
+                    end
+                elseif state(e) == 'G'
+                    if e == 13
+                        score = score - 0.8;
+                    else
+                        score = score - 0.15;
+                    end
+                end
+                scored(e) = true;
+            end
+
+            for e = hubEdges
+                if scored(e), continue; end
+                if e == 3
+                    if state(e) == 'G'
+                        score = score - 0.5;
+                    elseif state(e) == 'P'
+                        score = score + 0.1;
+                    end
+                else
+                    if state(e) == 'G'
+                        score = score + 0.2;
+                    elseif state(e) == 'P'
+                        score = score - 0.15;
+                    end
+                end
+                scored(e) = true;
+            end
+
+            greenCount = sum(state == 'G');
+            purpleCount = sum(state == 'P');
+            imbalance = abs(greenCount - purpleCount);
+            score = score - imbalance * 0.02;
+        end
+
+        function value = parallelSimulate(state, isOurTurn, ctx)
+            %PARALLELSIMULATE Self-contained rollout for parfor compatibility
+            %
+            %   All state passed via ctx struct - no handle object access needed.
+            %
+            %   ctx fields: useHeuristic, useOppModel, oppModelLoaded, oppModel,
+            %               myEdges, oppEdges, hubEdges, edgeBias,
+            %               lutLoaded, lut, player, calLoaded, calibration
+
+            currentState = state;
+            currentTurn = isOurTurn;
+            greyEdges = find(currentState == '-');
+
+            while ~isempty(greyEdges)
+                if ctx.useHeuristic
+                    [edge, color] = TangledMCTS.heuristicActionStatic( ...
+                        currentState, greyEdges, currentTurn, ...
+                        ctx.useOppModel, ctx.oppModelLoaded, ctx.oppModel, ...
+                        ctx.myEdges, ctx.oppEdges, ctx.hubEdges, ctx.edgeBias);
+                else
+                    edge = greyEdges(randi(length(greyEdges)));
+                    color = char('G' + (rand() > 0.5) * ('P' - 'G'));
+                end
+
+                currentState(edge) = color;
+                greyEdges = find(currentState == '-');
+                currentTurn = ~currentTurn;
+            end
+
+            value = TangledMCTS.evaluateTerminalStatic( ...
+                currentState, ctx.lutLoaded, ctx.lut, ...
+                ctx.player, ctx.calLoaded, ctx.calibration);
         end
     end
 end

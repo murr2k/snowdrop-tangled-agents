@@ -26,7 +26,7 @@ A comprehensive framework for building intelligent agents that play [Tangled](ht
 
 - **Thompson Sampling Opening Selection** - Bayesian approach to exploration-exploitation in AlphaQExplorerStrategy
 - **MCTS Strategy Engine** - Monte Carlo Tree Search with 500K iterations per move (default), configurable 100K-1M for speed/quality tradeoff
-- **MATLAB Integration** - High-compute search with parallel processing and neural network evaluation
+- **MATLAB Integration** - High-compute search with parallel `parfor` rollouts across 6 workers and neural network evaluation
 - **Live Web Play** - Automated gameplay on tangled-game.com via Playwright
 - **Statistical Analysis** - SQLite-backed game history with pattern discovery
 - **Calibrated Heuristics** - Terminal evaluation tuned from 140+ real games
@@ -285,6 +285,7 @@ High-compute MCTS implementation in MATLAB for live play against MCTS Melissa:
 **Key Features:**
 - 500K iterations per move with unlimited time (default, elite quality - ~14 min per move)
 - Configurable 100K-1M iterations via `--mcts-iterations` for speed/quality tradeoff
+- **Parallel `parfor` rollouts** — each MCTS iteration runs `NumWorkers` (default 6) independent rollouts in parallel and averages results, producing 6x more samples per leaf visit while using the already-allocated worker pool that previously sat idle
 - Domain-specific terminal evaluation calibrated from 140+ games
 - Opening book securing our vertex edges (E9, E10, E11 Green)
 - Adaptive exploration based on score momentum

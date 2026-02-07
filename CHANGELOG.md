@@ -9,6 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Parallel MCTS Rollouts via `parfor`** (`TangledMCTS.m`)
+  - The parallel pool of 6 workers was allocated (~900MB each, 5.4GB total) but never used — no
+    `parfor` existed in the file and all rollouts ran serially on the main thread
+  - Each MCTS iteration now runs `NumWorkers` rollouts in parallel using `parfor`, then averages
+    the results.  With 6 workers, each leaf visit produces 6 independent rollouts instead of 1,
+    yielding higher-quality value estimates and 6x more samples per iteration
+  - **Static method architecture:** MATLAB `parfor` cannot call methods on handle objects, so all
+    rollout logic was duplicated as static methods (`parallelSimulate`, `evaluateTerminalStatic`,
+    `heuristicActionStatic`, `computeRolloutPriorStatic`) that take a pre-packed context struct
+    instead of accessing `this.*` properties
+  - **Serial fallback preserved:** When `UseParallel = false` or pool fails to initialize, the
+    original `this.simulate()` path is used unchanged
+  - **Progress reporting updated:** `sims` counter now reflects actual rollout count
+    (e.g. 20K iterations × 6 workers = 120K simulations)
+  - Verified: 50 iterations with 4 workers → 200 simulations (exact 4x), all workers active
+
+### Added
+
 - **ANALYSIS_OF_GEORDIE_ROSE_FEEDBACK.md** (New Document)
   - Comprehensive 11,500-word technical analysis of Geordie Rose's feedback on Schrödinger adjudicator optimization work
   - Validates Rose's core claims: 20-vertex limit for exact methods, tensor networks as state-of-the-art, exponential scaling barriers
