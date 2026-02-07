@@ -255,6 +255,66 @@ STRATEGY_INFO = {
 }
 
 
+def verify_matlab_readiness() -> bool:
+    """
+    Verify MATLAB is ready for game execution.
+
+    Connects to MATLAB session, cleans up any stale parallel pools,
+    and verifies MATLAB is responsive before starting the browser.
+
+    Returns True if ready, False otherwise.
+    """
+    import matlab.engine
+    from snowdrop_tangled_agents.matlab import get_bridge
+
+    print("\n" + "=" * 60)
+    print("MATLAB READINESS CHECK")
+    print("=" * 60)
+
+    try:
+        # Connect to MATLAB
+        print(f"  Connecting to MATLAB session...")
+        bridge = get_bridge()
+        if not bridge.connect():
+            print(f"  ✗ Failed to connect to MATLAB")
+            return False
+
+        print(f"  ✓ Connected to MATLAB")
+
+        # Clean up any stale parallel pools
+        print(f"  Cleaning up stale parallel pools...")
+        try:
+            bridge.engine.eval(
+                "pool = gcp('nocreate'); if ~isempty(pool), delete(pool); fprintf('  ✓ Deleted stale pool with %d workers\\n', pool.NumWorkers); else fprintf('  ✓ No stale pools found\\n'); end",
+                nargout=0
+            )
+        except Exception as e:
+            print(f"  ✗ Pool cleanup failed: {e}")
+            return False
+
+        # Verify MATLAB is responsive with a simple test
+        print(f"  Verifying MATLAB responsiveness...")
+        try:
+            result = bridge.engine.eval("2 + 2")
+            if result != 4:
+                print(f"  ✗ MATLAB returned unexpected result: {result}")
+                return False
+            print(f"  ✓ MATLAB is responsive")
+        except Exception as e:
+            print(f"  ✗ MATLAB test failed: {e}")
+            return False
+
+        print("=" * 60)
+        print("MATLAB IS READY")
+        print("=" * 60 + "\n")
+        return True
+
+    except Exception as e:
+        print(f"  ✗ Readiness check failed: {e}")
+        print("=" * 60 + "\n")
+        return False
+
+
 def check_matlab_availability() -> bool:
     """
     Check and report MATLAB availability status.
@@ -2202,6 +2262,12 @@ def main():
     # Check MATLAB availability and get user confirmation if unavailable
     if not check_matlab_availability():
         return
+
+    # Verify MATLAB readiness (connect, cleanup stale pools, verify responsive)
+    if MATLAB_AVAILABLE and MATLAB_SESSIONS:
+        if not verify_matlab_readiness():
+            print("\nMATLAB is not ready. Please restart MATLAB and try again.")
+            return
 
     # Validate strategy selection (prompt for alternatives if MATLAB unavailable or high loss rate)
     args.strategy = validate_strategy_selection(args.strategy)

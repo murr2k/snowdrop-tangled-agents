@@ -31,6 +31,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Removed unintentional indentation from document title
   - Ensures consistent rendering across Markdown Monster and GitHub
 
+### Added
+
+- **MATLAB Readiness Check Before Game Start** (`play_tangled.py`)
+  - Added `verify_matlab_readiness()` function that runs before browser opens
+  - Checks MATLAB connection, cleans up stale parallel pools, verifies responsiveness
+  - Fails fast if MATLAB isn't ready, preventing browser from opening unnecessarily
+  - Provides clear diagnostic output showing connection status, pool cleanup, and responsiveness test
+  - Prevents the issue where browser opens and game starts but then fails due to MATLAB issues
+
 ### Fixed
 
 - **MATLAB MCTS Out-of-Memory Error Handling** (`TangledMCTS.m`, `matlab_strategy.py`)
