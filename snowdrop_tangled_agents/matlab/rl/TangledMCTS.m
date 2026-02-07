@@ -432,40 +432,54 @@ classdef TangledMCTS < handle
             simulations = 0;
             maxDepth = 0;
 
-            while iterations < this.Iterations
-                % Check time limit
-                if toc(startTime) >= this.TimeLimit
-                    break;
-                end
+            try
+                while iterations < this.Iterations
+                    % Check time limit
+                    if toc(startTime) >= this.TimeLimit
+                        break;
+                    end
 
-                % Selection: traverse tree using UCB1
-                node = root;
-                currentDepth = 0;
-                while ~node.isTerminal() && node.isFullyExpanded()
-                    node = node.bestChild(this.Exploration, this.PriorWeight);
-                    currentDepth = currentDepth + 1;
-                end
-                maxDepth = max(maxDepth, currentDepth);
+                    % Selection: traverse tree using UCB1
+                    node = root;
+                    currentDepth = 0;
+                    while ~node.isTerminal() && node.isFullyExpanded()
+                        node = node.bestChild(this.Exploration, this.PriorWeight);
+                        currentDepth = currentDepth + 1;
+                    end
+                    maxDepth = max(maxDepth, currentDepth);
 
-                % Expansion: add new child if not terminal
-                if ~node.isTerminal() && ~node.isFullyExpanded()
-                    node = node.expand();
-                    nodesExpanded = nodesExpanded + 1;
-                    maxDepth = max(maxDepth, currentDepth + 1);
-                end
+                    % Expansion: add new child if not terminal
+                    if ~node.isTerminal() && ~node.isFullyExpanded()
+                        node = node.expand();
+                        nodesExpanded = nodesExpanded + 1;
+                        maxDepth = max(maxDepth, currentDepth + 1);
+                    end
 
-                % Simulation: rollout to terminal state
-                if node.isTerminal()
-                    value = this.evaluateTerminal(node.State);
+                    % Simulation: rollout to terminal state
+                    if node.isTerminal()
+                        value = this.evaluateTerminal(node.State);
+                    else
+                        value = this.simulate(node.State, node.IsOurTurn);
+                        simulations = simulations + 1;
+                    end
+
+                    % Backpropagation: update values up the tree
+                    node.update(value);
+
+                    iterations = iterations + 1;
+                end
+            catch ME
+                % Check if out of memory
+                if contains(ME.identifier, 'OutOfMemory') || contains(ME.message, 'out of memory')
+                    error('TangledMCTS:OutOfMemory', ...
+                        'MCTS ran out of memory after %d iterations (%.1f MB used). Try reducing --mcts-iterations.', ...
+                        iterations, memInfo.MemUsedMATLAB / (1024 * 1024));
                 else
-                    value = this.simulate(node.State, node.IsOurTurn);
-                    simulations = simulations + 1;
+                    % Re-throw other errors with context
+                    error('TangledMCTS:SearchFailed', ...
+                        'MCTS search failed after %d iterations: %s', ...
+                        iterations, ME.message);
                 end
-
-                % Backpropagation: update values up the tree
-                node.update(value);
-
-                iterations = iterations + 1;
             end
 
             % Calculate CPU time consumed

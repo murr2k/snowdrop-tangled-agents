@@ -33,6 +33,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **MATLAB MCTS Out-of-Memory Error Handling** (`TangledMCTS.m`, `matlab_strategy.py`)
+  - Added try-catch block around main MCTS search loop to catch out-of-memory and other errors
+  - MATLAB now reports memory errors with diagnostic message instead of hanging silently
+  - Python side now detects and reports MATLAB out-of-memory errors with actionable guidance
+  - Error messages include iteration count and memory usage at failure point
+  - Suggests reducing --mcts-iterations if memory issues occur
+  - Prevents silent hangs when MATLAB runs out of memory during tree expansion or simulation
+
 - **setup_env.py Installation Robustness**
   - Added missing `websocket-client>=1.6.0` package (was in pyproject.toml but missing from pip install list)
   - Now upgrades pip, setuptools, and wheel before installing packages to ensure proper pyproject.toml handling

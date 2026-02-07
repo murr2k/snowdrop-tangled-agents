@@ -581,11 +581,26 @@ class HybridSolverStrategy:
             import time
             start = time.time()
 
-            # Call MATLAB solver
-            self.engine.eval(
-                f"[solverEdge, solverColor, solverInfo] = hybridSolver.solve('{state}');",
-                nargout=0
-            )
+            # Call MATLAB solver with timeout protection
+            # Note: MATLAB Engine doesn't support direct timeout, but errors should propagate
+            try:
+                self.engine.eval(
+                    f"[solverEdge, solverColor, solverInfo] = hybridSolver.solve('{state}');",
+                    nargout=0
+                )
+            except Exception as matlab_error:
+                # Check for specific MATLAB errors
+                error_msg = str(matlab_error)
+                if 'OutOfMemory' in error_msg or 'out of memory' in error_msg:
+                    logger.error(f"MATLAB out of memory: {error_msg}")
+                    logger.error(f"Try reducing --mcts-iterations (current: {self.mcts_iterations})")
+                    return None
+                elif 'SearchFailed' in error_msg:
+                    logger.error(f"MATLAB search failed: {error_msg}")
+                    return None
+                else:
+                    # Unknown MATLAB error - re-raise
+                    raise
 
             # Get results
             edge = int(self.engine.eval("solverEdge"))
@@ -612,6 +627,7 @@ class HybridSolverStrategy:
 
         except Exception as e:
             logger.error(f"HybridSolver error: {e}")
+            logger.error("If MATLAB is unresponsive, try restarting MATLAB and re-running")
             return None
 
     def _extract_solver_stats(self, elapsed: float, grey_count: int) -> dict:
