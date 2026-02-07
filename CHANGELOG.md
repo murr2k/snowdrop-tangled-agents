@@ -16,9 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Provides strategic roadmap: hybrid approach using exact methods for validation (≤12 vertices), tensor networks for scaling (15-20+ vertices)
   - 18 citations from quantum annealing and tensor network literature
 
-- **MCTS Parameter Documentation** (`play_tangled.py`)
+- **MCTS Parameter Documentation** (`play_tangled.py`, `README.md`)
   - Updated module docstring to include usage examples for `--mcts-iterations` and `--mcts-time` parameters
-  - Added guidance: 100K for faster/lower quality, 500K default for optimal quality, 1M shows diminishing returns
+  - Updated README with comprehensive examples showing new defaults (500K iterations, unlimited time)
+  - Added fast testing mode examples (100K iterations, 30s time limit) and maximum strength mode (1M iterations)
+  - Documented performance characteristics: 500K = ~14 min per move (elite quality), 100K = ~3 min per move (fast testing)
+  - Updated all strategy examples throughout Development Progress section with parameter guidance
   - Documented all current strategies with hybrid_solver as default
 
 ### Changed

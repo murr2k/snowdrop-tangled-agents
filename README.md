@@ -25,7 +25,7 @@ A comprehensive framework for building intelligent agents that play [Tangled](ht
 ### Highlights
 
 - **Thompson Sampling Opening Selection** - Bayesian approach to exploration-exploitation in AlphaQExplorerStrategy
-- **MCTS Strategy Engine** - Monte Carlo Tree Search with 5000+ iterations per move
+- **MCTS Strategy Engine** - Monte Carlo Tree Search with 500K iterations per move (default), configurable 100K-1M for speed/quality tradeoff
 - **MATLAB Integration** - High-compute search with parallel processing and neural network evaluation
 - **Live Web Play** - Automated gameplay on tangled-game.com via Playwright
 - **Statistical Analysis** - SQLite-backed game history with pattern discovery
@@ -84,12 +84,17 @@ cp .env.example .env
 ### Play a Game
 
 ```bash
-# Play against MCTS Melissa on tangled-game.com
+# Play against MCTS Melissa on tangled-game.com (default: hybrid_solver, 500K iterations, unlimited time)
 python play_tangled.py --games 1
 
 # Use different strategies
-python play_tangled.py --strategy mcts --mcts-time 5 --games 3
-python play_tangled.py --strategy hybrid --games 3
+python play_tangled.py --strategy alphaq_explorer --opponent alphaq --games 3
+
+# Fast testing mode (100K iterations, 30s time limit per move)
+python play_tangled.py --mcts-iterations 100000 --mcts-time 30 --games 5
+
+# Maximum strength (1M iterations, competitive play - takes ~7 hours per game)
+python play_tangled.py --mcts-iterations 1000000 --games 1
 
 # View game statistics
 python play_tangled.py --stats
@@ -141,8 +146,11 @@ Implemented a Monte Carlo Tree Search (MCTS) strategy with the following feature
 - **Statistics collection** for game analysis
 
 ```bash
-# Play with MCTS strategy
-python play_tangled.py --strategy mcts --mcts-time 5 --games 3
+# Play with MCTS strategy (default: 500K iterations, unlimited time)
+python play_tangled.py --strategy mcts --games 3
+
+# Fast mode for testing (100K iterations, 30s per move)
+python play_tangled.py --strategy mcts --mcts-iterations 100000 --mcts-time 30 --games 3
 ```
 
 ### 2. Web Automation Bot
@@ -261,8 +269,11 @@ This gives guaranteed optimal play for the last 4 moves of every game.
 - Palubeckis (2004) "Multistart Tabu Search Strategies"
 
 ```bash
-# Play with Hybrid Solver
+# Play with Hybrid Solver (default: 500K iterations, unlimited time)
 python play_tangled.py --strategy hybrid_solver --games 3
+
+# Competitive mode with maximum strength (1M iterations)
+python play_tangled.py --strategy hybrid_solver --mcts-iterations 1000000 --games 1
 ```
 
 See `docs/HYBRID_MINIMAX_MCTS_PLAN.md` for complete implementation plan.
@@ -272,7 +283,8 @@ See `docs/HYBRID_MINIMAX_MCTS_PLAN.md` for complete implementation plan.
 High-compute MCTS implementation in MATLAB for live play against MCTS Melissa:
 
 **Key Features:**
-- 5000 iterations per move with 20s time limit
+- 500K iterations per move with unlimited time (default, elite quality - ~14 min per move)
+- Configurable 100K-1M iterations via `--mcts-iterations` for speed/quality tradeoff
 - Domain-specific terminal evaluation calibrated from 140+ games
 - Opening book securing our vertex edges (E9, E10, E11 Green)
 - Adaptive exploration based on score momentum
@@ -288,8 +300,11 @@ High-compute MCTS implementation in MATLAB for live play against MCTS Melissa:
 - After fixes: Stable score progression, competitive games (draws and close losses)
 
 ```bash
-# Play with MATLAB MCTS
+# Play with MATLAB MCTS (default: 500K iterations, unlimited time - elite quality)
 python play_tangled.py --strategy matlab_mcts --games 3
+
+# Fast testing mode (100K iterations)
+python play_tangled.py --strategy matlab_mcts --mcts-iterations 100000 --games 5
 
 # View game statistics
 python play_tangled.py --stats
@@ -359,8 +374,11 @@ during exploitation, the next run re-enables learning and re-pushes the accumula
 playing.
 
 ```bash
-# Run 30 exploration games followed by exploitation
+# Run exploration games followed by exploitation (default: 500K iterations per move)
 python play_tangled.py --strategy alphaq_explorer --opponent alphaq --run 60
+
+# Fast exploration mode for development (100K iterations)
+python play_tangled.py --strategy alphaq_explorer --opponent alphaq --mcts-iterations 100000 --run 60
 
 # Check what the explorer learned
 cat ~/.tangled/alphaq_explorer_state.json
@@ -481,8 +499,11 @@ Each game:
 **Usage:**
 
 ```bash
-# Run trial with Thompson Sampling
+# Run trial with Thompson Sampling (default: 500K iterations, ~14 min per move)
 python play_tangled.py --strategy alphaq_explorer --opponent alphaq --games 10
+
+# Fast mode for testing algorithm behavior (100K iterations, ~3 min per move)
+python play_tangled.py --strategy alphaq_explorer --opponent alphaq --mcts-iterations 100000 --games 10
 
 # Inspect opening posteriors
 cat ~/.tangled/alphaq_explorer_state.json
