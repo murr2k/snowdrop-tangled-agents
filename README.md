@@ -37,71 +37,157 @@ A comprehensive framework for building intelligent agents that play [Tangled](ht
 
 ### Prerequisites
 
-- Python 3.11 - 3.13
-- Git
-- MATLAB R2024a+ (optional, for high-performance strategies)
+| Requirement | Version | Notes |
+|-------------|---------|-------|
+| **Python** | 3.11 – 3.13 | |
+| **Poetry** | 2.x | Package manager. Install: `pipx install poetry` |
+| **Git** | any | |
+| **MATLAB** | R2024a+ | Required for competitive play (see [MATLAB Setup](#matlab-setup)) |
 
 ### Installation
 
-**Automated Setup (Recommended)**
-
 ```bash
-# Clone the repository
+# Clone and install
 git clone https://github.com/snowdropquantum/snowdrop-tangled-agents.git
 cd snowdrop-tangled-agents
-
-# Run the setup script
-# On Windows:
-setup.bat
-
-# On macOS/Linux:
-chmod +x setup.sh
-./setup.sh
-```
-
-**Manual Setup**
-
-```bash
-# Using Poetry (recommended)
 poetry install
 poetry run playwright install chromium
+```
 
-# Using pip
-pip install -e .
-pip install snowdrop-tangled-game-engine snowdrop-adjudicators
-python -m playwright install chromium
+Or use the automated setup script (installs Poetry if missing):
+
+```bash
+# Windows:
+setup.bat
+
+# macOS / Linux:
+chmod +x setup.sh && ./setup.sh
 ```
 
 ### Configuration
 
-Copy `.env.example` to `.env` and add your tangled-game.com credentials:
-
 ```bash
 cp .env.example .env
-# Edit .env with your credentials
+# Edit .env: add your tangled-game.com credentials (sign up at https://tangled-game.com)
 ```
+
+See `.env.example` for all available settings including the optional live
+stats dashboard.
 
 ### Play a Game
 
 ```bash
-# Play against MCTS Melissa on tangled-game.com (default: hybrid_solver, 500K iterations, unlimited time)
-python play_tangled.py --games 1
+# Play 1 game against MCTS Melissa (default opponent, hybrid_solver strategy)
+poetry run python play_tangled.py --games 1
 
-# Use different strategies
-python play_tangled.py --strategy alphaq_explorer --opponent alphaq --games 3
+# Play against AlphaQ Up using the AlphaQ Explorer strategy (5K MCTS iterations)
+poetry run python play_tangled.py --strategy alphaq_explorer --opponent alphaq \
+  --games 3 --mcts-iterations 5000
 
-# Fast testing mode (100K iterations, 30s time limit per move)
-python play_tangled.py --mcts-iterations 100000 --mcts-time 30 --games 5
-
-# Maximum strength (1M iterations, competitive play - takes ~7 hours per game)
-python play_tangled.py --mcts-iterations 1000000 --games 1
-
-# View game statistics
-python play_tangled.py --stats
-
-# View adjudicator calibration
-python play_tangled.py --calibration
+# View game statistics from the local database
+poetry run python play_tangled.py --stats
 ```
+
+### MATLAB Setup
+
+MATLAB powers the high-performance MCTS engine. Without it, the system falls
+back to a pure-Python heuristic that is not competitive against strong opponents.
+
+**Required toolboxes:**
+
+| Toolbox | Used for |
+|---------|----------|
+| **Parallel Computing** | `parfor` rollouts — 6 workers × 100 rollouts/iter |
+| **Statistics and Machine Learning** | `interp1` P(win) calibration curve |
+
+**Optional toolboxes (for advanced features):**
+
+| Toolbox | Used for |
+|---------|----------|
+| Deep Learning | Neural network position evaluation priors |
+| Database | Direct SQLite access from MATLAB training pipelines |
+| MATLAB Compiler SDK | Building standalone Python-callable packages |
+| Reinforcement Learning | RL training experiments |
+
+**Install the MATLAB Engine API for Python:**
+
+```bash
+# From the MATLAB installation directory:
+cd "C:\Program Files\MATLAB\R2026a\extern\engines\python"   # Windows
+# cd /Applications/MATLAB/R2026a/extern/engines/python       # macOS
+# cd /usr/local/MATLAB/R2026a/extern/engines/python           # Linux
+
+python -m pip install .
+```
+
+The engine starts automatically in headless mode when you run a game — no need
+to open the MATLAB GUI.  All `.m` source files live in
+`snowdrop_tangled_agents/matlab/rl/` within this repository.
+
+**Verify MATLAB is detected:**
+
+```bash
+poetry run python test_matlab_detection.py
+```
+
+### Strategies
+
+| Strategy | Engine | Best for |
+|----------|--------|----------|
+| `hybrid_solver` | MATLAB Minimax + MCTS + Tabu | Default. Strong general play. |
+| `alphaq_explorer` | MATLAB MCTS + Thompson Sampling | Competing against AlphaQ Up. |
+| `matlab_mcts` | MATLAB MCTS only | Pure MCTS experiments. |
+| `mcts` | Pure Python MCTS | No MATLAB required. Weaker. |
+| `heuristic` | Python heuristics | Fast, always available. Not competitive. |
+
+### Running Experiments
+
+After installation and MATLAB setup, you can run the current flagship
+experiment — systematic re-exploration of all 30 Petersen graph openings
+against AlphaQ Up:
+
+```bash
+# Phase 1: Screen all 30 openings, 3 games each (est. ~8 hours)
+poetry run python play_tangled.py \
+  --strategy alphaq_explorer \
+  --opponent alphaq \
+  --games 90 \
+  --mcts-iterations 5000 \
+  --opening-mode round_robin
+```
+
+See `docs/EXPERIMENT_OPENING_RE_EXPLORATION.md` for the full experiment
+design and rationale.
+
+### Analyzing Results
+
+All game data is recorded in a local SQLite database at
+`~/.tangled/game_stats.db`.  Every game stores:
+
+- Result, final score, opening move, strategy, MCTS iteration setting
+- Move-by-move: edge, color, score, board state, thinking time
+- MCTS diagnostics: iterations, total rollout simulations, tree depth
+
+```bash
+# Quick summary
+poetry run python play_tangled.py --stats
+
+# Direct SQL queries
+sqlite3 ~/.tangled/game_stats.db "SELECT opening_edge, opening_color, result, final_score FROM games WHERE opening_mode='round_robin' ORDER BY opening_edge, opening_color"
+```
+
+### Live Dashboard (Optional)
+
+For real-time monitoring during long experiments, deploy the
+[tangled-stats-dashboard](https://github.com/murr2k/tangled-workspace/tree/main/tangled-stats-dashboard)
+to [fly.io](https://fly.io) or any host that supports WebSockets:
+
+1. Deploy the dashboard app (see its `.env.example` for configuration)
+2. Set `TANGLED_DASHBOARD_URL` and `TANGLED_DASHBOARD_API_KEY` in your `.env`
+3. Game telemetry streams automatically during play
+
+If no dashboard is configured, experiments run normally and all data is
+available for post-analysis from the SQLite database.
 
 ---
 
