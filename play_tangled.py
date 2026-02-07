@@ -586,54 +586,54 @@ class WebPlayer:
         elif strategy_type == "hybrid_solver":
             if not MATLAB_AVAILABLE or HybridSolverStrategy is None:
                 self.logger.warning("Hybrid solver unavailable, falling back to python mcts")
-                self.strategy = MCTSStrategy(time_limit=float('inf'), max_iterations=500000)
+                self.strategy = MCTSStrategy(time_limit=float('inf'), max_iterations=mcts_iterations)
             else:
                 self.strategy = HybridSolverStrategy(
-                    time_limit=float('inf'),
+                    time_limit=mcts_time,
                     minimax_depth=4,
-                    mcts_iterations=500000,
+                    mcts_iterations=mcts_iterations,
                     player=1,
                 )
         elif strategy_type == "amara_explorer":
             if not MATLAB_AVAILABLE or AmaraExplorerStrategy is None:
-                self.strategy = MCTSStrategy(time_limit=float('inf'), max_iterations=500000)
+                self.strategy = MCTSStrategy(time_limit=float('inf'), max_iterations=mcts_iterations)
             else:
                 self.strategy = AmaraExplorerStrategy(
-                    time_limit=float('inf'),
+                    time_limit=mcts_time,
                     minimax_depth=4,
-                    mcts_iterations=500000,
+                    mcts_iterations=mcts_iterations,
                     player=1,
                 )
         elif strategy_type == "amara_killer":
             if not MATLAB_AVAILABLE or AmaraKillerStrategy is None:
-                self.strategy = MCTSStrategy(time_limit=float('inf'), max_iterations=500000)
+                self.strategy = MCTSStrategy(time_limit=float('inf'), max_iterations=mcts_iterations)
             else:
                 self.strategy = AmaraKillerStrategy(
-                    time_limit=float('inf'),
+                    time_limit=mcts_time,
                     minimax_depth=4,
-                    mcts_iterations=500000,
+                    mcts_iterations=mcts_iterations,
                     player=1,
                     opening_mode='best',  # Always use E14P (highest win score)
                 )
         elif strategy_type == "melissa_killer":
             if not MATLAB_AVAILABLE or MelissaKillerStrategy is None:
-                self.strategy = MCTSStrategy(time_limit=float('inf'), max_iterations=500000)
+                self.strategy = MCTSStrategy(time_limit=float('inf'), max_iterations=mcts_iterations)
             else:
                 self.strategy = MelissaKillerStrategy(
-                    time_limit=float('inf'),
+                    time_limit=mcts_time,
                     minimax_depth=4,
-                    mcts_iterations=500000,
+                    mcts_iterations=mcts_iterations,
                     player=1,
                     opening_mode='cycle',  # Cycle through E9G, E12P, E13P
                 )
         elif strategy_type == "alphaq_explorer":
             if not MATLAB_AVAILABLE or AlphaQExplorerStrategy is None:
-                self.strategy = MCTSStrategy(time_limit=float('inf'), max_iterations=500000)
+                self.strategy = MCTSStrategy(time_limit=float('inf'), max_iterations=mcts_iterations)
             else:
                 self.strategy = AlphaQExplorerStrategy(
-                    time_limit=float('inf'),
+                    time_limit=mcts_time,
                     minimax_depth=4,
-                    mcts_iterations=500000,
+                    mcts_iterations=mcts_iterations,
                     player=1,
                     force_opening='E7G',  # Run 65 proved diversification fails - E7G is uniquely optimal
                 )
