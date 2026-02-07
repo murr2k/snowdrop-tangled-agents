@@ -7,6 +7,10 @@ The dashboard URL and API key are configured via environment variables:
 - TANGLED_DASHBOARD_API_KEY: API key for authentication
 
 If not configured, publishing is silently disabled.
+
+Connection is established in a background thread so it never blocks the game.
+Retry with exponential backoff ensures transient failures are recovered from.
+All connection attempts are timed and logged for diagnostics.
 """
 
 import json
@@ -15,7 +19,7 @@ import os
 import threading
 import time
 from datetime import datetime, timedelta
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
 logger = logging.getLogger(__name__)
 
@@ -33,8 +37,16 @@ class StatsPublisher:
     Publishes game statistics to a remote WebSocket dashboard.
 
     Thread-safe publisher that maintains a persistent connection
-    and handles reconnection automatically.
+    and handles reconnection automatically in the background.
     """
+
+    # Connection tuning
+    CONNECT_TIMEOUT = 10          # seconds per connection attempt
+    MAX_RETRIES = 5               # total attempts before giving up for this cycle
+    INITIAL_BACKOFF = 1.0         # seconds before first retry
+    MAX_BACKOFF = 30.0            # max seconds between retries
+    BACKOFF_MULTIPLIER = 2.0      # exponential backoff factor
+    RETRY_RESET_INTERVAL = 300.0  # seconds: reset retry state after this much idle time
 
     def __init__(
         self,
@@ -42,25 +54,27 @@ class StatsPublisher:
         api_key: Optional[str] = None,
         auto_connect: bool = True,
     ):
-        """
-        Initialize the stats publisher.
-
-        Args:
-            url: WebSocket URL. Defaults to TANGLED_DASHBOARD_URL env var.
-            api_key: API key for auth. Defaults to TANGLED_DASHBOARD_API_KEY env var.
-            auto_connect: Whether to connect automatically on first publish.
-        """
         self.url = url or os.environ.get('TANGLED_DASHBOARD_URL')
         self.api_key = api_key or os.environ.get('TANGLED_DASHBOARD_API_KEY')
 
-        self._ws: Optional[websocket.WebSocket] = None
+        self._ws: Optional['websocket.WebSocket'] = None
         self._lock = threading.Lock()
         self._connected = False
         self._authenticated = False
-        self._connect_attempts = 0
-        self._max_connect_attempts = 3
         self._last_ping_time = 0
         self._ping_interval = 10
+
+        # Retry state
+        self._retry_count = 0
+        self._gave_up = False
+        self._last_attempt_time = 0.0
+
+        # Background connection thread
+        self._connect_thread: Optional[threading.Thread] = None
+        self._connecting = False  # True while background thread is running
+
+        # Connection diagnostics (append-only log)
+        self._diag_log: List[Dict[str, Any]] = []
 
         # State for current session
         self._session_start: Optional[datetime] = None
@@ -73,7 +87,46 @@ class StatsPublisher:
         self._current_game_turn_time: float = 0.0
 
         if auto_connect and self.is_configured():
-            self._connect()
+            self._start_connect_thread()
+
+    # ------------------------------------------------------------------
+    # Diagnostics
+    # ------------------------------------------------------------------
+
+    def _record_diag(self, event: str, **kwargs):
+        """Append a timestamped diagnostic entry."""
+        entry = {
+            "time": datetime.now().isoformat(),
+            "elapsed_ms": round(kwargs.pop("elapsed_ms", 0), 1),
+            "event": event,
+            "attempt": self._retry_count,
+            **kwargs,
+        }
+        self._diag_log.append(entry)
+        # Keep only last 50 entries to bound memory
+        if len(self._diag_log) > 50:
+            self._diag_log = self._diag_log[-50:]
+
+    def get_diagnostics(self) -> List[Dict[str, Any]]:
+        """Return the connection diagnostics log for debugging."""
+        return list(self._diag_log)
+
+    def get_status(self) -> Dict[str, Any]:
+        """Return a summary of the current connection status."""
+        return {
+            "configured": self.is_configured(),
+            "connected": self._connected,
+            "authenticated": self._authenticated,
+            "connecting": self._connecting,
+            "retry_count": self._retry_count,
+            "gave_up": self._gave_up,
+            "url": self.url,
+            "diag_entries": len(self._diag_log),
+        }
+
+    # ------------------------------------------------------------------
+    # Connection management
+    # ------------------------------------------------------------------
 
     def is_configured(self) -> bool:
         """Check if publishing is configured (URL and API key set)."""
@@ -83,56 +136,104 @@ class StatsPublisher:
         """Check if currently connected and authenticated."""
         return self._connected and self._authenticated
 
-    def _connect(self) -> bool:
-        """Establish WebSocket connection and authenticate."""
-        if not self.is_configured():
-            return False
+    def _start_connect_thread(self):
+        """Launch background thread to establish connection with retries."""
+        if self._connecting:
+            return
+        # Reset gave_up if enough time has passed since last attempt
+        if self._gave_up and (time.monotonic() - self._last_attempt_time) > self.RETRY_RESET_INTERVAL:
+            self._gave_up = False
+            self._retry_count = 0
+        if self._gave_up:
+            return
+        self._connecting = True
+        t = threading.Thread(target=self._connect_with_retries, daemon=True, name="dashboard-connect")
+        t.start()
+        self._connect_thread = t
 
-        with self._lock:
-            if self._connected:
-                return True
+    def _connect_with_retries(self):
+        """Background thread: retry connection with exponential backoff."""
+        backoff = self.INITIAL_BACKOFF
+        try:
+            while self._retry_count < self.MAX_RETRIES:
+                self._retry_count += 1
+                self._last_attempt_time = time.monotonic()
 
-            self._connect_attempts += 1
-            if self._connect_attempts > self._max_connect_attempts:
-                logger.warning(f"Max connection attempts ({self._max_connect_attempts}) exceeded")
-                return False
+                success = self._try_connect_once()
+                if success:
+                    return
 
-            try:
-                logger.info(f"Connecting to dashboard: {self.url}")
-                self._ws = websocket.create_connection(
-                    self.url,
-                    timeout=60,
-                    enable_multithread=True,
-                    skip_utf8_validation=True,
-                    header={"Sec-WebSocket-Extensions": ""},
-                )
-                import socket
-                self._ws.sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
-                if hasattr(socket, 'SIO_KEEPALIVE_VALS'):
-                    self._ws.sock.ioctl(socket.SIO_KEEPALIVE_VALS, (1, 30000, 10000))
-                self._connected = True
+                if self._retry_count < self.MAX_RETRIES:
+                    self._record_diag("backoff", wait_s=round(backoff, 1))
+                    logger.info(f"Dashboard: retry {self._retry_count}/{self.MAX_RETRIES} in {backoff:.1f}s")
+                    time.sleep(backoff)
+                    backoff = min(backoff * self.BACKOFF_MULTIPLIER, self.MAX_BACKOFF)
 
-                auth_msg = json.dumps({"api_key": self.api_key})
-                self._ws.send(auth_msg)
+            # Exhausted retries
+            self._gave_up = True
+            self._record_diag("gave_up", total_attempts=self._retry_count)
+            logger.warning(f"Dashboard: gave up after {self._retry_count} attempts. "
+                           f"Will retry after {self.RETRY_RESET_INTERVAL}s of inactivity.")
+        finally:
+            self._connecting = False
 
-                response = self._ws.recv()
-                data = json.loads(response)
+    def _try_connect_once(self) -> bool:
+        """Single connection attempt. Returns True on success."""
+        t0 = time.monotonic()
+        try:
+            logger.info(f"Dashboard: connecting to {self.url} (attempt {self._retry_count}/{self.MAX_RETRIES})")
 
-                if data.get("type") == "authenticated":
+            ws = websocket.create_connection(
+                self.url,
+                timeout=self.CONNECT_TIMEOUT,
+                enable_multithread=True,
+                skip_utf8_validation=True,
+                header={"Sec-WebSocket-Extensions": ""},
+            )
+            elapsed_connect = (time.monotonic() - t0) * 1000
+
+            # TCP keepalive
+            import socket
+            ws.sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+            if hasattr(socket, 'SIO_KEEPALIVE_VALS'):
+                ws.sock.ioctl(socket.SIO_KEEPALIVE_VALS, (1, 30000, 10000))
+
+            # Authenticate
+            t_auth = time.monotonic()
+            ws.send(json.dumps({"api_key": self.api_key}))
+            response = ws.recv()
+            data = json.loads(response)
+            elapsed_auth = (time.monotonic() - t_auth) * 1000
+            elapsed_total = (time.monotonic() - t0) * 1000
+
+            if data.get("type") == "authenticated":
+                with self._lock:
+                    self._ws = ws
+                    self._connected = True
                     self._authenticated = True
-                    self._connect_attempts = 0
-                    logger.info("Dashboard connection authenticated")
-                    return True
-                else:
-                    logger.error(f"Dashboard auth failed: {data}")
-                    self._disconnect()
-                    return False
-
-            except Exception as e:
-                logger.warning(f"Dashboard connection failed: {e}")
-                self._disconnect()
-                self._connect_attempts = self._max_connect_attempts
+                self._record_diag("connected",
+                                  elapsed_ms=elapsed_total,
+                                  connect_ms=round(elapsed_connect, 1),
+                                  auth_ms=round(elapsed_auth, 1))
+                logger.info(f"Dashboard: connected and authenticated in {elapsed_total:.0f}ms "
+                            f"(tcp={elapsed_connect:.0f}ms, auth={elapsed_auth:.0f}ms)")
+                # Reset retry count on success
+                self._retry_count = 0
+                self._gave_up = False
+                return True
+            else:
+                ws.close()
+                elapsed_total = (time.monotonic() - t0) * 1000
+                self._record_diag("auth_rejected", elapsed_ms=elapsed_total, response=str(data)[:200])
+                logger.error(f"Dashboard: auth rejected after {elapsed_total:.0f}ms: {data}")
                 return False
+
+        except Exception as e:
+            elapsed_total = (time.monotonic() - t0) * 1000
+            error_str = f"{type(e).__name__}: {e}"
+            self._record_diag("connect_failed", elapsed_ms=elapsed_total, error=error_str[:200])
+            logger.warning(f"Dashboard: connection failed after {elapsed_total:.0f}ms: {error_str}")
+            return False
 
     def _disconnect(self):
         """Close WebSocket connection."""
@@ -146,32 +247,37 @@ class StatsPublisher:
             self._connected = False
             self._authenticated = False
 
+    def _ensure_connected(self) -> bool:
+        """Ensure we're connected, starting background retry if not."""
+        if self.is_connected():
+            return True
+        if not self.is_configured():
+            return False
+        self._start_connect_thread()
+        return False
+
     def _send(self, data: Dict[str, Any]) -> bool:
-        """Send data to the dashboard with automatic reconnection."""
-        max_retries = 2
+        """Send data to the dashboard. Non-blocking if not connected."""
+        if not self._ensure_connected():
+            return False
 
-        for attempt in range(max_retries + 1):
-            if not self.is_connected():
-                if not self._connect():
-                    continue
-
-            try:
-                with self._lock:
-                    if self._ws:
-                        self._ws.send(json.dumps(data))
-                        self._last_ping_time = time.time()
-                        logger.debug("Stats published to dashboard")
-                        return True
-            except Exception as e:
-                if attempt < max_retries:
-                    logger.debug(f"Dashboard send failed (attempt {attempt + 1}), reconnecting: {e}")
-                    self._disconnect()
-                    time.sleep(0.2)
-                else:
-                    logger.warning(f"Dashboard send failed after {max_retries + 1} attempts: {e}")
-                    self._disconnect()
+        try:
+            with self._lock:
+                if self._ws:
+                    self._ws.send(json.dumps(data))
+                    self._last_ping_time = time.time()
+                    return True
+        except Exception as e:
+            logger.debug(f"Dashboard: send failed: {e}")
+            self._disconnect()
+            # Trigger background reconnect for next send
+            self._start_connect_thread()
 
         return False
+
+    # ------------------------------------------------------------------
+    # Session management
+    # ------------------------------------------------------------------
 
     def set_session_info(
         self,
@@ -186,9 +292,11 @@ class StatsPublisher:
         self._total_turn_time = 0.0
         self._turn_count = 0
         self._current_game_turn_time = 0.0
-        self._connect_attempts = 0
+        # Reset retry state for new session
+        self._gave_up = False
+        self._retry_count = 0
         if self.is_configured() and not self.is_connected():
-            self._connect()
+            self._start_connect_thread()
 
     def game_completed(self):
         """Call when a game completes to finalize turn time tracking."""
@@ -234,6 +342,10 @@ class StatsPublisher:
 
         return eta
 
+    # ------------------------------------------------------------------
+    # Publishing
+    # ------------------------------------------------------------------
+
     def publish_state(
         self,
         # Move info (optional - for during-game updates)
@@ -271,21 +383,8 @@ class StatsPublisher:
         Publish the COMPLETE dashboard state. This is the ONE and ONLY message
         type sent to the dashboard. Every call sends ALL fields.
 
-        Args:
-            move_edge: Edge index (0-14) of current/last move
-            move_color: 'G' for green/FM, 'P' for purple/AFM
-            move_score: Score after this move
-            move_thinking_time: Time spent calculating this move (seconds)
-            move_player: 'us' or 'opponent'
-            board_state: Current board state string (15 chars of G/P/-)
-            vertex_state: Current vertex colors string (10 chars of R/B/-)
-            current_game: Game number currently being played (1-indexed)
-            completed_games: Number of completed games in this run
-            wins/draws/losses: Result counts
-            avg_score/median_score/min_score/max_score/std_score: Score statistics
-            recent_5: String of last 5 results (e.g., "WDWLW")
-            score_trend: Score trend slope
-            avg_entropy/avg_top3_hit/avg_pred_accuracy: Opponent model metrics
+        Non-blocking: if not yet connected, the message is silently dropped
+        and a background reconnect is triggered.
 
         Returns:
             True if published successfully
