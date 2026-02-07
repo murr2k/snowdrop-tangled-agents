@@ -357,6 +357,7 @@ classdef HybridTangledSolver < handle
             info.score = bestScore;
             info.mctsIterations = mctsInfo.iterations;
             info.mctsRootVisits = mctsInfo.rootVisits;
+            info.mctsSimulations = mctsInfo.simulations;
             info.tabuImproved = tabuImproved;
             info.time = toc(startTime);
         end

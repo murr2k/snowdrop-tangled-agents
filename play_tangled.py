@@ -2010,12 +2010,30 @@ class WebPlayer:
         result = self.get_outcome()
         terminal_state = self.read_board()
 
-        # Record game end to stats database (with prediction metrics)
+        # Extract opening info from strategy if available
+        opening_edge = None
+        opening_color = None
+        opening_mode = None
+        mcts_iters_setting = None
+        if hasattr(self.strategy, 'current_game_opening') and self.strategy.current_game_opening:
+            opening_edge, opening_color = self.strategy.current_game_opening
+        if hasattr(self.strategy, 'opening_mode'):
+            opening_mode = self.strategy.opening_mode
+        if hasattr(self.strategy, 'mcts_iterations'):
+            mcts_iters_setting = self.strategy.mcts_iterations
+        elif hasattr(self.strategy, 'solver') and hasattr(self.strategy.solver, 'mcts_iterations'):
+            mcts_iters_setting = self.strategy.solver.mcts_iterations
+
+        # Record game end to stats database (with prediction metrics and opening info)
         self.stats_collector.end_game(
             game_id=self.current_game_id,
             result=result,
             final_score=final_score,
-            model_metrics=self.metrics_tracker.get_game_metrics() if self.metrics_tracker else None
+            model_metrics=self.metrics_tracker.get_game_metrics() if self.metrics_tracker else None,
+            opening_edge=opening_edge,
+            opening_color=opening_color,
+            opening_mode=opening_mode,
+            mcts_iterations_setting=mcts_iters_setting,
         )
 
         # Online learning: update opponent model and re-export

@@ -172,6 +172,25 @@ MIGRATIONS: List[Tuple[int, str, str]] = [
         CREATE INDEX IF NOT EXISTS idx_games_run_id ON games(run_id);
         CREATE INDEX IF NOT EXISTS idx_runs_started ON runs(started);
     """),
+
+    # v9: Add MCTS rollout count and opening move tracking
+    (9, "Add mcts_simulations to moves and opening_move to games", """
+        -- Total rollout simulations (iterations × rollouts_per_iteration)
+        -- Critical for experiments: distinguishes 5K iterations × 1 rollout (broken)
+        -- from 5K iterations × 600 rollouts (fixed parallel)
+        ALTER TABLE moves ADD COLUMN mcts_simulations INTEGER;
+
+        -- Opening move tracking on game record for fast querying
+        ALTER TABLE games ADD COLUMN opening_edge INTEGER;
+        ALTER TABLE games ADD COLUMN opening_color TEXT;
+        ALTER TABLE games ADD COLUMN opening_mode TEXT;
+        ALTER TABLE games ADD COLUMN mcts_iterations_setting INTEGER;
+
+        CREATE INDEX IF NOT EXISTS idx_games_opening
+            ON games(opening_edge, opening_color);
+        CREATE INDEX IF NOT EXISTS idx_games_opening_mode
+            ON games(opening_mode);
+    """),
 ]
 
 

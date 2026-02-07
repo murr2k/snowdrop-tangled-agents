@@ -237,13 +237,13 @@ class StatsCollector:
                 (game_id, move_number, player, edge, color, score_after,
                  score_delta, state_after, mcts_iterations, thinking_time,
                  strategy_used, predicted_score, prediction_error,
-                 mcts_tree_depth, mcts_root_visits,
+                 mcts_tree_depth, mcts_root_visits, mcts_simulations,
                  minimax_nodes_searched, minimax_prune_count, minimax_depth,
                  trans_hits, trans_misses, tabu_restarts, tabu_improved,
                  lut_used, lut_grey_edges, move_confidence,
                  second_best_edge, second_best_score,
                  opponent_think_time, wall_clock_time)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 game_id, move_number, player, edge, color, score_after,
                 score_delta, state_after,
@@ -254,6 +254,7 @@ class StatsCollector:
                 stats.get('prediction_error'),
                 stats.get('mcts_tree_depth'),
                 stats.get('mcts_root_visits'),
+                stats.get('mcts_simulations'),
                 stats.get('minimax_nodes_searched'),
                 stats.get('minimax_prune_count'),
                 stats.get('minimax_depth'),
@@ -280,7 +281,11 @@ class StatsCollector:
         result: str,
         final_score: float,
         notes: Optional[str] = None,
-        model_metrics: dict = None
+        model_metrics: dict = None,
+        opening_edge: Optional[int] = None,
+        opening_color: Optional[str] = None,
+        opening_mode: Optional[str] = None,
+        mcts_iterations_setting: Optional[int] = None,
     ):
         """
         Mark a game as complete.
@@ -291,6 +296,10 @@ class StatsCollector:
             final_score: Final game score
             notes: Optional notes about the game
             model_metrics: Opponent model metrics dict from GameMetricsTracker
+            opening_edge: First-move edge index (0-14)
+            opening_color: First-move color ('G' or 'P')
+            opening_mode: Opening selection mode ('forced', 'thompson', 'round_robin')
+            mcts_iterations_setting: MCTS iterations setting used for this game
         """
         # Extract prediction accuracy metrics
         model_top3_hit = None
@@ -318,10 +327,14 @@ class StatsCollector:
             conn.execute("""
                 UPDATE games
                 SET result = ?, final_score = ?, total_moves = ?, notes = ?,
-                    model_top3_hit = ?, prediction_accuracy = ?
+                    model_top3_hit = ?, prediction_accuracy = ?,
+                    opening_edge = ?, opening_color = ?, opening_mode = ?,
+                    mcts_iterations_setting = ?
                 WHERE id = ?
             """, (result, final_score, total_moves, notes,
-                  model_top3_hit, prediction_accuracy, game_id))
+                  model_top3_hit, prediction_accuracy,
+                  opening_edge, opening_color, opening_mode,
+                  mcts_iterations_setting, game_id))
             conn.commit()
 
             # Update run completed count if this game belongs to a run

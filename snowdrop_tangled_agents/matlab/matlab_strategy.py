@@ -708,6 +708,7 @@ class HybridSolverStrategy:
             try:
                 stats['mcts_iterations'] = int(self.engine.eval("solverInfo.mctsIterations"))
                 stats['mcts_root_visits'] = int(self.engine.eval("solverInfo.mctsRootVisits"))
+                stats['mcts_simulations'] = int(self.engine.eval("solverInfo.mctsSimulations"))
                 stats['tabu_improved'] = bool(self.engine.eval("solverInfo.tabuImproved"))
                 if stats['tabu_improved']:
                     stats['tabu_restarts'] = int(self.engine.eval(
