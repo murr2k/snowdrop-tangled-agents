@@ -276,20 +276,20 @@ def verify_matlab_readiness() -> bool:
         print(f"  Connecting to MATLAB session...")
         bridge = get_bridge()
         if not bridge.connect():
-            print(f"  ✗ Failed to connect to MATLAB")
+            print(f"  [FAIL] Failed to connect to MATLAB")
             return False
 
-        print(f"  ✓ Connected to MATLAB")
+        print(f"  [OK] Connected to MATLAB")
 
         # Clean up any stale parallel pools
         print(f"  Cleaning up stale parallel pools...")
         try:
             bridge.engine.eval(
-                "pool = gcp('nocreate'); if ~isempty(pool), delete(pool); fprintf('  ✓ Deleted stale pool with %d workers\\n', pool.NumWorkers); else fprintf('  ✓ No stale pools found\\n'); end",
+                "pool = gcp('nocreate'); if ~isempty(pool), delete(pool); fprintf('  [OK] Deleted stale pool with %d workers\\n', pool.NumWorkers); else fprintf('  [OK] No stale pools found\\n'); end",
                 nargout=0
             )
         except Exception as e:
-            print(f"  ✗ Pool cleanup failed: {e}")
+            print(f"  [FAIL] Pool cleanup failed: {e}")
             return False
 
         # Verify MATLAB is responsive with a simple test
@@ -297,11 +297,11 @@ def verify_matlab_readiness() -> bool:
         try:
             result = bridge.engine.eval("2 + 2")
             if result != 4:
-                print(f"  ✗ MATLAB returned unexpected result: {result}")
+                print(f"  [FAIL] MATLAB returned unexpected result: {result}")
                 return False
-            print(f"  ✓ MATLAB is responsive")
+            print(f"  [OK] MATLAB is responsive")
         except Exception as e:
-            print(f"  ✗ MATLAB test failed: {e}")
+            print(f"  [FAIL] MATLAB test failed: {e}")
             return False
 
         print("=" * 60)
@@ -310,7 +310,7 @@ def verify_matlab_readiness() -> bool:
         return True
 
     except Exception as e:
-        print(f"  ✗ Readiness check failed: {e}")
+        print(f"  [FAIL] Readiness check failed: {e}")
         print("=" * 60 + "\n")
         return False
 
