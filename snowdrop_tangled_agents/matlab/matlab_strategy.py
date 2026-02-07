@@ -582,12 +582,21 @@ class HybridSolverStrategy:
             start = time.time()
 
             # Call MATLAB solver with timeout protection
-            # Note: MATLAB Engine doesn't support direct timeout, but errors should propagate
+            # Use async mode to enable timeout (5 minutes max per move)
+            timeout_seconds = 300  # 5 minutes
             try:
-                self.engine.eval(
+                future = self.engine.eval(
                     f"[solverEdge, solverColor, solverInfo] = hybridSolver.solve('{state}');",
-                    nargout=0
+                    nargout=0,
+                    background=True
                 )
+                # Wait for completion with timeout
+                future.result(timeout=timeout_seconds)
+            except TimeoutError:
+                logger.error(f"MATLAB timeout after {timeout_seconds}s - MCTS may be hanging or too slow")
+                logger.error(f"Current MCTS settings: iterations={self.mcts_iterations}, time_limit={self.time_limit}s")
+                logger.error("Try reducing --mcts-iterations or check MATLAB console for diagnostic output")
+                return None
             except Exception as matlab_error:
                 # Check for specific MATLAB errors
                 error_msg = str(matlab_error)
@@ -751,6 +760,14 @@ class HybridSolverStrategy:
             result: 'win', 'loss', or 'draw'
             final_score: Final game score
         """
+        # Cleanup parallel pool to free workers for next game
+        if self.solver_initialized and self.engine:
+            try:
+                self.engine.eval("mcts.cleanupPool();", nargout=0)
+                logger.debug("Cleaned up MATLAB parallel pool")
+            except Exception as e:
+                logger.debug(f"Parallel pool cleanup failed (non-critical): {e}")
+
         if not self.move_history:
             return
 

@@ -35,11 +35,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **MATLAB MCTS Out-of-Memory Error Handling** (`TangledMCTS.m`, `matlab_strategy.py`)
   - Added try-catch block around main MCTS search loop to catch out-of-memory and other errors
+  - Fixed critical bug in error handler where `memInfo` was referenced before being defined
   - MATLAB now reports memory errors with diagnostic message instead of hanging silently
   - Python side now detects and reports MATLAB out-of-memory errors with actionable guidance
   - Error messages include iteration count and memory usage at failure point
   - Suggests reducing --mcts-iterations if memory issues occur
   - Prevents silent hangs when MATLAB runs out of memory during tree expansion or simulation
+
+- **MATLAB Parallel Pool Management** (`TangledMCTS.m`, `matlab_strategy.py`)
+  - Fixed parallel pool not being cleaned up between games, causing worker exhaustion
+  - Now always deletes and recreates parallel pool to ensure clean worker state
+  - Dynamically queries MATLAB for available worker count instead of assuming fixed number
+  - Added `cleanupPool()` method to explicitly release workers after each game
+  - Python side now calls cleanup in `end_game()` to free resources for next game
+  - Added diagnostic logging to show worker allocation and pool lifecycle events
+  - Prevents "pool already exists" errors and stale worker states across games
+
+- **MATLAB Execution Timeout** (`matlab_strategy.py`)
+  - Added 5-minute timeout for MATLAB solver calls using async execution mode
+  - Prevents indefinite hangs when MATLAB enters infinite loop or deadlock
+  - Timeout errors are caught and reported with diagnostic information
+  - Suggests checking MATLAB console for diagnostic output when timeout occurs
+
+- **MATLAB Diagnostic Logging** (`TangledMCTS.m`)
+  - Added progress reporting every 10 seconds during MCTS search
+  - Shows iteration count, nodes expanded, simulations run, and tree depth
+  - Added logging for root node creation and MCTS loop initialization
+  - Helps diagnose where MATLAB hangs when execution stalls without throwing exceptions
 
 - **setup_env.py Installation Robustness**
   - Added missing `websocket-client>=1.6.0` package (was in pyproject.toml but missing from pip install list)

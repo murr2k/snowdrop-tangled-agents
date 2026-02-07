@@ -377,28 +377,57 @@ classdef TangledMCTS < handle
 
         function initPool(this)
             %INITPOOL Initialize parallel pool if needed
+            %
+            %   Always cleans up any existing pool and creates a fresh one
+            %   to avoid stale worker states between games.
 
-            if ~this.UseParallel || this.PoolInitialized
+            if ~this.UseParallel
                 return;
             end
 
             try
+                % Query available workers dynamically
                 cluster = parcluster('local');
                 maxWorkers = cluster.NumWorkers;
                 actualWorkers = min(this.NumWorkers, maxWorkers);
 
+                fprintf('Parallel pool: detected %d available workers, requesting %d\n', ...
+                    maxWorkers, actualWorkers);
+
+                % Always delete any existing pool to ensure clean state
                 pool = gcp('nocreate');
-                if isempty(pool)
-                    parpool('local', actualWorkers);
-                elseif pool.NumWorkers < actualWorkers
+                if ~isempty(pool)
+                    fprintf('Deleting existing parallel pool (%d workers)...\n', pool.NumWorkers);
                     delete(pool);
-                    parpool('local', actualWorkers);
                 end
+
+                % Create fresh pool
+                fprintf('Creating parallel pool with %d workers...\n', actualWorkers);
+                parpool('local', actualWorkers);
 
                 this.NumWorkers = actualWorkers;
                 this.PoolInitialized = true;
-            catch
+            catch ME
+                warning('Failed to initialize parallel pool: %s', ME.message);
                 this.UseParallel = false;
+                this.PoolInitialized = false;
+            end
+        end
+
+        function cleanupPool(this)
+            %CLEANUPPOOL Delete parallel pool to free workers
+            %
+            %   Call this between games to release worker resources.
+
+            try
+                pool = gcp('nocreate');
+                if ~isempty(pool)
+                    fprintf('Cleaning up parallel pool (%d workers)...\n', pool.NumWorkers);
+                    delete(pool);
+                end
+                this.PoolInitialized = false;
+            catch ME
+                warning('Failed to cleanup parallel pool: %s', ME.message);
             end
         end
 
@@ -425,15 +454,25 @@ classdef TangledMCTS < handle
             end
 
             % Create root node
+            fprintf('TangledMCTS: Creating root node...\n');
             root = MCTSNode(state, true);
+            fprintf('TangledMCTS: Root node created, starting MCTS loop (max %d iterations)...\n', this.Iterations);
 
             iterations = 0;
             nodesExpanded = 0;
             simulations = 0;
             maxDepth = 0;
+            lastReportTime = tic;
 
             try
                 while iterations < this.Iterations
+                    % Progress reporting every 10 seconds
+                    if toc(lastReportTime) >= 10.0
+                        fprintf('MCTS Progress: %d/%d iterations (%.1f%%), %d nodes, %d sims, depth %d\n', ...
+                            iterations, this.Iterations, 100.0 * iterations / this.Iterations, ...
+                            nodesExpanded, simulations, maxDepth);
+                        lastReportTime = tic;
+                    end
                     % Check time limit
                     if toc(startTime) >= this.TimeLimit
                         break;
@@ -469,11 +508,19 @@ classdef TangledMCTS < handle
                     iterations = iterations + 1;
                 end
             catch ME
+                % Get memory info for error reporting
+                try
+                    memInfo = memory;
+                    memUsedMB = memInfo.MemUsedMATLAB / (1024 * 1024);
+                catch
+                    memUsedMB = 0;  % Fallback if memory() fails
+                end
+
                 % Check if out of memory
                 if contains(ME.identifier, 'OutOfMemory') || contains(ME.message, 'out of memory')
                     error('TangledMCTS:OutOfMemory', ...
                         'MCTS ran out of memory after %d iterations (%.1f MB used). Try reducing --mcts-iterations.', ...
-                        iterations, memInfo.MemUsedMATLAB / (1024 * 1024));
+                        iterations, memUsedMB);
                 else
                     % Re-throw other errors with context
                     error('TangledMCTS:SearchFailed', ...
