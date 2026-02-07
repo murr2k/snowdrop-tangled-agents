@@ -594,8 +594,11 @@ class HybridSolverStrategy:
             start = time.time()
 
             # Call MATLAB solver with timeout protection
-            # Use async mode to enable timeout (5 minutes max per move)
-            timeout_seconds = 300  # 5 minutes
+            # Use async mode to enable timeout
+            # With parallel rollouts (6 workers × 100 rollouts/worker),
+            # ~170 iters/10s early game, faster in late game.
+            # 20K iters ≈ 20 min, 100K ≈ 100 min for first move.
+            timeout_seconds = max(1800, self.mcts_iterations // 10)  # 30 min minimum, scales with iterations
             try:
                 future = self.engine.eval(
                     f"[solverEdge, solverColor, solverInfo] = hybridSolver.solve('{state}');",
@@ -775,7 +778,11 @@ class HybridSolverStrategy:
         # Cleanup parallel pool to free workers for next game
         if self.solver_initialized and self.engine:
             try:
-                self.engine.eval("mcts.cleanupPool();", nargout=0)
+                self.engine.eval(
+                    "if exist('hybridSolver','var') && isvalid(hybridSolver), "
+                    "hybridSolver.MCTS.cleanupPool(); end",
+                    nargout=0
+                )
                 logger.debug("Cleaned up MATLAB parallel pool")
             except Exception as e:
                 logger.debug(f"Parallel pool cleanup failed (non-critical): {e}")

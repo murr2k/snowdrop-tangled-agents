@@ -467,7 +467,14 @@ classdef TangledMCTS < handle
             % Pre-pack simulation context for parfor workers (read-only data)
             useParBatch = this.UseParallel && this.PoolInitialized;
             if useParBatch
-                nRollouts = double(this.NumWorkers);
+                nWorkers = double(this.NumWorkers);
+                % Each worker runs rolloutsPerWorker rollouts to amortize
+                % parfor overhead (~60ms) across many cheap rollouts.
+                % With 100 rollouts/worker, each worker takes ~6ms of
+                % useful work, bringing overhead ratio below 10:1.
+                % Total per iteration: 6 workers × 100 = 600 rollouts.
+                rolloutsPerWorker = max(100, double(this.RolloutsPerLeaf));
+                totalRolloutsPerIter = nWorkers * rolloutsPerWorker;
             end
 
             % Safe defaults for potentially uninitialized properties
@@ -537,17 +544,20 @@ classdef TangledMCTS < handle
                     if node.isTerminal()
                         value = this.evaluateTerminal(node.State);
                     elseif useParBatch
-                        % Parallel batch: run NumWorkers rollouts and average
-                        values = zeros(nRollouts, 1);
+                        % Parallel batch: each worker runs rolloutsPerWorker
+                        % rollouts, amortizing parfor overhead across many
+                        % cheap rollouts instead of 1 per worker.
+                        values = zeros(nWorkers, 1);
                         nodeState = node.State;
                         nodeIsOurTurn = node.IsOurTurn;
                         ctx = simContext;
-                        parfor r = 1:nRollouts
+                        rpw = rolloutsPerWorker;
+                        parfor r = 1:nWorkers
                             values(r) = TangledMCTS.parallelSimulate( ...
-                                nodeState, nodeIsOurTurn, ctx);
+                                nodeState, nodeIsOurTurn, ctx, rpw);
                         end
                         value = mean(values);
-                        simulations = simulations + nRollouts;
+                        simulations = simulations + totalRolloutsPerIter;
                     else
                         % Serial fallback
                         value = this.simulate(node.State, node.IsOurTurn);
@@ -1280,38 +1290,43 @@ classdef TangledMCTS < handle
             score = score - imbalance * 0.02;
         end
 
-        function value = parallelSimulate(state, isOurTurn, ctx)
-            %PARALLELSIMULATE Self-contained rollout for parfor compatibility
+        function value = parallelSimulate(state, isOurTurn, ctx, nRollouts)
+            %PARALLELSIMULATE Run multiple rollouts on one worker
             %
-            %   All state passed via ctx struct - no handle object access needed.
+            %   Each parfor worker calls this with nRollouts > 1 to amortize
+            %   the parfor dispatch overhead across many cheap rollouts.
             %
             %   ctx fields: useHeuristic, useOppModel, oppModelLoaded, oppModel,
             %               myEdges, oppEdges, hubEdges, edgeBias,
             %               lutLoaded, lut, player, calLoaded, calibration
 
-            currentState = state;
-            currentTurn = isOurTurn;
-            greyEdges = find(currentState == '-');
+            total = 0;
+            for k = 1:nRollouts
+                currentState = state;
+                currentTurn = isOurTurn;
+                greyEdges = find(currentState == '-');
 
-            while ~isempty(greyEdges)
-                if ctx.useHeuristic
-                    [edge, color] = TangledMCTS.heuristicActionStatic( ...
-                        currentState, greyEdges, currentTurn, ...
-                        ctx.useOppModel, ctx.oppModelLoaded, ctx.oppModel, ...
-                        ctx.myEdges, ctx.oppEdges, ctx.hubEdges, ctx.edgeBias);
-                else
-                    edge = greyEdges(randi(length(greyEdges)));
-                    color = char('G' + (rand() > 0.5) * ('P' - 'G'));
+                while ~isempty(greyEdges)
+                    if ctx.useHeuristic
+                        [edge, color] = TangledMCTS.heuristicActionStatic( ...
+                            currentState, greyEdges, currentTurn, ...
+                            ctx.useOppModel, ctx.oppModelLoaded, ctx.oppModel, ...
+                            ctx.myEdges, ctx.oppEdges, ctx.hubEdges, ctx.edgeBias);
+                    else
+                        edge = greyEdges(randi(length(greyEdges)));
+                        color = char('G' + (rand() > 0.5) * ('P' - 'G'));
+                    end
+
+                    currentState(edge) = color;
+                    greyEdges = find(currentState == '-');
+                    currentTurn = ~currentTurn;
                 end
 
-                currentState(edge) = color;
-                greyEdges = find(currentState == '-');
-                currentTurn = ~currentTurn;
+                total = total + TangledMCTS.evaluateTerminalStatic( ...
+                    currentState, ctx.lutLoaded, ctx.lut, ...
+                    ctx.player, ctx.calLoaded, ctx.calibration);
             end
-
-            value = TangledMCTS.evaluateTerminalStatic( ...
-                currentState, ctx.lutLoaded, ctx.lut, ...
-                ctx.player, ctx.calLoaded, ctx.calibration);
+            value = total / nRollouts;
         end
     end
 end
