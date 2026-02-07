@@ -1575,6 +1575,7 @@ class AlphaQExplorerStrategy:
         player: int = 1,
         state_path: Optional[Path] = None,
         force_opening: Optional[str] = None,
+        opening_mode: str = 'forced',
     ):
         """
         Initialize AlphaQExplorerStrategy.
@@ -1586,12 +1587,19 @@ class AlphaQExplorerStrategy:
             player: Player perspective (1 or 2)
             state_path: Path to persist state across runs
             force_opening: Force specific opening (e.g., 'E7G') to override Thompson Sampling
+            opening_mode: 'forced' (use force_opening), 'thompson' (Beta sampling),
+                          'round_robin' (cycle all 30 openings systematically)
         """
         self.time_limit = time_limit
         self.minimax_depth = minimax_depth
         self.mcts_iterations = mcts_iterations
         self.player = player
         self.force_opening = force_opening
+        self.opening_mode = opening_mode
+
+        # Round-robin state: index into ALL_OPENINGS, persisted across games
+        self.rr_index = 0
+        self.rr_games_per_opening = 3  # Phase 1: 3 games per opening
 
         # Start with learning disabled
         self.solver = HybridSolverStrategy(
@@ -1638,9 +1646,11 @@ class AlphaQExplorerStrategy:
                         if key in loaded_openings:
                             self.openings[key] = loaded_openings[key]
                     self.games_played = data.get('games_played', 0)
+                    self.rr_index = data.get('rr_index', 0)
                     logger.info(
                         f"Loaded AlphaQ explorer state (v2): "
                         f"{self.games_played} games, {len([k for k, v in self.openings.items() if v['wins'] + v['draws'] + v['losses'] > 0])} tested openings"
+                        f"{f', rr_index={self.rr_index}' if self.opening_mode == 'round_robin' else ''}"
                     )
                 else:
                     # v1 format: migrate
@@ -1688,6 +1698,7 @@ class AlphaQExplorerStrategy:
                 'version': 2,
                 'openings': self.openings,
                 'games_played': self.games_played,
+                'rr_index': self.rr_index,
                 'last_updated': __import__('datetime').datetime.now().isoformat(),
             }
             with open(self.state_path, 'w') as f:
@@ -1728,8 +1739,25 @@ class AlphaQExplorerStrategy:
         if grey_count == 15:
             self.move_count = 1
 
-            # Check for forced opening override
-            if self.force_opening:
+            if self.opening_mode == 'round_robin':
+                # Round-robin: cycle through all 30 openings systematically
+                opening_idx = self.rr_index // self.rr_games_per_opening
+                game_within = self.rr_index % self.rr_games_per_opening
+                if opening_idx >= len(self.ALL_OPENINGS):
+                    logger.info("AlphaQ [round_robin]: All openings exhausted, wrapping around")
+                    opening_idx = opening_idx % len(self.ALL_OPENINGS)
+                edge_rr, color_rr = self.ALL_OPENINGS[opening_idx]
+                best_opening = f"E{edge_rr}{color_rr}"
+                self.thompson_sample = 0.0
+                self.thompson_alpha = 0.0
+                self.thompson_beta = 0.0
+                logger.info(
+                    f"AlphaQ [round_robin]: Opening {best_opening} "
+                    f"(opening {opening_idx + 1}/30, game {game_within + 1}/{self.rr_games_per_opening}, "
+                    f"rr_index={self.rr_index})"
+                )
+
+            elif self.opening_mode == 'forced' and self.force_opening:
                 best_opening = self.force_opening
                 # Get stats for the forced opening if it exists
                 if best_opening in self.openings:
@@ -1741,6 +1769,7 @@ class AlphaQExplorerStrategy:
                     self.thompson_beta = 1.0
                 self.thompson_sample = 1.0
                 logger.info(f"AlphaQ [forced]: Opening {best_opening} (FORCED)")
+
             else:
                 # Thompson sampling: pick opening with highest Beta sample
                 import random
@@ -1878,10 +1907,20 @@ class AlphaQExplorerStrategy:
 
             self.games_played += 1
 
-            logger.info(
-                f"AlphaQ [thompson]: {opening_key} -> {result} "
-                f"(score: {final_score:+.4f}, games_played={self.games_played})"
-            )
+            # Advance round-robin counter
+            if self.opening_mode == 'round_robin':
+                self.rr_index += 1
+                total_rr_games = len(self.ALL_OPENINGS) * self.rr_games_per_opening
+                logger.info(
+                    f"AlphaQ [round_robin]: {opening_key} -> {result} "
+                    f"(score: {final_score:+.4f}, rr_index={self.rr_index}/{total_rr_games}, "
+                    f"games_played={self.games_played})"
+                )
+            else:
+                logger.info(
+                    f"AlphaQ [{self.opening_mode}]: {opening_key} -> {result} "
+                    f"(score: {final_score:+.4f}, games_played={self.games_played})"
+                )
 
             # Learning gating
             if self.games_played >= self.MIN_GAMES_BEFORE_LEARNING:

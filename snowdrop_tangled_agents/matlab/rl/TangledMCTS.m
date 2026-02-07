@@ -267,16 +267,14 @@ classdef TangledMCTS < handle
             %
             %   Two-phase lookup:
             %     Phase 1 — Named opponent: search for calibration_<name>.mat.
-            %                If found, load it.  If not found, leave
-            %                CalibrationLoaded = false so calibrateScore falls
-            %                back to the tanh sigmoid.  Never loads the generic
-            %                curve for a named opponent.
-            %     Phase 2 — No opponent name (legacy path): load
-            %                calibration_pwin.mat exactly as before.
+            %                If found, load it and return.
+            %     Phase 2 — Fallback: load generic calibration_pwin.mat.
+            %                Used when no opponent name is set, or when no
+            %                opponent-specific file exists.
             %
             %   File layout:
             %     calibration_<sanitized>.mat   — per-opponent fitted curve
-            %     calibration_pwin.mat          — generic fallback (legacy)
+            %     calibration_pwin.mat          — generic cross-opponent curve
             %   Both contain: scores (Nx1) and pwin (Nx1).
 
             scriptPath = mfilename('fullpath');
@@ -301,16 +299,14 @@ classdef TangledMCTS < handle
                     end
                 end
 
-                if ~isfile(calPath)
-                    % No fitted curve for this opponent — tanh fallback
-                    fprintf('TangledMCTS: no calibration file for opponent ''%s'' (%s). Using tanh fallback.\n', ...
-                        this.OpponentName, calFile);
-                    this.CalibrationLoaded = false;
+                if isfile(calPath)
+                    this.loadCalibrationFile(calPath);
                     return;
                 end
 
-                this.loadCalibrationFile(calPath);
-                return;
+                % No opponent-specific file — fall through to generic
+                fprintf('TangledMCTS: no calibration for opponent ''%s'' (%s). Trying generic calibration.\n', ...
+                    this.OpponentName, calFile);
             end
 
             % ---- Phase 2: generic (legacy) calibration ----
