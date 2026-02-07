@@ -527,6 +527,18 @@ class HybridSolverStrategy:
             # .m files on the path.
             self.engine.eval("clear classes", nargout=0)
 
+            # Clean up any stale parallel pool from previous runs
+            # This prevents worker exhaustion if a previous run crashed
+            logger.debug("Cleaning up any stale parallel pools...")
+            try:
+                self.engine.eval(
+                    "pool = gcp('nocreate'); if ~isempty(pool), delete(pool); end",
+                    nargout=0
+                )
+                logger.debug("Stale pool cleanup complete")
+            except Exception as e:
+                logger.debug(f"Pool cleanup failed (non-critical): {e}")
+
             # Sanitize opponent name for safe MATLAB string embedding
             opponent_name = (opponent or '').replace("'", "''")
             self.engine.eval(
