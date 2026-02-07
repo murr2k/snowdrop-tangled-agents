@@ -512,6 +512,50 @@ cat ~/.tangled/alphaq_explorer_state.json
 
 The Thompson Sampling approach generalizes to any opening-selection problem in Tangled and other stochastic games where a strategy needs to learn which first moves lead to success against a specific opponent.
 
+### 13. Opening Re-Exploration Experiment (February 2026)
+
+All prior conclusions about optimal openings against AlphaQ Up — including the
+"Nash Equilibrium" claim from Runs 60–66 — were made with **broken MCTS
+parallelization**. The `parfor` worker pool allocated 6 workers but never dispatched
+work to them: every iteration performed a single serial rollout while workers sat
+idle at 0% CPU. This means historical tests used **5,000 rollouts per move** when
+they should have used **3,000,000** (a 600x deficit).
+
+Additionally, the MCTS terminal evaluation used a `tanh(score × 0.4)` calibration
+fallback that is catastrophically miscalibrated for AlphaQ: it predicts 66% P(win)
+at score +0.8, where the actual win rate is **0%** across 1,297 games. This caused
+the search to satisfice on the E7G opening line instead of exploring alternatives.
+
+**What changed:**
+
+| Fix | Before | After |
+|-----|--------|-------|
+| Parallel rollouts | 1 per iteration (broken) | 600 per iteration (6 workers × 100) |
+| Calibration fallback | `tanh(score × 0.4)` — 66% at +0.8 | Generic `calibration_pwin.mat` — 9.5% at +0.8 |
+| Total rollouts/move (5K iter) | 5,000 | 3,000,000 |
+
+**The experiment:** Systematically re-test all 30 possible opening moves
+(15 edges × 2 colors) against AlphaQ on the Petersen graph with functional
+parallel MCTS and correct calibration.
+
+| Phase | Openings | Games | Iterations | Rollouts/move |
+|-------|----------|-------|------------|---------------|
+| Phase 1: Screening | All 30 | 90 (3 each) | 5,000 | 3,000,000 |
+| Phase 2: Deep test | Promising | 10 each | 10,000 | 6,000,000 |
+
+```bash
+# Run Phase 1: systematic round-robin exploration of all 30 openings (est. ~8 hours)
+poetry run python play_tangled.py \
+  --strategy alphaq_explorer \
+  --opponent alphaq \
+  --games 90 \
+  --mcts-iterations 5000 \
+  --opening-mode round_robin
+```
+
+See `docs/EXPERIMENT_OPENING_RE_EXPLORATION.md` for the full experiment design,
+calibration analysis, and expected results.
+
 ### Documentation
 
 - `docs/DEPENDENCY_REPOSITORIES.md` - Complete documentation of the three dependency repos (game engine, adjudicators, tangled-adjudicate)
@@ -524,3 +568,4 @@ The Thompson Sampling approach generalizes to any opening-selection problem in T
 - `docs/GAME_ANALYTICS.md` - Game analytics and visualization system
 - `docs/TEST_SUITE.md` - Regression test documentation
 - `docs/THE_MATHEMATICS_OF_TANGLED_GAME.md` - Game theory analysis
+- `docs/EXPERIMENT_OPENING_RE_EXPLORATION.md` - Opening re-exploration experiment design and calibration analysis
