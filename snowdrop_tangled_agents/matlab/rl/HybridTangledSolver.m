@@ -164,11 +164,10 @@ classdef HybridTangledSolver < handle
             end
 
             % Opening book: Secure our vertex edges (E9, E10, E11) Green.
-            % Empirically correct against Melissa (fitted calibration exists).
-            % Skip for named opponents without a fitted calibration curve —
-            % those opponents counter the opening and the 30 s budget is better
-            % spent on MCTS/hybrid search at 12–13 grey edges.
-            useOpeningBook = isempty(this.OpponentName) || this.MCTS.CalibrationLoaded;
+            % Only use when an opponent-specific calibration curve exists
+            % (e.g., Melissa). Skip for opponents using generic calibration
+            % so MCTS explores freely and parallel workers are utilized.
+            useOpeningBook = isempty(this.OpponentName) || this.MCTS.CalibrationIsOpponentSpecific;
             if useOpeningBook
                 openingEdges = [10, 11, 12];  % E9, E10, E11
                 for e = openingEdges

@@ -595,10 +595,12 @@ class HybridSolverStrategy:
 
             # Call MATLAB solver with timeout protection
             # Use async mode to enable timeout
-            # With parallel rollouts (6 workers × 100 rollouts/worker),
-            # ~170 iters/10s early game, faster in late game.
-            # 20K iters ≈ 20 min, 100K ≈ 100 min for first move.
-            timeout_seconds = max(1800, self.mcts_iterations // 10)  # 30 min minimum, scales with iterations
+            # With parallel rollouts (6 workers × 100 rollouts/worker = 600/iter),
+            # each MCTS iteration takes ~65ms (dominated by parfor overhead).
+            # Hybrid path evaluates up to 5 candidate moves, each with full
+            # iteration count: 5 × iterations × 0.065s + pool/minimax overhead.
+            # Examples: 5K iters ≈ 28 min worst case, 20K ≈ 108 min, 100K ≈ 9 hr.
+            timeout_seconds = max(3600, self.mcts_iterations // 2)  # 1 hr minimum, scales with iterations
             try:
                 future = self.engine.eval(
                     f"[solverEdge, solverColor, solverInfo] = hybridSolver.solve('{state}');",
@@ -615,7 +617,15 @@ class HybridSolverStrategy:
             except Exception as matlab_error:
                 # Check for specific MATLAB errors
                 error_msg = str(matlab_error)
-                if 'OutOfMemory' in error_msg or 'out of memory' in error_msg:
+                if 'ParallelRequired' in error_msg or 'PoolNotReady' in error_msg \
+                        or 'PoolVerificationFailed' in error_msg or 'InsufficientWorkers' in error_msg:
+                    logger.error(f"MATLAB parallel pool failed to initialize: {error_msg}")
+                    logger.error("MCTS requires a working parallel pool. Check Parallel Computing Toolbox.")
+                    raise RuntimeError(
+                        "MCTS parallel pool initialization failed. "
+                        "Ensure MATLAB Parallel Computing Toolbox is installed and workers are available."
+                    ) from matlab_error
+                elif 'OutOfMemory' in error_msg or 'out of memory' in error_msg:
                     logger.error(f"MATLAB out of memory: {error_msg}")
                     logger.error(f"Try reducing --mcts-iterations (current: {self.mcts_iterations})")
                     return None

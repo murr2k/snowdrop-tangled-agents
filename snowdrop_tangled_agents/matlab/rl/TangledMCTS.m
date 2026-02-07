@@ -68,6 +68,7 @@ classdef TangledMCTS < handle
         % P(win) calibration curve (maps SA score -> win probability)
         Calibration struct                     % .scores and .pwin vectors
         CalibrationLoaded logical = false
+        CalibrationIsOpponentSpecific logical = false  % true only when fitted curve exists
         OpponentName char = ''                 % Opponent name for conditional calibration
     end
 
@@ -301,6 +302,7 @@ classdef TangledMCTS < handle
 
                 if isfile(calPath)
                     this.loadCalibrationFile(calPath);
+                    this.CalibrationIsOpponentSpecific = true;
                     return;
                 end
 
@@ -372,42 +374,62 @@ classdef TangledMCTS < handle
         end
 
         function initPool(this)
-            %INITPOOL Initialize parallel pool if needed
+            %INITPOOL Initialize parallel pool (required for MCTS)
             %
-            %   Always cleans up any existing pool and creates a fresh one
-            %   to avoid stale worker states between games.
+            %   Creates a parallel pool for MCTS rollouts. If pool
+            %   initialization fails, throws an error to halt the game
+            %   rather than silently falling back to serial mode.
+            %
+            %   Reuses an existing pool if it has the right number of
+            %   workers; otherwise creates a fresh one.
 
             if ~this.UseParallel
-                return;
+                error('TangledMCTS:ParallelRequired', ...
+                    'UseParallel is false but parallel rollouts are required. Cannot proceed.');
             end
 
-            try
-                % Query available workers dynamically
-                cluster = parcluster('local');
-                maxWorkers = cluster.NumWorkers;
-                actualWorkers = min(this.NumWorkers, maxWorkers);
-
-                fprintf('Parallel pool: detected %d available workers, requesting %d\n', ...
-                    maxWorkers, actualWorkers);
-
-                % Always delete any existing pool to ensure clean state
-                pool = gcp('nocreate');
-                if ~isempty(pool)
-                    fprintf('Deleting existing parallel pool (%d workers)...\n', pool.NumWorkers);
+            % Check for existing pool first - reuse if valid
+            pool = gcp('nocreate');
+            if ~isempty(pool)
+                if pool.NumWorkers >= this.NumWorkers
+                    fprintf('Parallel pool: reusing existing pool (%d workers)\n', pool.NumWorkers);
+                    this.NumWorkers = int32(pool.NumWorkers);
+                    this.PoolInitialized = true;
+                    return;
+                else
+                    fprintf('Parallel pool: existing pool has %d workers, need %d. Recreating...\n', ...
+                        pool.NumWorkers, this.NumWorkers);
                     delete(pool);
                 end
-
-                % Create fresh pool
-                fprintf('Creating parallel pool with %d workers...\n', actualWorkers);
-                parpool('local', actualWorkers);
-
-                this.NumWorkers = actualWorkers;
-                this.PoolInitialized = true;
-            catch ME
-                warning('Failed to initialize parallel pool: %s', ME.message);
-                this.UseParallel = false;
-                this.PoolInitialized = false;
             end
+
+            % Query available workers dynamically
+            cluster = parcluster('local');
+            maxWorkers = cluster.NumWorkers;
+            actualWorkers = min(this.NumWorkers, maxWorkers);
+
+            if actualWorkers < 2
+                error('TangledMCTS:InsufficientWorkers', ...
+                    'Need at least 2 parallel workers but only %d available.', maxWorkers);
+            end
+
+            fprintf('Parallel pool: detected %d available workers, requesting %d\n', ...
+                maxWorkers, actualWorkers);
+
+            % Create pool - let errors propagate to halt the game
+            fprintf('Creating parallel pool with %d workers...\n', actualWorkers);
+            parpool('local', actualWorkers);
+
+            % Verify pool is actually running
+            pool = gcp('nocreate');
+            if isempty(pool) || pool.NumWorkers < 2
+                error('TangledMCTS:PoolVerificationFailed', ...
+                    'Parallel pool creation returned but pool is not running.');
+            end
+
+            this.NumWorkers = int32(actualWorkers);
+            this.PoolInitialized = true;
+            fprintf('Parallel pool: %d workers ready\n', actualWorkers);
         end
 
         function cleanupPool(this)
@@ -444,9 +466,11 @@ classdef TangledMCTS < handle
             startTime = tic;
             cpuStart = cputime;  % Track CPU time consumed
 
-            % Initialize parallel pool if using parallel rollouts
-            if this.UseParallel
-                this.initPool();
+            % Initialize parallel pool (required for MCTS rollouts)
+            this.initPool();
+            if ~this.PoolInitialized
+                error('TangledMCTS:PoolNotReady', ...
+                    'Parallel pool failed to initialize. Cannot run MCTS without workers.');
             end
 
             % Create root node
@@ -461,17 +485,14 @@ classdef TangledMCTS < handle
             lastReportTime = tic;
 
             % Pre-pack simulation context for parfor workers (read-only data)
-            useParBatch = this.UseParallel && this.PoolInitialized;
-            if useParBatch
-                nWorkers = double(this.NumWorkers);
-                % Each worker runs rolloutsPerWorker rollouts to amortize
-                % parfor overhead (~60ms) across many cheap rollouts.
-                % With 100 rollouts/worker, each worker takes ~6ms of
-                % useful work, bringing overhead ratio below 10:1.
-                % Total per iteration: 6 workers × 100 = 600 rollouts.
-                rolloutsPerWorker = max(100, double(this.RolloutsPerLeaf));
-                totalRolloutsPerIter = nWorkers * rolloutsPerWorker;
-            end
+            nWorkers = double(this.NumWorkers);
+            % Each worker runs rolloutsPerWorker rollouts to amortize
+            % parfor overhead (~60ms) across many cheap rollouts.
+            % With 100 rollouts/worker, each worker takes ~6ms of
+            % useful work, bringing overhead ratio below 10:1.
+            % Total per iteration: 6 workers × 100 = 600 rollouts.
+            rolloutsPerWorker = max(100, double(this.RolloutsPerLeaf));
+            totalRolloutsPerIter = nWorkers * rolloutsPerWorker;
 
             % Safe defaults for potentially uninitialized properties
             if this.OpponentModelLoaded
@@ -539,7 +560,7 @@ classdef TangledMCTS < handle
                     % Simulation: rollout to terminal state
                     if node.isTerminal()
                         value = this.evaluateTerminal(node.State);
-                    elseif useParBatch
+                    else
                         % Parallel batch: each worker runs rolloutsPerWorker
                         % rollouts, amortizing parfor overhead across many
                         % cheap rollouts instead of 1 per worker.
@@ -554,10 +575,6 @@ classdef TangledMCTS < handle
                         end
                         value = mean(values);
                         simulations = simulations + totalRolloutsPerIter;
-                    else
-                        % Serial fallback
-                        value = this.simulate(node.State, node.IsOurTurn);
-                        simulations = simulations + 1;
                     end
 
                     % Backpropagation: update values up the tree
