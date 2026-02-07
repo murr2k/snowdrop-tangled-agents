@@ -2402,6 +2402,16 @@ def main():
                     break
 
                 print(f"\n=== Game {display_num}/{display_total} ===")
+
+                # Update ETA: record game start timestamp for avg calculation
+                games_completed_so_far = display_num - 1
+                publisher = get_publisher()
+                if publisher.is_configured():
+                    publisher.game_started(
+                        game_number=display_num,
+                        games_completed=games_completed_so_far,
+                    )
+
                 result = player.play_game(args.opponent)
                 results.append(result)
 

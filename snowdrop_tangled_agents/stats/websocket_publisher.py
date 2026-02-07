@@ -81,10 +81,10 @@ class StatsPublisher:
         self._run_id: Optional[int] = None
         self._planned_games: Optional[int] = None
 
-        # Turn time tracking for ETA
-        self._total_turn_time: float = 0.0
-        self._turn_count: int = 0
-        self._current_game_turn_time: float = 0.0
+        # ETA tracking: record run start time, recalculate avg at each game start
+        self._run_start_time: Optional[float] = None   # time.monotonic() at game 1 start
+        self._games_completed_at_calc: int = 0          # games completed when ETA last recalculated
+        self._avg_game_duration: Optional[float] = None # seconds per game (updated each game start)
 
         if auto_connect and self.is_configured():
             self._start_connect_thread()
@@ -289,58 +289,70 @@ class StatsPublisher:
         self._planned_games = planned_games
         if self._session_start is None:
             self._session_start = datetime.now()
-        self._total_turn_time = 0.0
-        self._turn_count = 0
-        self._current_game_turn_time = 0.0
+        # Reset ETA state for new run
+        self._run_start_time = None
+        self._games_completed_at_calc = 0
+        self._avg_game_duration = None
         # Reset retry state for new session
         self._gave_up = False
         self._retry_count = 0
         if self.is_configured() and not self.is_connected():
             self._start_connect_thread()
 
+    def game_started(self, game_number: int, games_completed: int):
+        """
+        Call at the start of each game to update ETA.
+
+        On game 1: records the run start timestamp.
+        On game 2+: recalculates avg_game_duration from elapsed wall-clock time.
+
+        Args:
+            game_number: 1-based game number starting now.
+            games_completed: number of games already finished in this run.
+        """
+        now = time.monotonic()
+
+        if self._run_start_time is None:
+            # First game in the run — record start time; ETA stays unknown
+            self._run_start_time = now
+            self._games_completed_at_calc = 0
+            self._avg_game_duration = None
+            return
+
+        # Game 2+: we can compute an average from wall-clock elapsed
+        if games_completed > 0:
+            elapsed = now - self._run_start_time
+            self._avg_game_duration = elapsed / games_completed
+            self._games_completed_at_calc = games_completed
+
     def game_completed(self):
-        """Call when a game completes to finalize turn time tracking."""
-        self._total_turn_time += self._current_game_turn_time
-        self._current_game_turn_time = 0.0
+        """Call when a game completes (kept for backward compatibility)."""
+        pass  # ETA is recalculated at the *start* of the next game
 
     def _calculate_eta(self, completed_games: int) -> Dict[str, Any]:
-        """Calculate estimated time of completion based on turn times."""
-        eta = {}
-        planned = self._planned_games
+        """
+        Calculate estimated time of completion.
 
-        if not planned:
-            return eta
+        Returns an empty dict (dashboard shows '--') until at least 1 game
+        has completed and the avg has been calculated (i.e. game 2 has started).
+        After that, ETA = now + avg_game_duration × games_remaining.
+        """
+        planned = self._planned_games
+        if not planned or self._avg_game_duration is None:
+            return {}
 
         remaining = planned - completed_games
-        MOVES_PER_GAME = 8
+        if remaining <= 0:
+            return {}
 
-        if self._turn_count > 0:
-            avg_turn_time = self._total_turn_time / self._turn_count
-            current_game_turns = max(1, int(self._current_game_turn_time / avg_turn_time)) if avg_turn_time > 0 else 0
-            completed_game_turns = self._turn_count - current_game_turns
+        est_remaining_seconds = remaining * self._avg_game_duration
+        est_end = datetime.now() + timedelta(seconds=est_remaining_seconds)
 
-            if completed_game_turns > 0 and completed_games > 0:
-                avg_game_duration = self._total_turn_time / completed_games
-            else:
-                avg_game_duration = avg_turn_time * MOVES_PER_GAME
-        elif completed_games >= 1 and self._session_start:
-            elapsed = (datetime.now() - self._session_start).total_seconds()
-            avg_game_duration = elapsed / completed_games
-            avg_turn_time = avg_game_duration / MOVES_PER_GAME
-        else:
-            return eta
-
-        if remaining > 0:
-            est_remaining_seconds = remaining * avg_game_duration
-            est_end = datetime.now() + timedelta(seconds=est_remaining_seconds)
-            eta = {
-                "estimated_end": est_end.isoformat(),
-                "games_remaining": remaining,
-                "avg_game_duration": avg_game_duration,
-                "avg_turn_time": avg_turn_time,
-            }
-
-        return eta
+        return {
+            "estimated_end": est_end.isoformat(),
+            "games_remaining": remaining,
+            "avg_game_duration": round(self._avg_game_duration, 1),
+        }
 
     # ------------------------------------------------------------------
     # Publishing
@@ -391,11 +403,6 @@ class StatsPublisher:
         """
         if not self.is_configured():
             return False
-
-        # Track turn time for ETA calculation
-        if move_thinking_time is not None:
-            self._current_game_turn_time += move_thinking_time
-            self._turn_count += 1
 
         # Default board state
         board = board_state if board_state else "-" * 15
