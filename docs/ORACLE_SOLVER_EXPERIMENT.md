@@ -3,9 +3,10 @@
 **Author:** Murray Kopit  
 **Date:** February 2026  
 **Status:** Live trial complete; LUT mismatch confirmed
-**Related:**  
-[ALPHAQ_ORACLE_STRATEGY.md](ALPHAQ_ORACLE_STRATEGY.md),  
-[PERSISTENT_EXPLOITABILITY_UNDER_EVALUATOR-POLICY_MISALIGNMENT.md](PERSISTENT_EXPLOITABILITY_UNDER_EVALUATOR-POLICY_MISALIGNMENT.md),  
+**Related:**
+[ALPHAQ_ORACLE_STRATEGY.md](ALPHAQ_ORACLE_STRATEGY.md),
+[PERSISTENT_EXPLOITABILITY_UNDER_EVALUATOR-POLICY_MISALIGNMENT.md](PERSISTENT_EXPLOITABILITY_UNDER_EVALUATOR-POLICY_MISALIGNMENT.md),
+[SCORE_OUTCOME_DISCREPANCY.md](SCORE_OUTCOME_DISCREPANCY.md),
 [ALPHAQ_STRATEGY.md](ALPHAQ_STRATEGY.md)
 
 ---
@@ -398,7 +399,7 @@ Route 7's target terminal state `PGGPGGPPPGPPPPP` was reached in all six games. 
 | Route 1 target | +7.943 | — | (not reached) |
 | Route 7 target | +1.985 | +1.578 | +0.03 ± 0.01 |
 
-The LUT predicted a decisive win (+1.985); the website adjudicator returned a near-zero draw (+0.03). The low variance in website scores across six trials (σ ≈ 0.01) indicates the website's adjudicator is approximately deterministic—consistent with a lookup table rather than a stochastic quantum computation.
+The LUT predicted a decisive win (+1.985); the website adjudicator returned a near-zero draw (+0.03). The low variance in website scores across six trials (σ ≈ 0.01) indicates the website's adjudicator is approximately deterministic—consistent with a lookup table rather than a stochastic quantum computation. This 66× overestimate is consistent with the SA positive bias documented in the Score–Outcome Discrepancy report (mean SA overestimate: +0.237, with qualitative outcome misclassifications at SA scores below +2).
 
 ---
 
@@ -449,20 +450,49 @@ A broader database analysis reveals that across 1,431 games and 91 unique termin
 
 This raises the question of whether it is possible to win against AlphaQ at all under the current adjudicator, or whether AlphaQ's training has converged to a policy that avoids all losing terminal states regardless of opponent play. Against Melissa (a weaker agent), 329 wins have been recorded with scores up to +15.365, confirming that the adjudicator does produce wins in general.
 
+### 11.6  Correlation with Score–Outcome Discrepancy Report
+
+An earlier analysis ([SCORE_OUTCOME_DISCREPANCY.md](SCORE_OUTCOME_DISCREPANCY.md)), conducted before the oracle solver was designed, identified every element of the failure we observed. The correlation is exact and worth documenting explicitly, because the oracle solver was built despite this prior work being available.
+
+**The score is not the outcome.** The discrepancy report demonstrated that 59% of losses show a positive displayed score, and that the declared winner and the displayed score are produced by independent processes. The oracle solver assumed `LUT score > ε → win`, a threshold model that the discrepancy report had already shown to be false. Wins require a displayed score above approximately +2.0, not +0.0005.
+
+**SA overestimates systematically.** The report quantified SA's positive bias: it overestimates the website score 64.9% of the time, with a mean bias of +0.237. At SA scores of +2 to +5, the actual win rate is only ~71%, not the near-certainty implied by the oracle solver's classification. Route 7's SA LUT score of +1.985 falls just below the +2 threshold where wins become reliable against Melissa—and that threshold does not apply to AlphaQ at all.
+
+**The calibration is opponent-specific.** The discrepancy report's Run 47 tested the Melissa-calibrated solver against AlphaQ and recorded 0 wins in 60 games. It concluded explicitly: *"To calibrate against AlphaQ Up, we need wins. The current calibration curve should not be trusted for this opponent."* The oracle solver ignored this finding by using the same SA-derived LUT regardless of opponent.
+
+**Hypothesis B (quantum measurement) explains the live trial.** The report proposed that the displayed score is an expectation value ⟨H⟩ while the winner is determined by a single quantum measurement. Route 7's consistent website score of +0.03 with low variance (σ ≈ 0.01) fits this model: the expectation value is stable and slightly positive, but too small to produce a winning measurement outcome. The six trials effectively performed the distinguishing test proposed in the report—the score is repeatable and near-deterministic, yet the outcome is always a draw, consistent with the measurement model where P(win) at score +0.03 is effectively zero.
+
+**The P(win) step function quantifies the gap.** The discrepancy report's calibration curve shows:
+
+| Website Score | P(win) vs Melissa |
+|---------------|-------------------|
+| [0, +0.5) | 5.9% |
+| [+0.5, +1) | 43.2% |
+| [+1, +2) | 77.4% |
+| [+2, +5) | 98.5% |
+
+Route 7's terminal state scores +0.03 on the website. Even against Melissa (the weaker opponent), this corresponds to P(win) ≈ 5.9%. Against AlphaQ, where no wins have ever been recorded at any score, the probability is effectively zero. The oracle solver would need to reach terminal states scoring above +2 on the website to have a realistic chance of winning—a constraint that the SA-derived LUT cannot enforce because it does not predict website scores.
+
+**The recursive mismatch was foreseeable.** Section 11.3 described the ironic symmetry of building an exploit tool that carries the same evaluator mismatch it targets. The discrepancy report made this explicit in its Finding 3: SA is a noisier signal than the website score itself, and the two can qualitatively disagree. The oracle solver amplified this error by treating SA scores as ground truth rather than as one more approximation.
+
+The lesson is not that the discrepancy report was ignored—it was written before the oracle solver was conceived—but that its findings should have been incorporated as hard constraints on the solver's design. Specifically, the solver should have been gated by the requirement that no route can be classified as "winning" unless its terminal state has been independently observed to produce a website score above +2. This would have reduced the 48 "winning" routes to zero and prevented the trial from proceeding under false expectations.
+
 ---
 
 ## 12  What Would Be Needed
 
 To make the oracle solver approach viable, the following would be required:
 
-1. **A website-calibrated LUT.** The SA-derived LUT must be replaced with scores from the actual game adjudicator. This could be obtained by:
-   - Requesting the D-Wave ground-truth LUT from the platform operators.
-   - Building an empirical LUT from observed terminal states and their website scores (limited to the ~91 states reached so far).
-   - Reverse-engineering the website's adjudication from sufficient game data across diverse terminal states.
+1. **A website-calibrated scoring function.** The SA-derived LUT must be replaced with a function that predicts P(win) against AlphaQ, not raw SA scores. The discrepancy report's calibration curve provides a template for Melissa, but AlphaQ requires its own—and building it requires achieving at least some wins to fit the upper tail. Possible approaches:
+   - Requesting the actual D-Wave ground-truth adjudicator scores from the platform operators.
+   - Building an empirical model from the ~91 terminal states reached against AlphaQ, mapping terminal state → website score → observed outcome. The current data (all draws/losses) constrains the model from above but cannot identify the win threshold.
+   - Playing against AlphaQ with diverse strategies to expand the set of reached terminal states, specifically targeting states with website scores above +1 to explore the upper tail of the P(win) curve.
 
-2. **Observation-weighted route selection.** The solver should rank routes not only by LUT score but by the minimum number of observations at any opponent decision point along the route. Routes with min_obs < 20 should be treated as speculative.
+2. **Terminal state targeting above the win threshold.** The discrepancy report established that wins require website scores above approximately +2. The solver must target terminal states that achieve this on the website, not states with high SA scores. Since SA and website scores are weakly correlated in the [0, +2) range, the solver cannot use SA as a proxy for this purpose.
 
-3. **Multi-route adaptive play.** Rather than committing to a single route before the game, the strategy should maintain a portfolio of compatible routes and dynamically select based on the opponent's actual responses—switching to an alternative route when a deviation occurs rather than falling back to MCTS.
+3. **Observation-weighted route selection.** The solver should rank routes not only by predicted score but by the minimum number of observations at any opponent decision point along the route. Routes with min_obs < 20 should be treated as speculative.
+
+4. **Multi-route adaptive play.** Rather than committing to a single route before the game, the strategy should maintain a portfolio of compatible routes and dynamically select based on the opponent's actual responses—switching to an alternative route when a deviation occurs rather than falling back to MCTS.
 
 ---
 
@@ -494,4 +524,8 @@ Despite failing to achieve a win, the experiment produced several durable result
 
 The experiment's failure mode is itself a demonstration of evaluator–policy misalignment, applied reflexively. The solver was designed to exploit AlphaQ's blind spots arising from training under an approximate evaluator—but the solver's own evaluation function (the SA-derived LUT) suffered from the same approximation error. A tool built to exploit mismatch cannot succeed when it carries the same mismatch within itself.
 
-The path forward requires breaking this symmetry: obtaining an evaluation function that is closer to the true adjudicator than the one AlphaQ was trained under. Only then can the oracle solver identify terminal states that are genuinely winning rather than merely SA-favourable.
+This was not an unforeseeable failure. The Score–Outcome Discrepancy report had already established that (1) SA scores do not determine game outcomes, (2) the win threshold is at website score ≈ +2, not ε = 0.0005, (3) SA-to-website calibration does not transfer across opponents, and (4) zero wins have been achieved against AlphaQ at any score. Each of these findings, had it been treated as a design constraint, would have prevented the oracle solver from classifying any routes as "winning."
+
+The path forward requires breaking the symmetry in one of two ways:
+- **Obtain a better evaluation function.** A LUT derived from the actual game adjudicator—whether obtained from the platform operators or reverse-engineered from observed outcomes—would allow the solver to target genuinely winning terminal states. The discrepancy report's P(win) curve provides the template: terminal states must score above +2 on the website to produce reliable wins, and the SA score is not a useful proxy for this.
+- **Expand the observed terminal state space against AlphaQ.** With only 91 unique terminal states reached across 1,431 games, and all of them draws or losses, the empirical P(win) curve against AlphaQ has no positive support. Reaching new terminal states—particularly those with website scores in the [+1, +3) range—would reveal whether the P(win) step function has a viable threshold against this opponent, or whether AlphaQ's policy has genuinely converged to a zero-loss equilibrium.
