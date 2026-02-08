@@ -136,6 +136,7 @@ signal.signal(signal.SIGINT, _signal_handler)
 
 from snowdrop_tangled_agents.strategy.petersen_strategy import PetersenStrategy
 from snowdrop_tangled_agents.strategy.mcts_strategy import MCTSStrategy, HybridStrategy, evaluate_terminal_state
+from snowdrop_tangled_agents.strategy.oracle_route_strategy import OracleRouteStrategy
 from snowdrop_tangled_agents.stats import get_collector, queries as stats_queries, GameMetricsTracker
 from snowdrop_tangled_agents.stats import get_publisher, StatsPublisher
 from snowdrop_tangled_agents.stats.session_stats import get_session_stats, get_run_stats
@@ -649,6 +650,15 @@ class WebPlayer:
                     force_opening=force_opening,
                     opening_mode=opening_mode or 'forced',
                 )
+        elif strategy_type == "oracle_route":
+            oracle_routes_path = Path(__file__).parent / "oracle-solver" / "output" / "oracle_routes.json"
+            fallback = MCTSStrategy(time_limit=float('inf'), max_iterations=mcts_iterations)
+            route_index = getattr(self, '_oracle_route_index', 6)  # Route 7 (best confidence)
+            self.strategy = OracleRouteStrategy(
+                routes_path=str(oracle_routes_path),
+                fallback_strategy=fallback,
+                route_index=route_index,
+            )
         else:  # "heuristic" (default)
             self.strategy = PetersenStrategy(params_path=self.params_path)
 
@@ -2115,7 +2125,7 @@ def main():
     parser.add_argument("--debug", action="store_true")
     parser.add_argument("--keep-open", "-k", type=int, default=5,
                         help="Seconds to keep browser open after last game (0 to close immediately)")
-    parser.add_argument("--strategy", "-s", choices=["heuristic", "mcts", "hybrid", "matlab", "rl", "ensemble", "matlab_mcts", "hybrid_solver", "amara_explorer", "amara_killer", "melissa_killer", "alphaq_explorer"], default="hybrid_solver",
+    parser.add_argument("--strategy", "-s", choices=["heuristic", "mcts", "hybrid", "matlab", "rl", "ensemble", "matlab_mcts", "hybrid_solver", "amara_explorer", "amara_killer", "melissa_killer", "alphaq_explorer", "oracle_route"], default="hybrid_solver",
                         help="Strategy to use: hybrid_solver (DEFAULT: D-Wave inspired minimax+MCTS+learning), alphaq_explorer (explore/exploit vs AlphaQ Up with closed learning loop), amara_killer (uses E14P against Amara), melissa_killer (cycles E12P/E13P against Melissa - 40%% win rate), amara_explorer (cycles all 30 openings), hybrid (MCTS with opening), mcts (Monte Carlo, 30s/move), heuristic (fast), matlab (MATLAB-enhanced), rl (trained PPO), ensemble (RL + MC rollouts), matlab_mcts (MATLAB MCTS)")
     parser.add_argument("--mcts-time", type=float, default=float('inf'),
                         help="MCTS time limit per move in seconds (default unlimited)")
