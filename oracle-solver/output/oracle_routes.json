@@ -1,0 +1,5249 @@
+{
+  "oracle_stats": {
+    "total_states_observed": 202,
+    "deterministic_states": 198,
+    "deterministic_pct": 98.019806,
+    "avg_confidence": 0.9917203
+  },
+  "enumeration_stats": {
+    "total_terminal_states": 76,
+    "win_candidates": 48,
+    "near_misses": 1,
+    "draws": 0,
+    "losses": 27,
+    "total_nodes_visited": 212554,
+    "oracle_hits": 1477,
+    "oracle_misses": 195955
+  },
+  "winning_routes": [
+    {
+      "terminal_state": "PGPGGGPPGGPPGPG",
+      "terminal_index": 21306,
+      "lut_score": 7.943015,
+      "margin_over_epsilon": 7.942515,
+      "path_min_confidence": 1.0,
+      "oracle_gaps": 0,
+      "moves": [
+        {
+          "turn": 1,
+          "player": "us",
+          "edge": 1,
+          "color": "G"
+        },
+        {
+          "turn": 2,
+          "player": "opponent",
+          "edge": 0,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 3,
+          "player": "us",
+          "edge": 2,
+          "color": "P"
+        },
+        {
+          "turn": 4,
+          "player": "opponent",
+          "edge": 4,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 5,
+          "player": "us",
+          "edge": 3,
+          "color": "G"
+        },
+        {
+          "turn": 6,
+          "player": "opponent",
+          "edge": 5,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 7,
+          "player": "us",
+          "edge": 6,
+          "color": "P"
+        },
+        {
+          "turn": 8,
+          "player": "opponent",
+          "edge": 8,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 9,
+          "player": "us",
+          "edge": 9,
+          "color": "G"
+        },
+        {
+          "turn": 10,
+          "player": "opponent",
+          "edge": 11,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 11,
+          "player": "us",
+          "edge": 10,
+          "color": "P"
+        },
+        {
+          "turn": 12,
+          "player": "opponent",
+          "edge": 7,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 13,
+          "player": "us",
+          "edge": 12,
+          "color": "G"
+        },
+        {
+          "turn": 14,
+          "player": "opponent",
+          "edge": 13,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 15,
+          "player": "us",
+          "edge": 14,
+          "color": "G"
+        }
+      ]
+    },
+    {
+      "terminal_state": "PPPGPPGGPPGPGPP",
+      "terminal_index": 5320,
+      "lut_score": 3.9768274,
+      "margin_over_epsilon": 3.9763274,
+      "path_min_confidence": 1.0,
+      "oracle_gaps": 0,
+      "moves": [
+        {
+          "turn": 1,
+          "player": "us",
+          "edge": 0,
+          "color": "P"
+        },
+        {
+          "turn": 2,
+          "player": "opponent",
+          "edge": 1,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 3,
+          "player": "us",
+          "edge": 4,
+          "color": "P"
+        },
+        {
+          "turn": 4,
+          "player": "opponent",
+          "edge": 2,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 5,
+          "player": "us",
+          "edge": 3,
+          "color": "G"
+        },
+        {
+          "turn": 6,
+          "player": "opponent",
+          "edge": 5,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 7,
+          "player": "us",
+          "edge": 6,
+          "color": "G"
+        },
+        {
+          "turn": 8,
+          "player": "opponent",
+          "edge": 7,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 9,
+          "player": "us",
+          "edge": 13,
+          "color": "P"
+        },
+        {
+          "turn": 10,
+          "player": "opponent",
+          "edge": 9,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 11,
+          "player": "us",
+          "edge": 10,
+          "color": "G"
+        },
+        {
+          "turn": 12,
+          "player": "opponent",
+          "edge": 12,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 13,
+          "player": "us",
+          "edge": 8,
+          "color": "P"
+        },
+        {
+          "turn": 14,
+          "player": "opponent",
+          "edge": 11,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 15,
+          "player": "us",
+          "edge": 14,
+          "color": "P"
+        }
+      ]
+    },
+    {
+      "terminal_state": "PGPGGGPPPGPGGPP",
+      "terminal_index": 6714,
+      "lut_score": 3.9741468,
+      "margin_over_epsilon": 3.9736469,
+      "path_min_confidence": 1.0,
+      "oracle_gaps": 0,
+      "moves": [
+        {
+          "turn": 1,
+          "player": "us",
+          "edge": 1,
+          "color": "G"
+        },
+        {
+          "turn": 2,
+          "player": "opponent",
+          "edge": 0,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 3,
+          "player": "us",
+          "edge": 2,
+          "color": "P"
+        },
+        {
+          "turn": 4,
+          "player": "opponent",
+          "edge": 4,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 5,
+          "player": "us",
+          "edge": 3,
+          "color": "G"
+        },
+        {
+          "turn": 6,
+          "player": "opponent",
+          "edge": 5,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 7,
+          "player": "us",
+          "edge": 7,
+          "color": "P"
+        },
+        {
+          "turn": 8,
+          "player": "opponent",
+          "edge": 6,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 9,
+          "player": "us",
+          "edge": 9,
+          "color": "G"
+        },
+        {
+          "turn": 10,
+          "player": "opponent",
+          "edge": 10,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 11,
+          "player": "us",
+          "edge": 13,
+          "color": "P"
+        },
+        {
+          "turn": 12,
+          "player": "opponent",
+          "edge": 12,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 13,
+          "player": "us",
+          "edge": 11,
+          "color": "G"
+        },
+        {
+          "turn": 14,
+          "player": "opponent",
+          "edge": 8,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 15,
+          "player": "us",
+          "edge": 14,
+          "color": "P"
+        }
+      ]
+    },
+    {
+      "terminal_state": "PGPPGGPPPGPGGPG",
+      "terminal_index": 23090,
+      "lut_score": 3.9723697,
+      "margin_over_epsilon": 3.9718697,
+      "path_min_confidence": 0.5,
+      "oracle_gaps": 1,
+      "moves": [
+        {
+          "turn": 1,
+          "player": "us",
+          "edge": 1,
+          "color": "G"
+        },
+        {
+          "turn": 2,
+          "player": "opponent",
+          "edge": 0,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 3,
+          "player": "us",
+          "edge": 2,
+          "color": "P"
+        },
+        {
+          "turn": 4,
+          "player": "opponent",
+          "edge": 4,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 5,
+          "player": "us",
+          "edge": 3,
+          "color": "P"
+        },
+        {
+          "turn": 6,
+          "player": "opponent",
+          "edge": 5,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 7,
+          "player": "us",
+          "edge": 6,
+          "color": "P"
+        },
+        {
+          "turn": 8,
+          "player": "opponent",
+          "edge": 7,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 9,
+          "player": "us",
+          "edge": 9,
+          "color": "G"
+        },
+        {
+          "turn": 10,
+          "player": "opponent",
+          "edge": 8,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 11,
+          "player": "us",
+          "edge": 11,
+          "color": "G"
+        },
+        {
+          "turn": 12,
+          "player": "opponent",
+          "edge": 10,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 13,
+          "player": "us",
+          "edge": 13,
+          "color": "P"
+        },
+        {
+          "turn": 14,
+          "player": "opponent",
+          "edge": 12,
+          "color": "G"
+        },
+        {
+          "turn": 15,
+          "player": "us",
+          "edge": 14,
+          "color": "G"
+        }
+      ]
+    },
+    {
+      "terminal_state": "PGPGGPPPPPPGGPG",
+      "terminal_index": 22554,
+      "lut_score": 3.9694948,
+      "margin_over_epsilon": 3.9689949,
+      "path_min_confidence": 1.0,
+      "oracle_gaps": 0,
+      "moves": [
+        {
+          "turn": 1,
+          "player": "us",
+          "edge": 1,
+          "color": "G"
+        },
+        {
+          "turn": 2,
+          "player": "opponent",
+          "edge": 0,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 3,
+          "player": "us",
+          "edge": 3,
+          "color": "G"
+        },
+        {
+          "turn": 4,
+          "player": "opponent",
+          "edge": 2,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 5,
+          "player": "us",
+          "edge": 14,
+          "color": "G"
+        },
+        {
+          "turn": 6,
+          "player": "opponent",
+          "edge": 5,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 7,
+          "player": "us",
+          "edge": 4,
+          "color": "G"
+        },
+        {
+          "turn": 8,
+          "player": "opponent",
+          "edge": 9,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 9,
+          "player": "us",
+          "edge": 11,
+          "color": "G"
+        },
+        {
+          "turn": 10,
+          "player": "opponent",
+          "edge": 6,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 11,
+          "player": "us",
+          "edge": 13,
+          "color": "P"
+        },
+        {
+          "turn": 12,
+          "player": "opponent",
+          "edge": 8,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 13,
+          "player": "us",
+          "edge": 7,
+          "color": "P"
+        },
+        {
+          "turn": 14,
+          "player": "opponent",
+          "edge": 10,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 15,
+          "player": "us",
+          "edge": 12,
+          "color": "G"
+        }
+      ]
+    },
+    {
+      "terminal_state": "PGPGGGPPPGPGGPG",
+      "terminal_index": 23098,
+      "lut_score": 3.9676402,
+      "margin_over_epsilon": 3.9671402,
+      "path_min_confidence": 1.0,
+      "oracle_gaps": 0,
+      "moves": [
+        {
+          "turn": 1,
+          "player": "us",
+          "edge": 1,
+          "color": "G"
+        },
+        {
+          "turn": 2,
+          "player": "opponent",
+          "edge": 0,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 3,
+          "player": "us",
+          "edge": 2,
+          "color": "P"
+        },
+        {
+          "turn": 4,
+          "player": "opponent",
+          "edge": 4,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 5,
+          "player": "us",
+          "edge": 3,
+          "color": "G"
+        },
+        {
+          "turn": 6,
+          "player": "opponent",
+          "edge": 5,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 7,
+          "player": "us",
+          "edge": 7,
+          "color": "P"
+        },
+        {
+          "turn": 8,
+          "player": "opponent",
+          "edge": 6,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 9,
+          "player": "us",
+          "edge": 9,
+          "color": "G"
+        },
+        {
+          "turn": 10,
+          "player": "opponent",
+          "edge": 10,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 11,
+          "player": "us",
+          "edge": 13,
+          "color": "P"
+        },
+        {
+          "turn": 12,
+          "player": "opponent",
+          "edge": 12,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 13,
+          "player": "us",
+          "edge": 11,
+          "color": "G"
+        },
+        {
+          "turn": 14,
+          "player": "opponent",
+          "edge": 8,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 15,
+          "player": "us",
+          "edge": 14,
+          "color": "G"
+        }
+      ]
+    },
+    {
+      "terminal_state": "PGGPGGPPPGPPPPP",
+      "terminal_index": 566,
+      "lut_score": 1.98471,
+      "margin_over_epsilon": 1.98421,
+      "path_min_confidence": 1.0,
+      "oracle_gaps": 0,
+      "moves": [
+        {
+          "turn": 1,
+          "player": "us",
+          "edge": 1,
+          "color": "G"
+        },
+        {
+          "turn": 2,
+          "player": "opponent",
+          "edge": 0,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 3,
+          "player": "us",
+          "edge": 2,
+          "color": "G"
+        },
+        {
+          "turn": 4,
+          "player": "opponent",
+          "edge": 3,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 5,
+          "player": "us",
+          "edge": 4,
+          "color": "G"
+        },
+        {
+          "turn": 6,
+          "player": "opponent",
+          "edge": 5,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 7,
+          "player": "us",
+          "edge": 6,
+          "color": "P"
+        },
+        {
+          "turn": 8,
+          "player": "opponent",
+          "edge": 7,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 9,
+          "player": "us",
+          "edge": 12,
+          "color": "P"
+        },
+        {
+          "turn": 10,
+          "player": "opponent",
+          "edge": 10,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 11,
+          "player": "us",
+          "edge": 9,
+          "color": "G"
+        },
+        {
+          "turn": 12,
+          "player": "opponent",
+          "edge": 8,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 13,
+          "player": "us",
+          "edge": 13,
+          "color": "P"
+        },
+        {
+          "turn": 14,
+          "player": "opponent",
+          "edge": 11,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 15,
+          "player": "us",
+          "edge": 14,
+          "color": "P"
+        }
+      ]
+    },
+    {
+      "terminal_state": "GPPPPGPPPPPGGPG",
+      "terminal_index": 22561,
+      "lut_score": 1.9828106,
+      "margin_over_epsilon": 1.9823107,
+      "path_min_confidence": 0.5,
+      "oracle_gaps": 1,
+      "moves": [
+        {
+          "turn": 1,
+          "player": "us",
+          "edge": 10,
+          "color": "P"
+        },
+        {
+          "turn": 2,
+          "player": "opponent",
+          "edge": 12,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 3,
+          "player": "us",
+          "edge": 0,
+          "color": "G"
+        },
+        {
+          "turn": 4,
+          "player": "opponent",
+          "edge": 1,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 5,
+          "player": "us",
+          "edge": 2,
+          "color": "P"
+        },
+        {
+          "turn": 6,
+          "player": "opponent",
+          "edge": 5,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 7,
+          "player": "us",
+          "edge": 3,
+          "color": "P"
+        },
+        {
+          "turn": 8,
+          "player": "opponent",
+          "edge": 4,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 9,
+          "player": "us",
+          "edge": 13,
+          "color": "P"
+        },
+        {
+          "turn": 10,
+          "player": "opponent",
+          "edge": 7,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 11,
+          "player": "us",
+          "edge": 11,
+          "color": "G"
+        },
+        {
+          "turn": 12,
+          "player": "opponent",
+          "edge": 9,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 13,
+          "player": "us",
+          "edge": 8,
+          "color": "P"
+        },
+        {
+          "turn": 14,
+          "player": "opponent",
+          "edge": 6,
+          "color": "P"
+        },
+        {
+          "turn": 15,
+          "player": "us",
+          "edge": 14,
+          "color": "G"
+        }
+      ]
+    },
+    {
+      "terminal_state": "GPGGPPPPPPPGPPG",
+      "terminal_index": 18445,
+      "lut_score": 1.596229,
+      "margin_over_epsilon": 1.595729,
+      "path_min_confidence": 1.0,
+      "oracle_gaps": 0,
+      "moves": [
+        {
+          "turn": 1,
+          "player": "us",
+          "edge": 11,
+          "color": "G"
+        },
+        {
+          "turn": 2,
+          "player": "opponent",
+          "edge": 2,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 3,
+          "player": "us",
+          "edge": 0,
+          "color": "G"
+        },
+        {
+          "turn": 4,
+          "player": "opponent",
+          "edge": 1,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 5,
+          "player": "us",
+          "edge": 3,
+          "color": "G"
+        },
+        {
+          "turn": 6,
+          "player": "opponent",
+          "edge": 4,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 7,
+          "player": "us",
+          "edge": 5,
+          "color": "P"
+        },
+        {
+          "turn": 8,
+          "player": "opponent",
+          "edge": 8,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 9,
+          "player": "us",
+          "edge": 12,
+          "color": "P"
+        },
+        {
+          "turn": 10,
+          "player": "opponent",
+          "edge": 10,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 11,
+          "player": "us",
+          "edge": 7,
+          "color": "P"
+        },
+        {
+          "turn": 12,
+          "player": "opponent",
+          "edge": 6,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 13,
+          "player": "us",
+          "edge": 9,
+          "color": "P"
+        },
+        {
+          "turn": 14,
+          "player": "opponent",
+          "edge": 13,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 15,
+          "player": "us",
+          "edge": 14,
+          "color": "G"
+        }
+      ]
+    },
+    {
+      "terminal_state": "GPGPGPPPPGPGPPP",
+      "terminal_index": 2581,
+      "lut_score": 1.5957574,
+      "margin_over_epsilon": 1.5952574,
+      "path_min_confidence": 1.0,
+      "oracle_gaps": 0,
+      "moves": [
+        {
+          "turn": 1,
+          "player": "us",
+          "edge": 12,
+          "color": "P"
+        },
+        {
+          "turn": 2,
+          "player": "opponent",
+          "edge": 10,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 3,
+          "player": "us",
+          "edge": 0,
+          "color": "G"
+        },
+        {
+          "turn": 4,
+          "player": "opponent",
+          "edge": 1,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 5,
+          "player": "us",
+          "edge": 2,
+          "color": "G"
+        },
+        {
+          "turn": 6,
+          "player": "opponent",
+          "edge": 3,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 7,
+          "player": "us",
+          "edge": 4,
+          "color": "G"
+        },
+        {
+          "turn": 8,
+          "player": "opponent",
+          "edge": 5,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 9,
+          "player": "us",
+          "edge": 9,
+          "color": "G"
+        },
+        {
+          "turn": 10,
+          "player": "opponent",
+          "edge": 6,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 11,
+          "player": "us",
+          "edge": 13,
+          "color": "P"
+        },
+        {
+          "turn": 12,
+          "player": "opponent",
+          "edge": 7,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 13,
+          "player": "us",
+          "edge": 11,
+          "color": "G"
+        },
+        {
+          "turn": 14,
+          "player": "opponent",
+          "edge": 14,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 15,
+          "player": "us",
+          "edge": 8,
+          "color": "P"
+        }
+      ]
+    },
+    {
+      "terminal_state": "PGPGGGPPPGGGGPG",
+      "terminal_index": 24122,
+      "lut_score": 0.7978787,
+      "margin_over_epsilon": 0.79737866,
+      "path_min_confidence": 0.5,
+      "oracle_gaps": 1,
+      "moves": [
+        {
+          "turn": 1,
+          "player": "us",
+          "edge": 1,
+          "color": "G"
+        },
+        {
+          "turn": 2,
+          "player": "opponent",
+          "edge": 0,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 3,
+          "player": "us",
+          "edge": 2,
+          "color": "P"
+        },
+        {
+          "turn": 4,
+          "player": "opponent",
+          "edge": 4,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 5,
+          "player": "us",
+          "edge": 3,
+          "color": "G"
+        },
+        {
+          "turn": 6,
+          "player": "opponent",
+          "edge": 5,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 7,
+          "player": "us",
+          "edge": 8,
+          "color": "P"
+        },
+        {
+          "turn": 8,
+          "player": "opponent",
+          "edge": 6,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 9,
+          "player": "us",
+          "edge": 9,
+          "color": "G"
+        },
+        {
+          "turn": 10,
+          "player": "opponent",
+          "edge": 11,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 11,
+          "player": "us",
+          "edge": 13,
+          "color": "P"
+        },
+        {
+          "turn": 12,
+          "player": "opponent",
+          "edge": 7,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 13,
+          "player": "us",
+          "edge": 10,
+          "color": "G"
+        },
+        {
+          "turn": 14,
+          "player": "opponent",
+          "edge": 12,
+          "color": "G"
+        },
+        {
+          "turn": 15,
+          "player": "us",
+          "edge": 14,
+          "color": "G"
+        }
+      ]
+    },
+    {
+      "terminal_state": "PGPGGPPPPPGGPPG",
+      "terminal_index": 19482,
+      "lut_score": 0.020013489,
+      "margin_over_epsilon": 0.01951349,
+      "path_min_confidence": 0.5,
+      "oracle_gaps": 1,
+      "moves": [
+        {
+          "turn": 1,
+          "player": "us",
+          "edge": 1,
+          "color": "G"
+        },
+        {
+          "turn": 2,
+          "player": "opponent",
+          "edge": 0,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 3,
+          "player": "us",
+          "edge": 3,
+          "color": "G"
+        },
+        {
+          "turn": 4,
+          "player": "opponent",
+          "edge": 2,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 5,
+          "player": "us",
+          "edge": 14,
+          "color": "G"
+        },
+        {
+          "turn": 6,
+          "player": "opponent",
+          "edge": 5,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 7,
+          "player": "us",
+          "edge": 4,
+          "color": "G"
+        },
+        {
+          "turn": 8,
+          "player": "opponent",
+          "edge": 9,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 9,
+          "player": "us",
+          "edge": 11,
+          "color": "G"
+        },
+        {
+          "turn": 10,
+          "player": "opponent",
+          "edge": 6,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 11,
+          "player": "us",
+          "edge": 13,
+          "color": "P"
+        },
+        {
+          "turn": 12,
+          "player": "opponent",
+          "edge": 8,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 13,
+          "player": "us",
+          "edge": 10,
+          "color": "G"
+        },
+        {
+          "turn": 14,
+          "player": "opponent",
+          "edge": 7,
+          "color": "P"
+        },
+        {
+          "turn": 15,
+          "player": "us",
+          "edge": 12,
+          "color": "P"
+        }
+      ]
+    },
+    {
+      "terminal_state": "GPGPPGPPPGGGGPG",
+      "terminal_index": 24101,
+      "lut_score": 0.010401135,
+      "margin_over_epsilon": 0.009901135,
+      "path_min_confidence": 1.0,
+      "oracle_gaps": 0,
+      "moves": [
+        {
+          "turn": 1,
+          "player": "us",
+          "edge": 0,
+          "color": "G"
+        },
+        {
+          "turn": 2,
+          "player": "opponent",
+          "edge": 1,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 3,
+          "player": "us",
+          "edge": 13,
+          "color": "P"
+        },
+        {
+          "turn": 4,
+          "player": "opponent",
+          "edge": 5,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 5,
+          "player": "us",
+          "edge": 2,
+          "color": "G"
+        },
+        {
+          "turn": 6,
+          "player": "opponent",
+          "edge": 3,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 7,
+          "player": "us",
+          "edge": 4,
+          "color": "P"
+        },
+        {
+          "turn": 8,
+          "player": "opponent",
+          "edge": 6,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 9,
+          "player": "us",
+          "edge": 10,
+          "color": "G"
+        },
+        {
+          "turn": 10,
+          "player": "opponent",
+          "edge": 12,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 11,
+          "player": "us",
+          "edge": 11,
+          "color": "G"
+        },
+        {
+          "turn": 12,
+          "player": "opponent",
+          "edge": 7,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 13,
+          "player": "us",
+          "edge": 9,
+          "color": "G"
+        },
+        {
+          "turn": 14,
+          "player": "opponent",
+          "edge": 8,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 15,
+          "player": "us",
+          "edge": 14,
+          "color": "G"
+        }
+      ]
+    },
+    {
+      "terminal_state": "GPGPGPPPGGPGPPP",
+      "terminal_index": 2837,
+      "lut_score": 0.008847059,
+      "margin_over_epsilon": 0.008347059,
+      "path_min_confidence": 1.0,
+      "oracle_gaps": 0,
+      "moves": [
+        {
+          "turn": 1,
+          "player": "us",
+          "edge": 12,
+          "color": "P"
+        },
+        {
+          "turn": 2,
+          "player": "opponent",
+          "edge": 10,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 3,
+          "player": "us",
+          "edge": 0,
+          "color": "G"
+        },
+        {
+          "turn": 4,
+          "player": "opponent",
+          "edge": 1,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 5,
+          "player": "us",
+          "edge": 2,
+          "color": "G"
+        },
+        {
+          "turn": 6,
+          "player": "opponent",
+          "edge": 3,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 7,
+          "player": "us",
+          "edge": 4,
+          "color": "G"
+        },
+        {
+          "turn": 8,
+          "player": "opponent",
+          "edge": 5,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 9,
+          "player": "us",
+          "edge": 9,
+          "color": "G"
+        },
+        {
+          "turn": 10,
+          "player": "opponent",
+          "edge": 6,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 11,
+          "player": "us",
+          "edge": 13,
+          "color": "P"
+        },
+        {
+          "turn": 12,
+          "player": "opponent",
+          "edge": 7,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 13,
+          "player": "us",
+          "edge": 11,
+          "color": "G"
+        },
+        {
+          "turn": 14,
+          "player": "opponent",
+          "edge": 14,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 15,
+          "player": "us",
+          "edge": 8,
+          "color": "G"
+        }
+      ]
+    },
+    {
+      "terminal_state": "PGGGGPGPPPGGGPG",
+      "terminal_index": 23646,
+      "lut_score": 0.008655876,
+      "margin_over_epsilon": 0.008155876,
+      "path_min_confidence": 1.0,
+      "oracle_gaps": 0,
+      "moves": [
+        {
+          "turn": 1,
+          "player": "us",
+          "edge": 1,
+          "color": "G"
+        },
+        {
+          "turn": 2,
+          "player": "opponent",
+          "edge": 0,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 3,
+          "player": "us",
+          "edge": 6,
+          "color": "G"
+        },
+        {
+          "turn": 4,
+          "player": "opponent",
+          "edge": 2,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 5,
+          "player": "us",
+          "edge": 3,
+          "color": "G"
+        },
+        {
+          "turn": 6,
+          "player": "opponent",
+          "edge": 4,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 7,
+          "player": "us",
+          "edge": 5,
+          "color": "P"
+        },
+        {
+          "turn": 8,
+          "player": "opponent",
+          "edge": 9,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 9,
+          "player": "us",
+          "edge": 10,
+          "color": "G"
+        },
+        {
+          "turn": 10,
+          "player": "opponent",
+          "edge": 12,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 11,
+          "player": "us",
+          "edge": 13,
+          "color": "P"
+        },
+        {
+          "turn": 12,
+          "player": "opponent",
+          "edge": 7,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 13,
+          "player": "us",
+          "edge": 8,
+          "color": "P"
+        },
+        {
+          "turn": 14,
+          "player": "opponent",
+          "edge": 11,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 15,
+          "player": "us",
+          "edge": 14,
+          "color": "G"
+        }
+      ]
+    },
+    {
+      "terminal_state": "PGGPPPPPPGGGGPG",
+      "terminal_index": 24070,
+      "lut_score": 0.008621076,
+      "margin_over_epsilon": 0.008121076,
+      "path_min_confidence": 1.0,
+      "oracle_gaps": 0,
+      "moves": [
+        {
+          "turn": 1,
+          "player": "us",
+          "edge": 1,
+          "color": "G"
+        },
+        {
+          "turn": 2,
+          "player": "opponent",
+          "edge": 0,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 3,
+          "player": "us",
+          "edge": 9,
+          "color": "G"
+        },
+        {
+          "turn": 4,
+          "player": "opponent",
+          "edge": 2,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 5,
+          "player": "us",
+          "edge": 10,
+          "color": "G"
+        },
+        {
+          "turn": 6,
+          "player": "opponent",
+          "edge": 12,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 7,
+          "player": "us",
+          "edge": 11,
+          "color": "G"
+        },
+        {
+          "turn": 8,
+          "player": "opponent",
+          "edge": 8,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 9,
+          "player": "us",
+          "edge": 5,
+          "color": "P"
+        },
+        {
+          "turn": 10,
+          "player": "opponent",
+          "edge": 4,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 11,
+          "player": "us",
+          "edge": 13,
+          "color": "P"
+        },
+        {
+          "turn": 12,
+          "player": "opponent",
+          "edge": 3,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 13,
+          "player": "us",
+          "edge": 14,
+          "color": "G"
+        },
+        {
+          "turn": 14,
+          "player": "opponent",
+          "edge": 7,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 15,
+          "player": "us",
+          "edge": 6,
+          "color": "P"
+        }
+      ]
+    },
+    {
+      "terminal_state": "PGGPPPGPPGGGGPP",
+      "terminal_index": 7750,
+      "lut_score": 0.0074951076,
+      "margin_over_epsilon": 0.0069951075,
+      "path_min_confidence": 1.0,
+      "oracle_gaps": 0,
+      "moves": [
+        {
+          "turn": 1,
+          "player": "us",
+          "edge": 1,
+          "color": "G"
+        },
+        {
+          "turn": 2,
+          "player": "opponent",
+          "edge": 0,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 3,
+          "player": "us",
+          "edge": 2,
+          "color": "G"
+        },
+        {
+          "turn": 4,
+          "player": "opponent",
+          "edge": 3,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 5,
+          "player": "us",
+          "edge": 5,
+          "color": "P"
+        },
+        {
+          "turn": 6,
+          "player": "opponent",
+          "edge": 4,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 7,
+          "player": "us",
+          "edge": 6,
+          "color": "G"
+        },
+        {
+          "turn": 8,
+          "player": "opponent",
+          "edge": 7,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 9,
+          "player": "us",
+          "edge": 9,
+          "color": "G"
+        },
+        {
+          "turn": 10,
+          "player": "opponent",
+          "edge": 8,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 11,
+          "player": "us",
+          "edge": 10,
+          "color": "G"
+        },
+        {
+          "turn": 12,
+          "player": "opponent",
+          "edge": 12,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 13,
+          "player": "us",
+          "edge": 11,
+          "color": "G"
+        },
+        {
+          "turn": 14,
+          "player": "opponent",
+          "edge": 13,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 15,
+          "player": "us",
+          "edge": 14,
+          "color": "P"
+        }
+      ]
+    },
+    {
+      "terminal_state": "PGGGGPGPPPGGGPP",
+      "terminal_index": 7262,
+      "lut_score": 0.0072135176,
+      "margin_over_epsilon": 0.0067135175,
+      "path_min_confidence": 1.0,
+      "oracle_gaps": 0,
+      "moves": [
+        {
+          "turn": 1,
+          "player": "us",
+          "edge": 1,
+          "color": "G"
+        },
+        {
+          "turn": 2,
+          "player": "opponent",
+          "edge": 0,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 3,
+          "player": "us",
+          "edge": 6,
+          "color": "G"
+        },
+        {
+          "turn": 4,
+          "player": "opponent",
+          "edge": 2,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 5,
+          "player": "us",
+          "edge": 3,
+          "color": "G"
+        },
+        {
+          "turn": 6,
+          "player": "opponent",
+          "edge": 4,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 7,
+          "player": "us",
+          "edge": 5,
+          "color": "P"
+        },
+        {
+          "turn": 8,
+          "player": "opponent",
+          "edge": 9,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 9,
+          "player": "us",
+          "edge": 10,
+          "color": "G"
+        },
+        {
+          "turn": 10,
+          "player": "opponent",
+          "edge": 12,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 11,
+          "player": "us",
+          "edge": 13,
+          "color": "P"
+        },
+        {
+          "turn": 12,
+          "player": "opponent",
+          "edge": 7,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 13,
+          "player": "us",
+          "edge": 8,
+          "color": "P"
+        },
+        {
+          "turn": 14,
+          "player": "opponent",
+          "edge": 11,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 15,
+          "player": "us",
+          "edge": 14,
+          "color": "P"
+        }
+      ]
+    },
+    {
+      "terminal_state": "PGPGGPPGPPPGPPG",
+      "terminal_index": 18586,
+      "lut_score": 0.0071983156,
+      "margin_over_epsilon": 0.0066983155,
+      "path_min_confidence": 1.0,
+      "oracle_gaps": 0,
+      "moves": [
+        {
+          "turn": 1,
+          "player": "us",
+          "edge": 1,
+          "color": "G"
+        },
+        {
+          "turn": 2,
+          "player": "opponent",
+          "edge": 0,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 3,
+          "player": "us",
+          "edge": 3,
+          "color": "G"
+        },
+        {
+          "turn": 4,
+          "player": "opponent",
+          "edge": 2,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 5,
+          "player": "us",
+          "edge": 9,
+          "color": "P"
+        },
+        {
+          "turn": 6,
+          "player": "opponent",
+          "edge": 4,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 7,
+          "player": "us",
+          "edge": 5,
+          "color": "P"
+        },
+        {
+          "turn": 8,
+          "player": "opponent",
+          "edge": 10,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 9,
+          "player": "us",
+          "edge": 11,
+          "color": "G"
+        },
+        {
+          "turn": 10,
+          "player": "opponent",
+          "edge": 8,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 11,
+          "player": "us",
+          "edge": 13,
+          "color": "P"
+        },
+        {
+          "turn": 12,
+          "player": "opponent",
+          "edge": 6,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 13,
+          "player": "us",
+          "edge": 14,
+          "color": "G"
+        },
+        {
+          "turn": 14,
+          "player": "opponent",
+          "edge": 7,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 15,
+          "player": "us",
+          "edge": 12,
+          "color": "P"
+        }
+      ]
+    },
+    {
+      "terminal_state": "PPGPGGGGGPGGPPP",
+      "terminal_index": 3572,
+      "lut_score": 0.007068454,
+      "margin_over_epsilon": 0.0065684537,
+      "path_min_confidence": 0.6,
+      "oracle_gaps": 0,
+      "moves": [
+        {
+          "turn": 1,
+          "player": "us",
+          "edge": 0,
+          "color": "P"
+        },
+        {
+          "turn": 2,
+          "player": "opponent",
+          "edge": 1,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 3,
+          "player": "us",
+          "edge": 2,
+          "color": "G"
+        },
+        {
+          "turn": 4,
+          "player": "opponent",
+          "edge": 3,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 5,
+          "player": "us",
+          "edge": 4,
+          "color": "G"
+        },
+        {
+          "turn": 6,
+          "player": "opponent",
+          "edge": 5,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 7,
+          "player": "us",
+          "edge": 6,
+          "color": "G"
+        },
+        {
+          "turn": 8,
+          "player": "opponent",
+          "edge": 9,
+          "color": "P",
+          "oracle_confidence": 0.6
+        },
+        {
+          "turn": 9,
+          "player": "us",
+          "edge": 10,
+          "color": "G"
+        },
+        {
+          "turn": 10,
+          "player": "opponent",
+          "edge": 7,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 11,
+          "player": "us",
+          "edge": 13,
+          "color": "P"
+        },
+        {
+          "turn": 12,
+          "player": "opponent",
+          "edge": 12,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 13,
+          "player": "us",
+          "edge": 11,
+          "color": "G"
+        },
+        {
+          "turn": 14,
+          "player": "opponent",
+          "edge": 14,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 15,
+          "player": "us",
+          "edge": 8,
+          "color": "G"
+        }
+      ]
+    },
+    {
+      "terminal_state": "PGPGGPPPPPPGPPG",
+      "terminal_index": 18458,
+      "lut_score": 0.0068233777,
+      "margin_over_epsilon": 0.0063233776,
+      "path_min_confidence": 1.0,
+      "oracle_gaps": 0,
+      "moves": [
+        {
+          "turn": 1,
+          "player": "us",
+          "edge": 1,
+          "color": "G"
+        },
+        {
+          "turn": 2,
+          "player": "opponent",
+          "edge": 0,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 3,
+          "player": "us",
+          "edge": 3,
+          "color": "G"
+        },
+        {
+          "turn": 4,
+          "player": "opponent",
+          "edge": 2,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 5,
+          "player": "us",
+          "edge": 14,
+          "color": "G"
+        },
+        {
+          "turn": 6,
+          "player": "opponent",
+          "edge": 5,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 7,
+          "player": "us",
+          "edge": 4,
+          "color": "G"
+        },
+        {
+          "turn": 8,
+          "player": "opponent",
+          "edge": 9,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 9,
+          "player": "us",
+          "edge": 11,
+          "color": "G"
+        },
+        {
+          "turn": 10,
+          "player": "opponent",
+          "edge": 6,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 11,
+          "player": "us",
+          "edge": 13,
+          "color": "P"
+        },
+        {
+          "turn": 12,
+          "player": "opponent",
+          "edge": 8,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 13,
+          "player": "us",
+          "edge": 7,
+          "color": "P"
+        },
+        {
+          "turn": 14,
+          "player": "opponent",
+          "edge": 10,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 15,
+          "player": "us",
+          "edge": 12,
+          "color": "P"
+        }
+      ]
+    },
+    {
+      "terminal_state": "PGPGPPPPGGPPPPG",
+      "terminal_index": 17162,
+      "lut_score": 0.0067177573,
+      "margin_over_epsilon": 0.0062177572,
+      "path_min_confidence": 0.94545454,
+      "oracle_gaps": 0,
+      "moves": [
+        {
+          "turn": 1,
+          "player": "us",
+          "edge": 1,
+          "color": "G"
+        },
+        {
+          "turn": 2,
+          "player": "opponent",
+          "edge": 0,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 3,
+          "player": "us",
+          "edge": 3,
+          "color": "G"
+        },
+        {
+          "turn": 4,
+          "player": "opponent",
+          "edge": 2,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 5,
+          "player": "us",
+          "edge": 8,
+          "color": "G"
+        },
+        {
+          "turn": 6,
+          "player": "opponent",
+          "edge": 4,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 7,
+          "player": "us",
+          "edge": 5,
+          "color": "P"
+        },
+        {
+          "turn": 8,
+          "player": "opponent",
+          "edge": 11,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 9,
+          "player": "us",
+          "edge": 13,
+          "color": "P"
+        },
+        {
+          "turn": 10,
+          "player": "opponent",
+          "edge": 6,
+          "color": "P",
+          "oracle_confidence": 0.94545454
+        },
+        {
+          "turn": 11,
+          "player": "us",
+          "edge": 14,
+          "color": "G"
+        },
+        {
+          "turn": 12,
+          "player": "opponent",
+          "edge": 9,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 13,
+          "player": "us",
+          "edge": 12,
+          "color": "P"
+        },
+        {
+          "turn": 14,
+          "player": "opponent",
+          "edge": 7,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 15,
+          "player": "us",
+          "edge": 10,
+          "color": "P"
+        }
+      ]
+    },
+    {
+      "terminal_state": "PPGGPGGGPGGGGPP",
+      "terminal_index": 7916,
+      "lut_score": 0.006612796,
+      "margin_over_epsilon": 0.006112796,
+      "path_min_confidence": 0.6666667,
+      "oracle_gaps": 0,
+      "moves": [
+        {
+          "turn": 1,
+          "player": "us",
+          "edge": 0,
+          "color": "P"
+        },
+        {
+          "turn": 2,
+          "player": "opponent",
+          "edge": 1,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 3,
+          "player": "us",
+          "edge": 9,
+          "color": "G"
+        },
+        {
+          "turn": 4,
+          "player": "opponent",
+          "edge": 2,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 5,
+          "player": "us",
+          "edge": 10,
+          "color": "G"
+        },
+        {
+          "turn": 6,
+          "player": "opponent",
+          "edge": 12,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 7,
+          "player": "us",
+          "edge": 11,
+          "color": "G"
+        },
+        {
+          "turn": 8,
+          "player": "opponent",
+          "edge": 5,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 9,
+          "player": "us",
+          "edge": 13,
+          "color": "P"
+        },
+        {
+          "turn": 10,
+          "player": "opponent",
+          "edge": 14,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 11,
+          "player": "us",
+          "edge": 4,
+          "color": "P"
+        },
+        {
+          "turn": 12,
+          "player": "opponent",
+          "edge": 3,
+          "color": "G",
+          "oracle_confidence": 0.6666667
+        },
+        {
+          "turn": 13,
+          "player": "us",
+          "edge": 8,
+          "color": "P"
+        },
+        {
+          "turn": 14,
+          "player": "opponent",
+          "edge": 6,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 15,
+          "player": "us",
+          "edge": 7,
+          "color": "G"
+        }
+      ]
+    },
+    {
+      "terminal_state": "PGGGGPPGGPGGGPP",
+      "terminal_index": 7582,
+      "lut_score": 0.0065453686,
+      "margin_over_epsilon": 0.0060453685,
+      "path_min_confidence": 1.0,
+      "oracle_gaps": 0,
+      "moves": [
+        {
+          "turn": 1,
+          "player": "us",
+          "edge": 1,
+          "color": "G"
+        },
+        {
+          "turn": 2,
+          "player": "opponent",
+          "edge": 0,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 3,
+          "player": "us",
+          "edge": 7,
+          "color": "G"
+        },
+        {
+          "turn": 4,
+          "player": "opponent",
+          "edge": 2,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 5,
+          "player": "us",
+          "edge": 3,
+          "color": "G"
+        },
+        {
+          "turn": 6,
+          "player": "opponent",
+          "edge": 4,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 7,
+          "player": "us",
+          "edge": 5,
+          "color": "P"
+        },
+        {
+          "turn": 8,
+          "player": "opponent",
+          "edge": 9,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 9,
+          "player": "us",
+          "edge": 10,
+          "color": "G"
+        },
+        {
+          "turn": 10,
+          "player": "opponent",
+          "edge": 12,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 11,
+          "player": "us",
+          "edge": 13,
+          "color": "P"
+        },
+        {
+          "turn": 12,
+          "player": "opponent",
+          "edge": 6,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 13,
+          "player": "us",
+          "edge": 14,
+          "color": "P"
+        },
+        {
+          "turn": 14,
+          "player": "opponent",
+          "edge": 8,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 15,
+          "player": "us",
+          "edge": 11,
+          "color": "G"
+        }
+      ]
+    },
+    {
+      "terminal_state": "PGGPPPPGPGGGGPG",
+      "terminal_index": 24198,
+      "lut_score": 0.0065142955,
+      "margin_over_epsilon": 0.0060142954,
+      "path_min_confidence": 0.5,
+      "oracle_gaps": 1,
+      "moves": [
+        {
+          "turn": 1,
+          "player": "us",
+          "edge": 1,
+          "color": "G"
+        },
+        {
+          "turn": 2,
+          "player": "opponent",
+          "edge": 0,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 3,
+          "player": "us",
+          "edge": 9,
+          "color": "G"
+        },
+        {
+          "turn": 4,
+          "player": "opponent",
+          "edge": 2,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 5,
+          "player": "us",
+          "edge": 10,
+          "color": "G"
+        },
+        {
+          "turn": 6,
+          "player": "opponent",
+          "edge": 12,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 7,
+          "player": "us",
+          "edge": 11,
+          "color": "G"
+        },
+        {
+          "turn": 8,
+          "player": "opponent",
+          "edge": 8,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 9,
+          "player": "us",
+          "edge": 5,
+          "color": "P"
+        },
+        {
+          "turn": 10,
+          "player": "opponent",
+          "edge": 4,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 11,
+          "player": "us",
+          "edge": 13,
+          "color": "P"
+        },
+        {
+          "turn": 12,
+          "player": "opponent",
+          "edge": 3,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 13,
+          "player": "us",
+          "edge": 7,
+          "color": "G"
+        },
+        {
+          "turn": 14,
+          "player": "opponent",
+          "edge": 6,
+          "color": "P"
+        },
+        {
+          "turn": 15,
+          "player": "us",
+          "edge": 14,
+          "color": "G"
+        }
+      ]
+    },
+    {
+      "terminal_state": "GPGPGGPPGGGGGPP",
+      "terminal_index": 7989,
+      "lut_score": 0.006290633,
+      "margin_over_epsilon": 0.005790633,
+      "path_min_confidence": 1.0,
+      "oracle_gaps": 0,
+      "moves": [
+        {
+          "turn": 1,
+          "player": "us",
+          "edge": 10,
+          "color": "G"
+        },
+        {
+          "turn": 2,
+          "player": "opponent",
+          "edge": 12,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 3,
+          "player": "us",
+          "edge": 0,
+          "color": "G"
+        },
+        {
+          "turn": 4,
+          "player": "opponent",
+          "edge": 1,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 5,
+          "player": "us",
+          "edge": 2,
+          "color": "G"
+        },
+        {
+          "turn": 6,
+          "player": "opponent",
+          "edge": 3,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 7,
+          "player": "us",
+          "edge": 4,
+          "color": "G"
+        },
+        {
+          "turn": 8,
+          "player": "opponent",
+          "edge": 5,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 9,
+          "player": "us",
+          "edge": 9,
+          "color": "G"
+        },
+        {
+          "turn": 10,
+          "player": "opponent",
+          "edge": 6,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 11,
+          "player": "us",
+          "edge": 13,
+          "color": "P"
+        },
+        {
+          "turn": 12,
+          "player": "opponent",
+          "edge": 7,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 13,
+          "player": "us",
+          "edge": 11,
+          "color": "G"
+        },
+        {
+          "turn": 14,
+          "player": "opponent",
+          "edge": 14,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 15,
+          "player": "us",
+          "edge": 8,
+          "color": "G"
+        }
+      ]
+    },
+    {
+      "terminal_state": "GPPPPGPPGPPGGPG",
+      "terminal_index": 22817,
+      "lut_score": 0.0060241884,
+      "margin_over_epsilon": 0.0055241883,
+      "path_min_confidence": 1.0,
+      "oracle_gaps": 0,
+      "moves": [
+        {
+          "turn": 1,
+          "player": "us",
+          "edge": 10,
+          "color": "P"
+        },
+        {
+          "turn": 2,
+          "player": "opponent",
+          "edge": 12,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 3,
+          "player": "us",
+          "edge": 0,
+          "color": "G"
+        },
+        {
+          "turn": 4,
+          "player": "opponent",
+          "edge": 1,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 5,
+          "player": "us",
+          "edge": 2,
+          "color": "P"
+        },
+        {
+          "turn": 6,
+          "player": "opponent",
+          "edge": 5,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 7,
+          "player": "us",
+          "edge": 3,
+          "color": "P"
+        },
+        {
+          "turn": 8,
+          "player": "opponent",
+          "edge": 4,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 9,
+          "player": "us",
+          "edge": 13,
+          "color": "P"
+        },
+        {
+          "turn": 10,
+          "player": "opponent",
+          "edge": 7,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 11,
+          "player": "us",
+          "edge": 11,
+          "color": "G"
+        },
+        {
+          "turn": 12,
+          "player": "opponent",
+          "edge": 9,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 13,
+          "player": "us",
+          "edge": 6,
+          "color": "P"
+        },
+        {
+          "turn": 14,
+          "player": "opponent",
+          "edge": 8,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 15,
+          "player": "us",
+          "edge": 14,
+          "color": "G"
+        }
+      ]
+    },
+    {
+      "terminal_state": "PGGPPPGPPGGGGPG",
+      "terminal_index": 24134,
+      "lut_score": 0.005982914,
+      "margin_over_epsilon": 0.005482914,
+      "path_min_confidence": 1.0,
+      "oracle_gaps": 0,
+      "moves": [
+        {
+          "turn": 1,
+          "player": "us",
+          "edge": 1,
+          "color": "G"
+        },
+        {
+          "turn": 2,
+          "player": "opponent",
+          "edge": 0,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 3,
+          "player": "us",
+          "edge": 2,
+          "color": "G"
+        },
+        {
+          "turn": 4,
+          "player": "opponent",
+          "edge": 3,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 5,
+          "player": "us",
+          "edge": 5,
+          "color": "P"
+        },
+        {
+          "turn": 6,
+          "player": "opponent",
+          "edge": 4,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 7,
+          "player": "us",
+          "edge": 6,
+          "color": "G"
+        },
+        {
+          "turn": 8,
+          "player": "opponent",
+          "edge": 7,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 9,
+          "player": "us",
+          "edge": 9,
+          "color": "G"
+        },
+        {
+          "turn": 10,
+          "player": "opponent",
+          "edge": 8,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 11,
+          "player": "us",
+          "edge": 10,
+          "color": "G"
+        },
+        {
+          "turn": 12,
+          "player": "opponent",
+          "edge": 12,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 13,
+          "player": "us",
+          "edge": 11,
+          "color": "G"
+        },
+        {
+          "turn": 14,
+          "player": "opponent",
+          "edge": 13,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 15,
+          "player": "us",
+          "edge": 14,
+          "color": "G"
+        }
+      ]
+    },
+    {
+      "terminal_state": "PGPPGGPPPGPGPPG",
+      "terminal_index": 18994,
+      "lut_score": 0.005161159,
+      "margin_over_epsilon": 0.004661159,
+      "path_min_confidence": 1.0,
+      "oracle_gaps": 0,
+      "moves": [
+        {
+          "turn": 1,
+          "player": "us",
+          "edge": 1,
+          "color": "G"
+        },
+        {
+          "turn": 2,
+          "player": "opponent",
+          "edge": 0,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 3,
+          "player": "us",
+          "edge": 2,
+          "color": "P"
+        },
+        {
+          "turn": 4,
+          "player": "opponent",
+          "edge": 4,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 5,
+          "player": "us",
+          "edge": 3,
+          "color": "P"
+        },
+        {
+          "turn": 6,
+          "player": "opponent",
+          "edge": 5,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 7,
+          "player": "us",
+          "edge": 6,
+          "color": "P"
+        },
+        {
+          "turn": 8,
+          "player": "opponent",
+          "edge": 7,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 9,
+          "player": "us",
+          "edge": 9,
+          "color": "G"
+        },
+        {
+          "turn": 10,
+          "player": "opponent",
+          "edge": 8,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 11,
+          "player": "us",
+          "edge": 11,
+          "color": "G"
+        },
+        {
+          "turn": 12,
+          "player": "opponent",
+          "edge": 10,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 13,
+          "player": "us",
+          "edge": 12,
+          "color": "P"
+        },
+        {
+          "turn": 14,
+          "player": "opponent",
+          "edge": 13,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 15,
+          "player": "us",
+          "edge": 14,
+          "color": "G"
+        }
+      ]
+    },
+    {
+      "terminal_state": "PPPGGPPGGPGGGPP",
+      "terminal_index": 7576,
+      "lut_score": 0.0048930314,
+      "margin_over_epsilon": 0.0043930314,
+      "path_min_confidence": 1.0,
+      "oracle_gaps": 0,
+      "moves": [
+        {
+          "turn": 1,
+          "player": "us",
+          "edge": 0,
+          "color": "P"
+        },
+        {
+          "turn": 2,
+          "player": "opponent",
+          "edge": 1,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 3,
+          "player": "us",
+          "edge": 14,
+          "color": "P"
+        },
+        {
+          "turn": 4,
+          "player": "opponent",
+          "edge": 2,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 5,
+          "player": "us",
+          "edge": 3,
+          "color": "G"
+        },
+        {
+          "turn": 6,
+          "player": "opponent",
+          "edge": 4,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 7,
+          "player": "us",
+          "edge": 5,
+          "color": "P"
+        },
+        {
+          "turn": 8,
+          "player": "opponent",
+          "edge": 9,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 9,
+          "player": "us",
+          "edge": 10,
+          "color": "G"
+        },
+        {
+          "turn": 10,
+          "player": "opponent",
+          "edge": 12,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 11,
+          "player": "us",
+          "edge": 13,
+          "color": "P"
+        },
+        {
+          "turn": 12,
+          "player": "opponent",
+          "edge": 6,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 13,
+          "player": "us",
+          "edge": 7,
+          "color": "G"
+        },
+        {
+          "turn": 14,
+          "player": "opponent",
+          "edge": 8,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 15,
+          "player": "us",
+          "edge": 11,
+          "color": "G"
+        }
+      ]
+    },
+    {
+      "terminal_state": "PPPGGPPPGPGGGPP",
+      "terminal_index": 7448,
+      "lut_score": 0.0046648467,
+      "margin_over_epsilon": 0.0041648466,
+      "path_min_confidence": 0.5,
+      "oracle_gaps": 1,
+      "moves": [
+        {
+          "turn": 1,
+          "player": "us",
+          "edge": 0,
+          "color": "P"
+        },
+        {
+          "turn": 2,
+          "player": "opponent",
+          "edge": 1,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 3,
+          "player": "us",
+          "edge": 14,
+          "color": "P"
+        },
+        {
+          "turn": 4,
+          "player": "opponent",
+          "edge": 2,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 5,
+          "player": "us",
+          "edge": 3,
+          "color": "G"
+        },
+        {
+          "turn": 6,
+          "player": "opponent",
+          "edge": 4,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 7,
+          "player": "us",
+          "edge": 5,
+          "color": "P"
+        },
+        {
+          "turn": 8,
+          "player": "opponent",
+          "edge": 9,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 9,
+          "player": "us",
+          "edge": 10,
+          "color": "G"
+        },
+        {
+          "turn": 10,
+          "player": "opponent",
+          "edge": 12,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 11,
+          "player": "us",
+          "edge": 13,
+          "color": "P"
+        },
+        {
+          "turn": 12,
+          "player": "opponent",
+          "edge": 6,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 13,
+          "player": "us",
+          "edge": 8,
+          "color": "G"
+        },
+        {
+          "turn": 14,
+          "player": "opponent",
+          "edge": 7,
+          "color": "P"
+        },
+        {
+          "turn": 15,
+          "player": "us",
+          "edge": 11,
+          "color": "G"
+        }
+      ]
+    },
+    {
+      "terminal_state": "PGPGGPPPPPPGGPP",
+      "terminal_index": 6170,
+      "lut_score": 0.0043491195,
+      "margin_over_epsilon": 0.0038491194,
+      "path_min_confidence": 0.5,
+      "oracle_gaps": 1,
+      "moves": [
+        {
+          "turn": 1,
+          "player": "us",
+          "edge": 1,
+          "color": "G"
+        },
+        {
+          "turn": 2,
+          "player": "opponent",
+          "edge": 0,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 3,
+          "player": "us",
+          "edge": 3,
+          "color": "G"
+        },
+        {
+          "turn": 4,
+          "player": "opponent",
+          "edge": 2,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 5,
+          "player": "us",
+          "edge": 9,
+          "color": "P"
+        },
+        {
+          "turn": 6,
+          "player": "opponent",
+          "edge": 4,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 7,
+          "player": "us",
+          "edge": 5,
+          "color": "P"
+        },
+        {
+          "turn": 8,
+          "player": "opponent",
+          "edge": 10,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 9,
+          "player": "us",
+          "edge": 11,
+          "color": "G"
+        },
+        {
+          "turn": 10,
+          "player": "opponent",
+          "edge": 8,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 11,
+          "player": "us",
+          "edge": 13,
+          "color": "P"
+        },
+        {
+          "turn": 12,
+          "player": "opponent",
+          "edge": 6,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 13,
+          "player": "us",
+          "edge": 7,
+          "color": "P"
+        },
+        {
+          "turn": 14,
+          "player": "opponent",
+          "edge": 12,
+          "color": "G"
+        },
+        {
+          "turn": 15,
+          "player": "us",
+          "edge": 14,
+          "color": "P"
+        }
+      ]
+    },
+    {
+      "terminal_state": "GPGGPPPPPPPGPPP",
+      "terminal_index": 2061,
+      "lut_score": 0.003614405,
+      "margin_over_epsilon": 0.0031144049,
+      "path_min_confidence": 1.0,
+      "oracle_gaps": 0,
+      "moves": [
+        {
+          "turn": 1,
+          "player": "us",
+          "edge": 11,
+          "color": "G"
+        },
+        {
+          "turn": 2,
+          "player": "opponent",
+          "edge": 2,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 3,
+          "player": "us",
+          "edge": 0,
+          "color": "G"
+        },
+        {
+          "turn": 4,
+          "player": "opponent",
+          "edge": 1,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 5,
+          "player": "us",
+          "edge": 3,
+          "color": "G"
+        },
+        {
+          "turn": 6,
+          "player": "opponent",
+          "edge": 4,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 7,
+          "player": "us",
+          "edge": 5,
+          "color": "P"
+        },
+        {
+          "turn": 8,
+          "player": "opponent",
+          "edge": 8,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 9,
+          "player": "us",
+          "edge": 12,
+          "color": "P"
+        },
+        {
+          "turn": 10,
+          "player": "opponent",
+          "edge": 10,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 11,
+          "player": "us",
+          "edge": 7,
+          "color": "P"
+        },
+        {
+          "turn": 12,
+          "player": "opponent",
+          "edge": 6,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 13,
+          "player": "us",
+          "edge": 9,
+          "color": "P"
+        },
+        {
+          "turn": 14,
+          "player": "opponent",
+          "edge": 13,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 15,
+          "player": "us",
+          "edge": 14,
+          "color": "P"
+        }
+      ]
+    },
+    {
+      "terminal_state": "PGPGGPPGPPGGGPG",
+      "terminal_index": 23706,
+      "lut_score": 0.0031975962,
+      "margin_over_epsilon": 0.002697596,
+      "path_min_confidence": 0.5,
+      "oracle_gaps": 1,
+      "moves": [
+        {
+          "turn": 1,
+          "player": "us",
+          "edge": 1,
+          "color": "G"
+        },
+        {
+          "turn": 2,
+          "player": "opponent",
+          "edge": 0,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 3,
+          "player": "us",
+          "edge": 3,
+          "color": "G"
+        },
+        {
+          "turn": 4,
+          "player": "opponent",
+          "edge": 2,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 5,
+          "player": "us",
+          "edge": 14,
+          "color": "G"
+        },
+        {
+          "turn": 6,
+          "player": "opponent",
+          "edge": 5,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 7,
+          "player": "us",
+          "edge": 4,
+          "color": "G"
+        },
+        {
+          "turn": 8,
+          "player": "opponent",
+          "edge": 9,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 9,
+          "player": "us",
+          "edge": 11,
+          "color": "G"
+        },
+        {
+          "turn": 10,
+          "player": "opponent",
+          "edge": 6,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 11,
+          "player": "us",
+          "edge": 13,
+          "color": "P"
+        },
+        {
+          "turn": 12,
+          "player": "opponent",
+          "edge": 8,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 13,
+          "player": "us",
+          "edge": 7,
+          "color": "G"
+        },
+        {
+          "turn": 14,
+          "player": "opponent",
+          "edge": 12,
+          "color": "G"
+        },
+        {
+          "turn": 15,
+          "player": "us",
+          "edge": 10,
+          "color": "G"
+        }
+      ]
+    },
+    {
+      "terminal_state": "PPGGPGGPPGGGGPP",
+      "terminal_index": 7788,
+      "lut_score": 0.0030915432,
+      "margin_over_epsilon": 0.0025915431,
+      "path_min_confidence": 0.6666667,
+      "oracle_gaps": 0,
+      "moves": [
+        {
+          "turn": 1,
+          "player": "us",
+          "edge": 0,
+          "color": "P"
+        },
+        {
+          "turn": 2,
+          "player": "opponent",
+          "edge": 1,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 3,
+          "player": "us",
+          "edge": 9,
+          "color": "G"
+        },
+        {
+          "turn": 4,
+          "player": "opponent",
+          "edge": 2,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 5,
+          "player": "us",
+          "edge": 10,
+          "color": "G"
+        },
+        {
+          "turn": 6,
+          "player": "opponent",
+          "edge": 12,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 7,
+          "player": "us",
+          "edge": 11,
+          "color": "G"
+        },
+        {
+          "turn": 8,
+          "player": "opponent",
+          "edge": 5,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 9,
+          "player": "us",
+          "edge": 13,
+          "color": "P"
+        },
+        {
+          "turn": 10,
+          "player": "opponent",
+          "edge": 14,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 11,
+          "player": "us",
+          "edge": 4,
+          "color": "P"
+        },
+        {
+          "turn": 12,
+          "player": "opponent",
+          "edge": 3,
+          "color": "G",
+          "oracle_confidence": 0.6666667
+        },
+        {
+          "turn": 13,
+          "player": "us",
+          "edge": 8,
+          "color": "P"
+        },
+        {
+          "turn": 14,
+          "player": "opponent",
+          "edge": 6,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 15,
+          "player": "us",
+          "edge": 7,
+          "color": "P"
+        }
+      ]
+    },
+    {
+      "terminal_state": "PGGPPPPPPGGGGPP",
+      "terminal_index": 7686,
+      "lut_score": 0.0030098367,
+      "margin_over_epsilon": 0.0025098366,
+      "path_min_confidence": 0.5,
+      "oracle_gaps": 1,
+      "moves": [
+        {
+          "turn": 1,
+          "player": "us",
+          "edge": 1,
+          "color": "G"
+        },
+        {
+          "turn": 2,
+          "player": "opponent",
+          "edge": 0,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 3,
+          "player": "us",
+          "edge": 9,
+          "color": "G"
+        },
+        {
+          "turn": 4,
+          "player": "opponent",
+          "edge": 2,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 5,
+          "player": "us",
+          "edge": 10,
+          "color": "G"
+        },
+        {
+          "turn": 6,
+          "player": "opponent",
+          "edge": 12,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 7,
+          "player": "us",
+          "edge": 11,
+          "color": "G"
+        },
+        {
+          "turn": 8,
+          "player": "opponent",
+          "edge": 8,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 9,
+          "player": "us",
+          "edge": 5,
+          "color": "P"
+        },
+        {
+          "turn": 10,
+          "player": "opponent",
+          "edge": 4,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 11,
+          "player": "us",
+          "edge": 13,
+          "color": "P"
+        },
+        {
+          "turn": 12,
+          "player": "opponent",
+          "edge": 3,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 13,
+          "player": "us",
+          "edge": 6,
+          "color": "P"
+        },
+        {
+          "turn": 14,
+          "player": "opponent",
+          "edge": 7,
+          "color": "P"
+        },
+        {
+          "turn": 15,
+          "player": "us",
+          "edge": 14,
+          "color": "P"
+        }
+      ]
+    },
+    {
+      "terminal_state": "PGPGGPPGPPPGGPP",
+      "terminal_index": 6298,
+      "lut_score": 0.002828441,
+      "margin_over_epsilon": 0.002328441,
+      "path_min_confidence": 0.5,
+      "oracle_gaps": 1,
+      "moves": [
+        {
+          "turn": 1,
+          "player": "us",
+          "edge": 1,
+          "color": "G"
+        },
+        {
+          "turn": 2,
+          "player": "opponent",
+          "edge": 0,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 3,
+          "player": "us",
+          "edge": 3,
+          "color": "G"
+        },
+        {
+          "turn": 4,
+          "player": "opponent",
+          "edge": 2,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 5,
+          "player": "us",
+          "edge": 9,
+          "color": "P"
+        },
+        {
+          "turn": 6,
+          "player": "opponent",
+          "edge": 4,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 7,
+          "player": "us",
+          "edge": 5,
+          "color": "P"
+        },
+        {
+          "turn": 8,
+          "player": "opponent",
+          "edge": 10,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 9,
+          "player": "us",
+          "edge": 11,
+          "color": "G"
+        },
+        {
+          "turn": 10,
+          "player": "opponent",
+          "edge": 8,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 11,
+          "player": "us",
+          "edge": 13,
+          "color": "P"
+        },
+        {
+          "turn": 12,
+          "player": "opponent",
+          "edge": 6,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 13,
+          "player": "us",
+          "edge": 7,
+          "color": "G"
+        },
+        {
+          "turn": 14,
+          "player": "opponent",
+          "edge": 12,
+          "color": "G"
+        },
+        {
+          "turn": 15,
+          "player": "us",
+          "edge": 14,
+          "color": "P"
+        }
+      ]
+    },
+    {
+      "terminal_state": "PPPGGPPPPPGPGPP",
+      "terminal_index": 5144,
+      "lut_score": 0.0025693118,
+      "margin_over_epsilon": 0.0020693117,
+      "path_min_confidence": 0.5,
+      "oracle_gaps": 1,
+      "moves": [
+        {
+          "turn": 1,
+          "player": "us",
+          "edge": 0,
+          "color": "P"
+        },
+        {
+          "turn": 2,
+          "player": "opponent",
+          "edge": 1,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 3,
+          "player": "us",
+          "edge": 14,
+          "color": "P"
+        },
+        {
+          "turn": 4,
+          "player": "opponent",
+          "edge": 2,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 5,
+          "player": "us",
+          "edge": 3,
+          "color": "G"
+        },
+        {
+          "turn": 6,
+          "player": "opponent",
+          "edge": 4,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 7,
+          "player": "us",
+          "edge": 5,
+          "color": "P"
+        },
+        {
+          "turn": 8,
+          "player": "opponent",
+          "edge": 9,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 9,
+          "player": "us",
+          "edge": 10,
+          "color": "G"
+        },
+        {
+          "turn": 10,
+          "player": "opponent",
+          "edge": 12,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 11,
+          "player": "us",
+          "edge": 13,
+          "color": "P"
+        },
+        {
+          "turn": 12,
+          "player": "opponent",
+          "edge": 6,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 13,
+          "player": "us",
+          "edge": 8,
+          "color": "P"
+        },
+        {
+          "turn": 14,
+          "player": "opponent",
+          "edge": 7,
+          "color": "P"
+        },
+        {
+          "turn": 15,
+          "player": "us",
+          "edge": 11,
+          "color": "P"
+        }
+      ]
+    },
+    {
+      "terminal_state": "PGPGPPPPGGGPPPG",
+      "terminal_index": 18186,
+      "lut_score": 0.0024777164,
+      "margin_over_epsilon": 0.0019777163,
+      "path_min_confidence": 0.94545454,
+      "oracle_gaps": 0,
+      "moves": [
+        {
+          "turn": 1,
+          "player": "us",
+          "edge": 1,
+          "color": "G"
+        },
+        {
+          "turn": 2,
+          "player": "opponent",
+          "edge": 0,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 3,
+          "player": "us",
+          "edge": 3,
+          "color": "G"
+        },
+        {
+          "turn": 4,
+          "player": "opponent",
+          "edge": 2,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 5,
+          "player": "us",
+          "edge": 8,
+          "color": "G"
+        },
+        {
+          "turn": 6,
+          "player": "opponent",
+          "edge": 4,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 7,
+          "player": "us",
+          "edge": 5,
+          "color": "P"
+        },
+        {
+          "turn": 8,
+          "player": "opponent",
+          "edge": 11,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 9,
+          "player": "us",
+          "edge": 13,
+          "color": "P"
+        },
+        {
+          "turn": 10,
+          "player": "opponent",
+          "edge": 6,
+          "color": "P",
+          "oracle_confidence": 0.94545454
+        },
+        {
+          "turn": 11,
+          "player": "us",
+          "edge": 14,
+          "color": "G"
+        },
+        {
+          "turn": 12,
+          "player": "opponent",
+          "edge": 9,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 13,
+          "player": "us",
+          "edge": 12,
+          "color": "P"
+        },
+        {
+          "turn": 14,
+          "player": "opponent",
+          "edge": 7,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 15,
+          "player": "us",
+          "edge": 10,
+          "color": "G"
+        }
+      ]
+    },
+    {
+      "terminal_state": "PGGPPPPGPGGGGPP",
+      "terminal_index": 7814,
+      "lut_score": 0.0022850817,
+      "margin_over_epsilon": 0.0017850816,
+      "path_min_confidence": 0.5,
+      "oracle_gaps": 1,
+      "moves": [
+        {
+          "turn": 1,
+          "player": "us",
+          "edge": 1,
+          "color": "G"
+        },
+        {
+          "turn": 2,
+          "player": "opponent",
+          "edge": 0,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 3,
+          "player": "us",
+          "edge": 9,
+          "color": "G"
+        },
+        {
+          "turn": 4,
+          "player": "opponent",
+          "edge": 2,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 5,
+          "player": "us",
+          "edge": 10,
+          "color": "G"
+        },
+        {
+          "turn": 6,
+          "player": "opponent",
+          "edge": 12,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 7,
+          "player": "us",
+          "edge": 11,
+          "color": "G"
+        },
+        {
+          "turn": 8,
+          "player": "opponent",
+          "edge": 8,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 9,
+          "player": "us",
+          "edge": 5,
+          "color": "P"
+        },
+        {
+          "turn": 10,
+          "player": "opponent",
+          "edge": 4,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 11,
+          "player": "us",
+          "edge": 13,
+          "color": "P"
+        },
+        {
+          "turn": 12,
+          "player": "opponent",
+          "edge": 3,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 13,
+          "player": "us",
+          "edge": 7,
+          "color": "G"
+        },
+        {
+          "turn": 14,
+          "player": "opponent",
+          "edge": 6,
+          "color": "P"
+        },
+        {
+          "turn": 15,
+          "player": "us",
+          "edge": 14,
+          "color": "P"
+        }
+      ]
+    },
+    {
+      "terminal_state": "PGPPGGPPPGPGPPP",
+      "terminal_index": 2610,
+      "lut_score": 0.0022293017,
+      "margin_over_epsilon": 0.0017293016,
+      "path_min_confidence": 1.0,
+      "oracle_gaps": 0,
+      "moves": [
+        {
+          "turn": 1,
+          "player": "us",
+          "edge": 1,
+          "color": "G"
+        },
+        {
+          "turn": 2,
+          "player": "opponent",
+          "edge": 0,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 3,
+          "player": "us",
+          "edge": 2,
+          "color": "P"
+        },
+        {
+          "turn": 4,
+          "player": "opponent",
+          "edge": 4,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 5,
+          "player": "us",
+          "edge": 3,
+          "color": "P"
+        },
+        {
+          "turn": 6,
+          "player": "opponent",
+          "edge": 5,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 7,
+          "player": "us",
+          "edge": 6,
+          "color": "P"
+        },
+        {
+          "turn": 8,
+          "player": "opponent",
+          "edge": 7,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 9,
+          "player": "us",
+          "edge": 9,
+          "color": "G"
+        },
+        {
+          "turn": 10,
+          "player": "opponent",
+          "edge": 8,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 11,
+          "player": "us",
+          "edge": 11,
+          "color": "G"
+        },
+        {
+          "turn": 12,
+          "player": "opponent",
+          "edge": 10,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 13,
+          "player": "us",
+          "edge": 12,
+          "color": "P"
+        },
+        {
+          "turn": 14,
+          "player": "opponent",
+          "edge": 13,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 15,
+          "player": "us",
+          "edge": 14,
+          "color": "P"
+        }
+      ]
+    },
+    {
+      "terminal_state": "PGPGGPPPPPGGGPG",
+      "terminal_index": 23578,
+      "lut_score": 0.00213102,
+      "margin_over_epsilon": 0.0016310199,
+      "path_min_confidence": 0.5,
+      "oracle_gaps": 1,
+      "moves": [
+        {
+          "turn": 1,
+          "player": "us",
+          "edge": 1,
+          "color": "G"
+        },
+        {
+          "turn": 2,
+          "player": "opponent",
+          "edge": 0,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 3,
+          "player": "us",
+          "edge": 3,
+          "color": "G"
+        },
+        {
+          "turn": 4,
+          "player": "opponent",
+          "edge": 2,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 5,
+          "player": "us",
+          "edge": 14,
+          "color": "G"
+        },
+        {
+          "turn": 6,
+          "player": "opponent",
+          "edge": 5,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 7,
+          "player": "us",
+          "edge": 4,
+          "color": "G"
+        },
+        {
+          "turn": 8,
+          "player": "opponent",
+          "edge": 9,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 9,
+          "player": "us",
+          "edge": 11,
+          "color": "G"
+        },
+        {
+          "turn": 10,
+          "player": "opponent",
+          "edge": 6,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 11,
+          "player": "us",
+          "edge": 13,
+          "color": "P"
+        },
+        {
+          "turn": 12,
+          "player": "opponent",
+          "edge": 8,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 13,
+          "player": "us",
+          "edge": 10,
+          "color": "G"
+        },
+        {
+          "turn": 14,
+          "player": "opponent",
+          "edge": 7,
+          "color": "P"
+        },
+        {
+          "turn": 15,
+          "player": "us",
+          "edge": 12,
+          "color": "G"
+        }
+      ]
+    },
+    {
+      "terminal_state": "PPPGPPGGPPGPGPG",
+      "terminal_index": 21704,
+      "lut_score": 0.0019884552,
+      "margin_over_epsilon": 0.0014884551,
+      "path_min_confidence": 1.0,
+      "oracle_gaps": 0,
+      "moves": [
+        {
+          "turn": 1,
+          "player": "us",
+          "edge": 0,
+          "color": "P"
+        },
+        {
+          "turn": 2,
+          "player": "opponent",
+          "edge": 1,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 3,
+          "player": "us",
+          "edge": 4,
+          "color": "P"
+        },
+        {
+          "turn": 4,
+          "player": "opponent",
+          "edge": 2,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 5,
+          "player": "us",
+          "edge": 3,
+          "color": "G"
+        },
+        {
+          "turn": 6,
+          "player": "opponent",
+          "edge": 5,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 7,
+          "player": "us",
+          "edge": 6,
+          "color": "G"
+        },
+        {
+          "turn": 8,
+          "player": "opponent",
+          "edge": 7,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 9,
+          "player": "us",
+          "edge": 13,
+          "color": "P"
+        },
+        {
+          "turn": 10,
+          "player": "opponent",
+          "edge": 9,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 11,
+          "player": "us",
+          "edge": 10,
+          "color": "G"
+        },
+        {
+          "turn": 12,
+          "player": "opponent",
+          "edge": 12,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 13,
+          "player": "us",
+          "edge": 8,
+          "color": "P"
+        },
+        {
+          "turn": 14,
+          "player": "opponent",
+          "edge": 11,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 15,
+          "player": "us",
+          "edge": 14,
+          "color": "G"
+        }
+      ]
+    },
+    {
+      "terminal_state": "PPPGGPPGGPGPGPP",
+      "terminal_index": 5528,
+      "lut_score": 0.0019884552,
+      "margin_over_epsilon": 0.0014884551,
+      "path_min_confidence": 1.0,
+      "oracle_gaps": 0,
+      "moves": [
+        {
+          "turn": 1,
+          "player": "us",
+          "edge": 0,
+          "color": "P"
+        },
+        {
+          "turn": 2,
+          "player": "opponent",
+          "edge": 1,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 3,
+          "player": "us",
+          "edge": 14,
+          "color": "P"
+        },
+        {
+          "turn": 4,
+          "player": "opponent",
+          "edge": 2,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 5,
+          "player": "us",
+          "edge": 3,
+          "color": "G"
+        },
+        {
+          "turn": 6,
+          "player": "opponent",
+          "edge": 4,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 7,
+          "player": "us",
+          "edge": 5,
+          "color": "P"
+        },
+        {
+          "turn": 8,
+          "player": "opponent",
+          "edge": 9,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 9,
+          "player": "us",
+          "edge": 10,
+          "color": "G"
+        },
+        {
+          "turn": 10,
+          "player": "opponent",
+          "edge": 12,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 11,
+          "player": "us",
+          "edge": 13,
+          "color": "P"
+        },
+        {
+          "turn": 12,
+          "player": "opponent",
+          "edge": 6,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 13,
+          "player": "us",
+          "edge": 7,
+          "color": "G"
+        },
+        {
+          "turn": 14,
+          "player": "opponent",
+          "edge": 8,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 15,
+          "player": "us",
+          "edge": 11,
+          "color": "P"
+        }
+      ]
+    },
+    {
+      "terminal_state": "PGPGGPPPPPPGPPP",
+      "terminal_index": 2074,
+      "lut_score": 0.0019691712,
+      "margin_over_epsilon": 0.0014691711,
+      "path_min_confidence": 0.5,
+      "oracle_gaps": 1,
+      "moves": [
+        {
+          "turn": 1,
+          "player": "us",
+          "edge": 1,
+          "color": "G"
+        },
+        {
+          "turn": 2,
+          "player": "opponent",
+          "edge": 0,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 3,
+          "player": "us",
+          "edge": 3,
+          "color": "G"
+        },
+        {
+          "turn": 4,
+          "player": "opponent",
+          "edge": 2,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 5,
+          "player": "us",
+          "edge": 9,
+          "color": "P"
+        },
+        {
+          "turn": 6,
+          "player": "opponent",
+          "edge": 4,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 7,
+          "player": "us",
+          "edge": 5,
+          "color": "P"
+        },
+        {
+          "turn": 8,
+          "player": "opponent",
+          "edge": 10,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 9,
+          "player": "us",
+          "edge": 11,
+          "color": "G"
+        },
+        {
+          "turn": 10,
+          "player": "opponent",
+          "edge": 8,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 11,
+          "player": "us",
+          "edge": 13,
+          "color": "P"
+        },
+        {
+          "turn": 12,
+          "player": "opponent",
+          "edge": 6,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 13,
+          "player": "us",
+          "edge": 12,
+          "color": "P"
+        },
+        {
+          "turn": 14,
+          "player": "opponent",
+          "edge": 7,
+          "color": "P"
+        },
+        {
+          "turn": 15,
+          "player": "us",
+          "edge": 14,
+          "color": "P"
+        }
+      ]
+    },
+    {
+      "terminal_state": "PPPGGPPPPPGGGPP",
+      "terminal_index": 7192,
+      "lut_score": 0.0019691712,
+      "margin_over_epsilon": 0.0014691711,
+      "path_min_confidence": 0.5,
+      "oracle_gaps": 1,
+      "moves": [
+        {
+          "turn": 1,
+          "player": "us",
+          "edge": 0,
+          "color": "P"
+        },
+        {
+          "turn": 2,
+          "player": "opponent",
+          "edge": 1,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 3,
+          "player": "us",
+          "edge": 14,
+          "color": "P"
+        },
+        {
+          "turn": 4,
+          "player": "opponent",
+          "edge": 2,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 5,
+          "player": "us",
+          "edge": 3,
+          "color": "G"
+        },
+        {
+          "turn": 6,
+          "player": "opponent",
+          "edge": 4,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 7,
+          "player": "us",
+          "edge": 5,
+          "color": "P"
+        },
+        {
+          "turn": 8,
+          "player": "opponent",
+          "edge": 9,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 9,
+          "player": "us",
+          "edge": 10,
+          "color": "G"
+        },
+        {
+          "turn": 10,
+          "player": "opponent",
+          "edge": 12,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 11,
+          "player": "us",
+          "edge": 13,
+          "color": "P"
+        },
+        {
+          "turn": 12,
+          "player": "opponent",
+          "edge": 6,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 13,
+          "player": "us",
+          "edge": 8,
+          "color": "P"
+        },
+        {
+          "turn": 14,
+          "player": "opponent",
+          "edge": 7,
+          "color": "P"
+        },
+        {
+          "turn": 15,
+          "player": "us",
+          "edge": 11,
+          "color": "G"
+        }
+      ]
+    },
+    {
+      "terminal_state": "GPGPGGPPPGGGGPP",
+      "terminal_index": 7733,
+      "lut_score": 0.0014858494,
+      "margin_over_epsilon": 0.0009858494,
+      "path_min_confidence": 1.0,
+      "oracle_gaps": 0,
+      "moves": [
+        {
+          "turn": 1,
+          "player": "us",
+          "edge": 10,
+          "color": "G"
+        },
+        {
+          "turn": 2,
+          "player": "opponent",
+          "edge": 12,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 3,
+          "player": "us",
+          "edge": 0,
+          "color": "G"
+        },
+        {
+          "turn": 4,
+          "player": "opponent",
+          "edge": 1,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 5,
+          "player": "us",
+          "edge": 2,
+          "color": "G"
+        },
+        {
+          "turn": 6,
+          "player": "opponent",
+          "edge": 3,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 7,
+          "player": "us",
+          "edge": 4,
+          "color": "G"
+        },
+        {
+          "turn": 8,
+          "player": "opponent",
+          "edge": 5,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 9,
+          "player": "us",
+          "edge": 9,
+          "color": "G"
+        },
+        {
+          "turn": 10,
+          "player": "opponent",
+          "edge": 6,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 11,
+          "player": "us",
+          "edge": 13,
+          "color": "P"
+        },
+        {
+          "turn": 12,
+          "player": "opponent",
+          "edge": 7,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 13,
+          "player": "us",
+          "edge": 11,
+          "color": "G"
+        },
+        {
+          "turn": 14,
+          "player": "opponent",
+          "edge": 14,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 15,
+          "player": "us",
+          "edge": 8,
+          "color": "P"
+        }
+      ]
+    },
+    {
+      "terminal_state": "PGPPGGPPPGPGGPP",
+      "terminal_index": 6706,
+      "lut_score": 0.0014225852,
+      "margin_over_epsilon": 0.0009225852,
+      "path_min_confidence": 0.5,
+      "oracle_gaps": 1,
+      "moves": [
+        {
+          "turn": 1,
+          "player": "us",
+          "edge": 1,
+          "color": "G"
+        },
+        {
+          "turn": 2,
+          "player": "opponent",
+          "edge": 0,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 3,
+          "player": "us",
+          "edge": 2,
+          "color": "P"
+        },
+        {
+          "turn": 4,
+          "player": "opponent",
+          "edge": 4,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 5,
+          "player": "us",
+          "edge": 3,
+          "color": "P"
+        },
+        {
+          "turn": 6,
+          "player": "opponent",
+          "edge": 5,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 7,
+          "player": "us",
+          "edge": 6,
+          "color": "P"
+        },
+        {
+          "turn": 8,
+          "player": "opponent",
+          "edge": 7,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 9,
+          "player": "us",
+          "edge": 9,
+          "color": "G"
+        },
+        {
+          "turn": 10,
+          "player": "opponent",
+          "edge": 8,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 11,
+          "player": "us",
+          "edge": 11,
+          "color": "G"
+        },
+        {
+          "turn": 12,
+          "player": "opponent",
+          "edge": 10,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 13,
+          "player": "us",
+          "edge": 13,
+          "color": "P"
+        },
+        {
+          "turn": 14,
+          "player": "opponent",
+          "edge": 12,
+          "color": "G"
+        },
+        {
+          "turn": 15,
+          "player": "us",
+          "edge": 14,
+          "color": "P"
+        }
+      ]
+    }
+  ],
+  "near_miss_routes": [
+    {
+      "terminal_state": "PGPGGGPGPGPPPGP",
+      "terminal_index": 8890,
+      "lut_score": 0.00010728785,
+      "margin_over_epsilon": -0.0003927122,
+      "path_min_confidence": 1.0,
+      "oracle_gaps": 0,
+      "moves": [
+        {
+          "turn": 1,
+          "player": "us",
+          "edge": 1,
+          "color": "G"
+        },
+        {
+          "turn": 2,
+          "player": "opponent",
+          "edge": 0,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 3,
+          "player": "us",
+          "edge": 2,
+          "color": "P"
+        },
+        {
+          "turn": 4,
+          "player": "opponent",
+          "edge": 4,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 5,
+          "player": "us",
+          "edge": 3,
+          "color": "G"
+        },
+        {
+          "turn": 6,
+          "player": "opponent",
+          "edge": 5,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 7,
+          "player": "us",
+          "edge": 13,
+          "color": "G"
+        },
+        {
+          "turn": 8,
+          "player": "opponent",
+          "edge": 6,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 9,
+          "player": "us",
+          "edge": 9,
+          "color": "G"
+        },
+        {
+          "turn": 10,
+          "player": "opponent",
+          "edge": 7,
+          "color": "G",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 11,
+          "player": "us",
+          "edge": 12,
+          "color": "P"
+        },
+        {
+          "turn": 12,
+          "player": "opponent",
+          "edge": 10,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 13,
+          "player": "us",
+          "edge": 14,
+          "color": "P"
+        },
+        {
+          "turn": 14,
+          "player": "opponent",
+          "edge": 8,
+          "color": "P",
+          "oracle_confidence": 1.0
+        },
+        {
+          "turn": 15,
+          "player": "us",
+          "edge": 11,
+          "color": "P"
+        }
+      ]
+    }
+  ]
+}
