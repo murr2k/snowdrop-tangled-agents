@@ -9,6 +9,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Empirical Closure of the Petersen Graph Under Quantum Adjudication** (`docs/EMPIRICAL_CLOSURE_OF_THE_PETERSEN_GRAPH_UNDER_QUANTUM_ADJUDICATION.md`)
+  - Formal writeup of the empirical negative result: 0 wins across 120 diverse terminal states against AlphaQ
+  - Documents polarity inversion between SA and quantum adjudication (r = -0.396, p < 0.0001)
+  - Statistical confidence analysis: 95% confidence winning terminals < 2.5% of reachable space
+  - Sampling bias caveat: classical strategies may be unable to reach non-classical winning states
+  - Falsifiability framework and formal proof requirements (complete enumeration, game tree analysis, symmetry reduction)
+  - 35 references grounding the work in quantum annealing, order-by-disorder, graph theory, and quantum game theory
+  - References Geordie Rose's Tangled blog, $10,000 AlphaQ Up Challenge, and D-Wave adjudication methodology
+
+- **Empirical LUT Construction Campaign** (`docs/EMPIRICAL_LUT_CONSTRUCTION_RESULTS.md`)
+  - Results from 65 games (48 oracle routes + 17 terminal explorer) testing website-calibrated LUT
+  - Confirms AlphaQ zero-loss equilibrium: max website score +0.861, far below +2 threshold
+  - SA polarity inversion quantified: SA [+2,+10) maps to website avg -1.3 to -2.5
+  - Tools created: `build_website_lut.py`, `terminal_explorer_strategy.py`, route cycling mode
+
+- **Strategy Analysis Documents** (`docs/POST_SA_LUT_STRATEGY_OPTIONS.md`, `docs/HIGH_COMPUTE_STRATEGY_OPTIONS.md`)
+  - 8 strategy alternatives after SA LUT proven anti-correlated with quantum evaluation
+  - High-compute options for GPU + MATLAB + multi-core environments
+  - Phased approach: exhaustive mapping (9-17 days) then conditional AlphaZero (42 days)
+  - Resource allocation for parallel execution of multiple approaches
+
+- **Website-Calibrated LUT Builder** (`snowdrop_tangled_agents/tools/build_website_lut.py`)
+  - Mines calibration table for empirical terminal state scores from game database
+  - Outputs website_scores.bin (32,768 x f32 LE) with NaN for unobserved states
+  - Correlation and compression analysis, score distribution reporting
+
+- **Terminal Explorer Strategy** (`snowdrop_tangled_agents/strategy/terminal_explorer_strategy.py`)
+  - Systematic round-robin through all 30 possible openings (15 edges x 2 colors)
+  - MCTS fallback for mid-game, designed to maximize terminal state diversity
+
+- **Oracle Route Cycling** (`snowdrop_tangled_agents/strategy/oracle_route_strategy.py`)
+  - Added `route_mode` parameter: `fixed` (default) or `cycle` (round-robin through all routes)
+  - `--route-mode` and `--routes-file` CLI arguments in `play_tangled.py`
+
 - **Parallel MCTS Rollouts via `parfor`** (`TangledMCTS.m`)
   - The parallel pool of 6 workers was allocated (~900MB each, 5.4GB total) but never used — no
     `parfor` existed in the file and all rollouts ran serially on the main thread

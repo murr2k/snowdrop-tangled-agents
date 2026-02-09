@@ -642,8 +642,33 @@ poetry run python play_tangled.py \
 See `docs/EXPERIMENT_OPENING_RE_EXPLORATION.md` for the full experiment design,
 calibration analysis, and expected results.
 
+### 14. Empirical Closure of the Petersen Graph Under Quantum Adjudication (February 2026)
+
+A formal investigation into whether AlphaQ Up can be defeated on the Petersen graph.
+
+**Key findings:**
+
+- **0 wins across 120 diverse terminal states** against AlphaQ, from 2,436+ game observations
+- **SA polarity inversion**: Simulated annealing scores are anti-correlated (r = -0.396) with the website's quantum adjudicator against AlphaQ -- states the SA LUT predicts as wins are actually losses
+- **AlphaQ zero-loss equilibrium**: Max observed website score +0.861, far below the +2 win threshold. AlphaQ's policy restricts the reachable terminal state basin to [-8.8, +0.9]
+- **Statistical confidence**: 95% confidence that winning terminals comprise < 2.5% of the reachable state space (binomial model)
+- **Sampling bias caveat**: Classical strategies may be biased toward classically accessible regions; winning terminals may exist only in non-classical portions of the state space
+
+The analysis is grounded in 35 references spanning quantum annealing theory (Kadowaki & Nishimori 1998), order-by-disorder phenomena (Villain et al. 1980), Petersen graph symmetry (Schmidt 2018), and Geordie Rose's Tangled game design and $10,000 AlphaQ Up Challenge.
+
+**Tools created during this investigation:**
+- `tools/build_website_lut.py` -- empirical website-calibrated LUT builder
+- `strategy/terminal_explorer_strategy.py` -- diversity-maximizing terminal state exploration
+- Oracle route cycling mode (`--route-mode cycle`)
+
+See `docs/EMPIRICAL_CLOSURE_OF_THE_PETERSEN_GRAPH_UNDER_QUANTUM_ADJUDICATION.md` for the full paper.
+
 ### Documentation
 
+- `docs/EMPIRICAL_CLOSURE_OF_THE_PETERSEN_GRAPH_UNDER_QUANTUM_ADJUDICATION.md` - Formal paper on the empirical negative result against AlphaQ
+- `docs/EMPIRICAL_LUT_CONSTRUCTION_RESULTS.md` - Campaign results: 65 games, SA polarity inversion data
+- `docs/HIGH_COMPUTE_STRATEGY_OPTIONS.md` - GPU + MATLAB strategy options for unlimited compute
+- `docs/POST_SA_LUT_STRATEGY_OPTIONS.md` - Strategy alternatives after SA LUT proven anti-correlated
 - `docs/DEPENDENCY_REPOSITORIES.md` - Complete documentation of the three dependency repos (game engine, adjudicators, tangled-adjudicate)
 - `docs/ALPHAQ_STRATEGY.md` - Thompson Sampling mathematical foundation, test results, reproduction guide
 - `docs/THEORY_OF_OPERATION.md` - Comprehensive system documentation
