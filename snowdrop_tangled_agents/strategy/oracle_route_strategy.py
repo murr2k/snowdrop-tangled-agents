@@ -26,15 +26,18 @@ class OracleRouteStrategy:
         routes_path: str = "oracle-solver/output/oracle_routes.json",
         fallback_strategy=None,
         route_index: int = 0,
+        route_mode: str = "fixed",
     ):
         self.routes_path = Path(routes_path)
         self.fallback_strategy = fallback_strategy
         self.preferred_route_index = route_index
+        self.route_mode = route_mode  # 'fixed' or 'cycle'
         self.routes = []
         self.active_route = None
         self.our_move_index = 0  # Which of our moves we're on (0-based)
         self.last_state = None
         self.deviated = False
+        self.games_played = 0
 
         self._load_routes()
 
@@ -250,8 +253,16 @@ class OracleRouteStrategy:
                 self.active_route["terminal_state"],
                 self.active_route["lut_score"],
             )
+        self.games_played += 1
+
         # Reset for next game
         self.our_move_index = 0
         self.deviated = False
         self.last_state = None
-        self._select_route(self.preferred_route_index)
+
+        if self.route_mode == "cycle" and self.routes:
+            next_index = self.games_played % len(self.routes)
+            logger.info("Cycling to route %d/%d", next_index + 1, len(self.routes))
+            self._select_route(next_index)
+        else:
+            self._select_route(self.preferred_route_index)

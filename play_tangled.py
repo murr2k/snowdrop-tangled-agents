@@ -137,6 +137,7 @@ signal.signal(signal.SIGINT, _signal_handler)
 from snowdrop_tangled_agents.strategy.petersen_strategy import PetersenStrategy
 from snowdrop_tangled_agents.strategy.mcts_strategy import MCTSStrategy, HybridStrategy, evaluate_terminal_state
 from snowdrop_tangled_agents.strategy.oracle_route_strategy import OracleRouteStrategy
+from snowdrop_tangled_agents.strategy.terminal_explorer_strategy import TerminalExplorerStrategy
 from snowdrop_tangled_agents.stats import get_collector, queries as stats_queries, GameMetricsTracker
 from snowdrop_tangled_agents.stats import get_publisher, StatsPublisher
 from snowdrop_tangled_agents.stats.session_stats import get_session_stats, get_run_stats
@@ -513,6 +514,8 @@ class WebPlayer:
         use_nn: bool = True,
         adapt_opponent: bool = True,
         opening_mode: Optional[str] = None,
+        route_mode: Optional[str] = None,
+        routes_file: Optional[str] = None,
     ):
         self.username = os.getenv("TANGLED_USERNAME")
         self.password = os.getenv("TANGLED_PASSWORD")
@@ -524,6 +527,10 @@ class WebPlayer:
         self._use_nn = use_nn
         self._adapt_opponent = adapt_opponent
         self._opening_mode = opening_mode
+
+        # Oracle route options
+        self._oracle_route_mode = route_mode or 'fixed'
+        self._oracle_routes_file = routes_file
 
         self.playwright = None
         self.browser = None
@@ -651,13 +658,22 @@ class WebPlayer:
                     opening_mode=opening_mode or 'forced',
                 )
         elif strategy_type == "oracle_route":
-            oracle_routes_path = Path(__file__).parent / "oracle-solver" / "output" / "oracle_routes.json"
+            routes_file = getattr(self, '_oracle_routes_file', None) or "oracle_routes.json"
+            oracle_routes_path = Path(__file__).parent / "oracle-solver" / "output" / routes_file
             fallback = MCTSStrategy(time_limit=float('inf'), max_iterations=mcts_iterations)
             route_index = getattr(self, '_oracle_route_index', 6)  # Route 7 (best confidence)
+            route_mode = getattr(self, '_oracle_route_mode', 'fixed')
             self.strategy = OracleRouteStrategy(
                 routes_path=str(oracle_routes_path),
                 fallback_strategy=fallback,
                 route_index=route_index,
+                route_mode=route_mode,
+            )
+        elif strategy_type == "terminal_explorer":
+            fallback = MCTSStrategy(time_limit=float('inf'), max_iterations=mcts_iterations)
+            self.strategy = TerminalExplorerStrategy(
+                fallback_strategy=fallback,
+                randomize_midgame=True,
             )
         else:  # "heuristic" (default)
             self.strategy = PetersenStrategy(params_path=self.params_path)
@@ -2125,7 +2141,7 @@ def main():
     parser.add_argument("--debug", action="store_true")
     parser.add_argument("--keep-open", "-k", type=int, default=5,
                         help="Seconds to keep browser open after last game (0 to close immediately)")
-    parser.add_argument("--strategy", "-s", choices=["heuristic", "mcts", "hybrid", "matlab", "rl", "ensemble", "matlab_mcts", "hybrid_solver", "amara_explorer", "amara_killer", "melissa_killer", "alphaq_explorer", "oracle_route"], default="hybrid_solver",
+    parser.add_argument("--strategy", "-s", choices=["heuristic", "mcts", "hybrid", "matlab", "rl", "ensemble", "matlab_mcts", "hybrid_solver", "amara_explorer", "amara_killer", "melissa_killer", "alphaq_explorer", "oracle_route", "terminal_explorer"], default="hybrid_solver",
                         help="Strategy to use: hybrid_solver (DEFAULT: D-Wave inspired minimax+MCTS+learning), alphaq_explorer (explore/exploit vs AlphaQ Up with closed learning loop), amara_killer (uses E14P against Amara), melissa_killer (cycles E12P/E13P against Melissa - 40%% win rate), amara_explorer (cycles all 30 openings), hybrid (MCTS with opening), mcts (Monte Carlo, 30s/move), heuristic (fast), matlab (MATLAB-enhanced), rl (trained PPO), ensemble (RL + MC rollouts), matlab_mcts (MATLAB MCTS)")
     parser.add_argument("--mcts-time", type=float, default=float('inf'),
                         help="MCTS time limit per move in seconds (default unlimited)")
@@ -2165,6 +2181,13 @@ def main():
                         help="Use neural network priors with matlab strategy")
     parser.add_argument("--adapt-opponent", action="store_true",
                         help="Adapt play style to opponent with matlab strategy")
+    parser.add_argument("--route-mode", choices=["fixed", "cycle"], default="fixed",
+                        help="Oracle route selection mode: fixed (always same route) or "
+                             "cycle (round-robin through all routes for terminal state discovery)")
+    parser.add_argument("--routes-file", type=str, default=None,
+                        help="Oracle routes JSON filename in oracle-solver/output/ "
+                             "(default: oracle_routes.json, use website_oracle_routes.json for "
+                             "website-calibrated routes)")
 
     args = parser.parse_args()
 
@@ -2389,6 +2412,8 @@ def main():
             use_nn=args.use_nn,
             adapt_opponent=args.adapt_opponent,
             opening_mode=getattr(args, 'opening_mode', None),
+            route_mode=getattr(args, 'route_mode', None),
+            routes_file=getattr(args, 'routes_file', None),
         ) as player:
             player.login()
 
