@@ -919,11 +919,23 @@ class StatsCollector:
         Returns:
             Tuple of (run_id, next_game_number)
         """
-        # Look for incomplete runs by this PID first, then any incomplete run
-        # with matching parameters (allows resuming after reboot with new PID)
+        # Look for incomplete run by this PID first (reconnecting to own run)
         active = self.get_active_run(pid=os.getpid())
+
+        # If no own-PID run, look for an orphaned run (owner PID is dead)
+        # This enables resume-after-reboot without stealing live sessions' runs
         if not active:
-            active = self.get_active_run()
+            candidate = self.get_active_run()
+            if candidate and candidate.get('pid'):
+                # Check if the owning process is still alive
+                try:
+                    os.kill(candidate['pid'], 0)  # signal 0 = check existence
+                    # Process is alive - don't steal its run
+                    candidate = None
+                except OSError:
+                    # Process is dead - safe to claim this orphaned run
+                    pass
+            active = candidate
 
         if active:
             # Check if parameters match - if not, start a new run
