@@ -791,7 +791,10 @@ class StatsCollector:
         planned_games: int,
         description: Optional[str] = None,
         strategy: Optional[str] = None,
-        opponent: Optional[str] = None
+        opponent: Optional[str] = None,
+        seat: int = 1,
+        random_turns: Optional[str] = None,
+        novel_branch: bool = False,
     ) -> int:
         """
         Start a new run (batch of planned games).
@@ -801,18 +804,24 @@ class StatsCollector:
             description: Optional description of the run
             strategy: Strategy being used
             opponent: Opponent being played
+            seat: Player seat (1 or 2)
+            random_turns: Comma-separated random turn indices (e.g. "0,2,4")
+            novel_branch: Whether novel branch forcing is enabled
 
         Returns:
             Run ID
         """
         with connect_db(self.db_path) as conn:
             cursor = conn.execute("""
-                INSERT INTO runs (planned_games, description, strategy, opponent, pid)
-                VALUES (?, ?, ?, ?, ?)
-            """, (planned_games, description, strategy, opponent, os.getpid()))
+                INSERT INTO runs (planned_games, description, strategy, opponent, pid,
+                                  seat, random_turns, novel_branch)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (planned_games, description, strategy, opponent, os.getpid(),
+                  seat, random_turns, 1 if novel_branch else 0))
             conn.commit()
             run_id = cursor.lastrowid
-            logger.info(f"Started run {run_id}: {planned_games} games planned")
+            logger.info(f"Started run {run_id}: {planned_games} games planned "
+                        f"(seat={seat}, random_turns={random_turns}, novel_branch={novel_branch})")
             return run_id
 
     def get_active_run(self, pid: Optional[int] = None) -> Optional[Dict[str, Any]]:
@@ -902,66 +911,65 @@ class StatsCollector:
         self,
         planned_games: int,
         strategy: Optional[str] = None,
-        opponent: Optional[str] = None
+        opponent: Optional[str] = None,
+        seat: int = 1,
+        random_turns: Optional[str] = None,
+        novel_branch: bool = False,
     ) -> tuple[int, int]:
         """
-        Get active run or create a new one.
+        Get active run matching config or create a new one.
 
-        If an active run exists but has different parameters (strategy or opponent),
-        a new run is started instead of resuming. This ensures each unique
-        configuration gets its own run for proper tracking.
+        Multiple instances with the same config share the same run.
+        Each unique (strategy, opponent, planned_games, seat, random_turns,
+        novel_branch) configuration gets its own run.
 
         Args:
-            planned_games: Total games planned (used for new run)
+            planned_games: Total games planned
             strategy: Strategy being used
             opponent: Opponent being played
+            seat: Player seat (1 or 2)
+            random_turns: Comma-separated random turn indices
+            novel_branch: Whether novel branch forcing is enabled
 
         Returns:
             Tuple of (run_id, next_game_number)
         """
-        # Look for incomplete run by this PID first (reconnecting to own run)
-        active = self.get_active_run(pid=os.getpid())
+        novel_int = 1 if novel_branch else 0
 
-        # If no own-PID run, look for an orphaned run (owner PID is dead)
-        # This enables resume-after-reboot without stealing live sessions' runs
-        if not active:
-            candidate = self.get_active_run()
-            if candidate and candidate.get('pid'):
-                # Check if the owning process is still alive
-                try:
-                    os.kill(candidate['pid'], 0)  # signal 0 = check existence
-                    # Process is alive - don't steal its run
-                    candidate = None
-                except OSError:
-                    # Process is dead - safe to claim this orphaned run
-                    pass
-            active = candidate
+        # Find an incomplete run with exactly matching config
+        with connect_db(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.execute("""
+                SELECT * FROM runs
+                WHERE completed_games < planned_games
+                    AND strategy = ?
+                    AND opponent = ?
+                    AND planned_games = ?
+                    AND COALESCE(seat, 1) = ?
+                    AND COALESCE(random_turns, '') = ?
+                    AND COALESCE(novel_branch, 0) = ?
+                ORDER BY started DESC
+                LIMIT 1
+            """, (strategy, opponent, planned_games, seat,
+                  random_turns or '', novel_int))
+            active = cursor.fetchone()
+            if active:
+                active = dict(active)
 
         if active:
-            # Check if parameters match - if not, start a new run
-            active_strategy = active.get('strategy')
-            active_opponent = active.get('opponent')
-
-            if active_strategy != strategy or active_opponent != opponent:
-                logger.info(
-                    f"Active run {active['id']} has different parameters "
-                    f"(strategy={active_strategy}, opponent={active_opponent}) vs "
-                    f"(strategy={strategy}, opponent={opponent}) - starting new run"
-                )
-            else:
-                # Parameters match - resume existing run, claim it with our PID
-                run_id = active['id']
-                with connect_db(self.db_path) as conn:
-                    conn.execute("UPDATE runs SET pid = ? WHERE id = ?", (os.getpid(), run_id))
-                    conn.commit()
-                game_number = self.get_next_game_number(run_id)
-                logger.info(f"Resuming run {run_id}: game {game_number}/{active['planned_games']}")
-                return run_id, game_number
+            run_id = active['id']
+            game_number = self.get_next_game_number(run_id)
+            logger.info(f"Joining run {run_id}: game {game_number}/{active['planned_games']} "
+                        f"(seat={seat}, random_turns={random_turns}, novel_branch={novel_branch})")
+            return run_id, game_number
 
         run_id = self.start_run(
             planned_games=planned_games,
             strategy=strategy,
-            opponent=opponent
+            opponent=opponent,
+            seat=seat,
+            random_turns=random_turns,
+            novel_branch=novel_branch,
         )
         return run_id, 1
 

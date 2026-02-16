@@ -2385,6 +2385,11 @@ def main():
     from snowdrop_tangled_agents.stats import get_collector
     stats_collector = get_collector()
 
+    # Normalize random_turns for DB storage (canonical sorted comma-separated string)
+    random_turns_str = None
+    if args.random_turns:
+        random_turns_str = ','.join(str(x) for x in sorted(int(x.strip()) for x in args.random_turns.split(',')))
+
     # Determine run info - always create a run for tracking
     planned_games = args.run if args.run else args.games
     if args.run:
@@ -2392,7 +2397,10 @@ def main():
         run_id, start_game_number = stats_collector.get_or_create_run(
             planned_games=args.run,
             strategy=args.strategy,
-            opponent=args.opponent
+            opponent=args.opponent,
+            seat=args.seat,
+            random_turns=random_turns_str,
+            novel_branch=args.novel_branch,
         )
         run_info = stats_collector.get_run(run_id)
         total_planned = run_info['planned_games']
@@ -2402,7 +2410,10 @@ def main():
         run_id = stats_collector.start_run(
             planned_games=planned_games,
             strategy=args.strategy,
-            opponent=args.opponent
+            opponent=args.opponent,
+            seat=args.seat,
+            random_turns=random_turns_str,
+            novel_branch=args.novel_branch,
         )
         start_game_number = 1
         total_planned = planned_games
@@ -2446,8 +2457,8 @@ def main():
         # Create player and play games
         # Parse random-turns into a set of ints
         random_turns = None
-        if args.random_turns:
-            random_turns = {int(x.strip()) for x in args.random_turns.split(',')}
+        if random_turns_str:
+            random_turns = {int(x) for x in random_turns_str.split(',')}
 
         with WebPlayer(
             headless=args.headless,

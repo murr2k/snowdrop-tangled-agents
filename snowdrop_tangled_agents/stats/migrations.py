@@ -196,6 +196,16 @@ MIGRATIONS: List[Tuple[int, str, str]] = [
     (10, "Add pid column to runs for concurrent session isolation", """
         ALTER TABLE runs ADD COLUMN pid INTEGER;
     """),
+
+    # v11: Add game configuration columns to runs for differentiating launch types
+    (11, "Add seat, random_turns, novel_branch to runs for config tracking", """
+        ALTER TABLE runs ADD COLUMN seat INTEGER DEFAULT 1;
+        ALTER TABLE runs ADD COLUMN random_turns TEXT;
+        ALTER TABLE runs ADD COLUMN novel_branch INTEGER DEFAULT 0;
+
+        CREATE INDEX IF NOT EXISTS idx_runs_config
+            ON runs(strategy, opponent, seat, novel_branch);
+    """),
 ]
 
 
