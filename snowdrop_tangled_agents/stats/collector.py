@@ -11,6 +11,7 @@ Extended for MATLAB integration:
 """
 
 import json
+import os
 import sqlite3
 import uuid
 from datetime import datetime
@@ -24,6 +25,16 @@ logger = logging.getLogger(__name__)
 
 # Default database location
 DEFAULT_DB_PATH = Path.home() / ".tangled" / "game_stats.db"
+
+
+def connect_db(db_path=None):
+    """Create a SQLite connection with WAL mode and busy timeout for concurrent access."""
+    if db_path is None:
+        db_path = DEFAULT_DB_PATH
+    conn = sqlite3.connect(db_path)
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=30000")
+    return conn
 
 
 class StatsCollector:
@@ -66,7 +77,7 @@ class StatsCollector:
 
     def _init_database(self):
         """Create database tables if they don't exist and run migrations."""
-        with sqlite3.connect(self.db_path) as conn:
+        with connect_db(self.db_path) as conn:
             # Create base tables (v1 schema)
             conn.executescript("""
                 CREATE TABLE IF NOT EXISTS games (
@@ -175,7 +186,7 @@ class StatsCollector:
             model_games_learned = model_metrics.get('model_games_learned')
             model_moves_learned = model_metrics.get('model_moves_learned')
 
-        with sqlite3.connect(self.db_path) as conn:
+        with connect_db(self.db_path) as conn:
             conn.execute("""
                 INSERT INTO games (
                     id, opponent, graph, strategy, mcts_time,
@@ -231,7 +242,7 @@ class StatsCollector:
         # Extract solver stats if provided
         stats = solver_stats or {}
 
-        with sqlite3.connect(self.db_path) as conn:
+        with connect_db(self.db_path) as conn:
             conn.execute("""
                 INSERT OR REPLACE INTO moves
                 (game_id, move_number, player, edge, color, score_after,
@@ -308,7 +319,7 @@ class StatsCollector:
             model_top3_hit = model_metrics.get('model_top3_hit')
             prediction_accuracy = model_metrics.get('prediction_accuracy')
 
-        with sqlite3.connect(self.db_path) as conn:
+        with connect_db(self.db_path) as conn:
             # Count total moves
             cursor = conn.execute(
                 "SELECT COUNT(*) FROM moves WHERE game_id = ? AND player = 'us'",
@@ -362,7 +373,7 @@ class StatsCollector:
         error = predicted_score - website_score
         abs_error = abs(error)
 
-        with sqlite3.connect(self.db_path) as conn:
+        with connect_db(self.db_path) as conn:
             conn.execute("""
                 INSERT INTO calibration
                 (game_id, terminal_state, website_score, predicted_score, error, abs_error)
@@ -374,7 +385,7 @@ class StatsCollector:
 
     def get_game_count(self) -> dict:
         """Get count of games by result."""
-        with sqlite3.connect(self.db_path) as conn:
+        with connect_db(self.db_path) as conn:
             cursor = conn.execute("""
                 SELECT result, COUNT(*) as count
                 FROM games
@@ -392,7 +403,7 @@ class StatsCollector:
 
     def get_connection(self) -> sqlite3.Connection:
         """Get a database connection for custom queries."""
-        return sqlite3.connect(self.db_path)
+        return connect_db(self.db_path)
 
     # ========== Model Management Methods ==========
 
@@ -423,7 +434,7 @@ class StatsCollector:
         """
         hyperparams_json = json.dumps(hyperparameters) if hyperparameters else None
 
-        with sqlite3.connect(self.db_path) as conn:
+        with connect_db(self.db_path) as conn:
             # If setting active, deactivate other models of same type
             if set_active:
                 conn.execute(
@@ -453,7 +464,7 @@ class StatsCollector:
         Returns:
             Model info dict or None if no active model
         """
-        with sqlite3.connect(self.db_path) as conn:
+        with connect_db(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
             cursor = conn.execute("""
                 SELECT * FROM models WHERE type = ? AND active = 1
@@ -477,7 +488,7 @@ class StatsCollector:
         Returns:
             List of model info dicts
         """
-        with sqlite3.connect(self.db_path) as conn:
+        with connect_db(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
             if model_type:
                 cursor = conn.execute(
@@ -522,7 +533,7 @@ class StatsCollector:
         """
         features_json = json.dumps(features) if features else None
 
-        with sqlite3.connect(self.db_path) as conn:
+        with connect_db(self.db_path) as conn:
             # Check if opponent exists
             cursor = conn.execute(
                 "SELECT id, games_played FROM opponents WHERE name = ?",
@@ -562,7 +573,7 @@ class StatsCollector:
         Returns:
             Opponent info dict or None
         """
-        with sqlite3.connect(self.db_path) as conn:
+        with connect_db(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
             cursor = conn.execute(
                 "SELECT * FROM opponents WHERE name = ?",
@@ -587,7 +598,7 @@ class StatsCollector:
         Returns:
             List of opponent info dicts
         """
-        with sqlite3.connect(self.db_path) as conn:
+        with connect_db(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
             if cluster_id is not None:
                 cursor = conn.execute(
@@ -615,7 +626,7 @@ class StatsCollector:
             name: Opponent name
             won: Whether we won this game
         """
-        with sqlite3.connect(self.db_path) as conn:
+        with connect_db(self.db_path) as conn:
             # Get current stats
             cursor = conn.execute(
                 "SELECT games_played, win_rate FROM opponents WHERE name = ?",
@@ -671,7 +682,7 @@ class StatsCollector:
             our_prev_edge: Our previous move's edge (if any)
             our_prev_color: Our previous move's color (if any)
         """
-        with sqlite3.connect(self.db_path) as conn:
+        with connect_db(self.db_path) as conn:
             conn.execute("""
                 INSERT OR REPLACE INTO opponent_history
                 (opponent_name, game_id, move_number, board_state_before,
@@ -713,7 +724,7 @@ class StatsCollector:
         features_json = json.dumps(features)
         policy_json = json.dumps(target_policy) if target_policy else None
 
-        with sqlite3.connect(self.db_path) as conn:
+        with connect_db(self.db_path) as conn:
             cursor = conn.execute("""
                 INSERT INTO training_data
                 (version, features, target_value, target_policy,
@@ -741,7 +752,7 @@ class StatsCollector:
         Returns:
             List of training sample dicts
         """
-        with sqlite3.connect(self.db_path) as conn:
+        with connect_db(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
 
             query = "SELECT * FROM training_data WHERE quality_score >= ?"
@@ -770,7 +781,7 @@ class StatsCollector:
 
     def get_migration_status(self) -> Dict[str, Any]:
         """Get database migration status."""
-        with sqlite3.connect(self.db_path) as conn:
+        with connect_db(self.db_path) as conn:
             return get_migration_status(conn)
 
     # ========== Run Management Methods ==========
@@ -794,31 +805,43 @@ class StatsCollector:
         Returns:
             Run ID
         """
-        with sqlite3.connect(self.db_path) as conn:
+        with connect_db(self.db_path) as conn:
             cursor = conn.execute("""
-                INSERT INTO runs (planned_games, description, strategy, opponent)
-                VALUES (?, ?, ?, ?)
-            """, (planned_games, description, strategy, opponent))
+                INSERT INTO runs (planned_games, description, strategy, opponent, pid)
+                VALUES (?, ?, ?, ?, ?)
+            """, (planned_games, description, strategy, opponent, os.getpid()))
             conn.commit()
             run_id = cursor.lastrowid
             logger.info(f"Started run {run_id}: {planned_games} games planned")
             return run_id
 
-    def get_active_run(self) -> Optional[Dict[str, Any]]:
+    def get_active_run(self, pid: Optional[int] = None) -> Optional[Dict[str, Any]]:
         """
-        Get the most recent incomplete run.
+        Get the most recent incomplete run, optionally filtered by PID.
+
+        Args:
+            pid: Process ID to filter by. If provided, only returns runs
+                 started by this PID. If None, returns any incomplete run.
 
         Returns:
             Run info dict or None if no active run
         """
-        with sqlite3.connect(self.db_path) as conn:
+        with connect_db(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
-            cursor = conn.execute("""
-                SELECT * FROM runs
-                WHERE completed_games < planned_games
-                ORDER BY started DESC
-                LIMIT 1
-            """)
+            if pid is not None:
+                cursor = conn.execute("""
+                    SELECT * FROM runs
+                    WHERE completed_games < planned_games AND pid = ?
+                    ORDER BY started DESC
+                    LIMIT 1
+                """, (pid,))
+            else:
+                cursor = conn.execute("""
+                    SELECT * FROM runs
+                    WHERE completed_games < planned_games
+                    ORDER BY started DESC
+                    LIMIT 1
+                """)
             row = cursor.fetchone()
             return dict(row) if row else None
 
@@ -832,7 +855,7 @@ class StatsCollector:
         Returns:
             Run info dict or None
         """
-        with sqlite3.connect(self.db_path) as conn:
+        with connect_db(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
             cursor = conn.execute(
                 "SELECT * FROM runs WHERE id = ?",
@@ -851,7 +874,7 @@ class StatsCollector:
         Returns:
             Next game number (1-based)
         """
-        with sqlite3.connect(self.db_path) as conn:
+        with connect_db(self.db_path) as conn:
             cursor = conn.execute(
                 "SELECT COALESCE(MAX(game_number), 0) + 1 FROM games WHERE run_id = ?",
                 (run_id,)
@@ -865,7 +888,7 @@ class StatsCollector:
         Args:
             run_id: Run ID
         """
-        with sqlite3.connect(self.db_path) as conn:
+        with connect_db(self.db_path) as conn:
             conn.execute("""
                 UPDATE runs SET completed_games = (
                     SELECT COUNT(*) FROM games
@@ -896,7 +919,11 @@ class StatsCollector:
         Returns:
             Tuple of (run_id, next_game_number)
         """
-        active = self.get_active_run()
+        # Look for incomplete runs by this PID first, then any incomplete run
+        # with matching parameters (allows resuming after reboot with new PID)
+        active = self.get_active_run(pid=os.getpid())
+        if not active:
+            active = self.get_active_run()
 
         if active:
             # Check if parameters match - if not, start a new run
@@ -910,8 +937,11 @@ class StatsCollector:
                     f"(strategy={strategy}, opponent={opponent}) - starting new run"
                 )
             else:
-                # Parameters match - resume existing run
+                # Parameters match - resume existing run, claim it with our PID
                 run_id = active['id']
+                with connect_db(self.db_path) as conn:
+                    conn.execute("UPDATE runs SET pid = ? WHERE id = ?", (os.getpid(), run_id))
+                    conn.commit()
                 game_number = self.get_next_game_number(run_id)
                 logger.info(f"Resuming run {run_id}: game {game_number}/{active['planned_games']}")
                 return run_id, game_number
@@ -931,7 +961,7 @@ class StatsCollector:
             game_id: Game ID from start_game()
             reason: Reason for abandonment
         """
-        with sqlite3.connect(self.db_path) as conn:
+        with connect_db(self.db_path) as conn:
             conn.execute("""
                 UPDATE games
                 SET result = 'abandoned', notes = ?

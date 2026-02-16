@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Concurrent Game Sessions** (`play_tangled.py`, `snowdrop_tangled_agents/stats/`)
+  - Multiple independent `play_tangled.py` processes can now run simultaneously
+  - SQLite WAL mode + 30s busy timeout via `connect_db()` helper eliminates "database is locked" errors
+  - Per-PID process tracking in `~/.tangled/active_processes/` replaces single-process guard
+  - PID-based run isolation: each process gets its own `run_id`, with resume support after reboot
+  - Migration v10 adds `pid` column to `runs` table
+  - Exclusive transaction guard on schema migrations prevents race conditions
+  - PID-suffixed `opponent_model.mat` output avoids concurrent write conflicts
+  - `--process-status` shows all active sessions; `--kill-active` stops all
+
+- **Headless Mode** (`play_tangled.py`)
+  - `--headless` flag runs browser without visible window, useful for background campaigns
+
 - **Empirical Closure of the Petersen Graph Under Quantum Adjudication** (`docs/EMPIRICAL_CLOSURE_OF_THE_PETERSEN_GRAPH_UNDER_QUANTUM_ADJUDICATION.md`)
   - Formal writeup of the empirical negative result: 0 wins across 120 diverse terminal states against AlphaQ
   - Documents polarity inversion between SA and quantum adjudication (r = -0.396, p < 0.0001)

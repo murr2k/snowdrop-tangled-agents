@@ -50,54 +50,63 @@ class StuckOpponentError(Exception):
     pass
 
 
-# Process tracking for safe cleanup
-PROCESS_TRACKING_FILE = Path.home() / ".tangled" / "active_process.json"
+# Process tracking for safe cleanup (supports multiple concurrent sessions)
+PROCESS_TRACKING_DIR = Path.home() / ".tangled" / "active_processes"
 
 
-def register_process(run_id: int = None, planned_games: int = None):
-    """Register this process as the active game runner."""
-    PROCESS_TRACKING_FILE.parent.mkdir(parents=True, exist_ok=True)
+def register_process(run_id: int = None, planned_games: int = None,
+                     strategy: str = None, opponent: str = None):
+    """Register this process as an active game runner."""
+    PROCESS_TRACKING_DIR.mkdir(parents=True, exist_ok=True)
+    pid = os.getpid()
     info = {
-        "pid": os.getpid(),
+        "pid": pid,
         "started": datetime.now().isoformat(),
         "run_id": run_id,
         "planned_games": planned_games,
+        "strategy": strategy,
+        "opponent": opponent,
     }
-    with open(PROCESS_TRACKING_FILE, 'w') as f:
+    with open(PROCESS_TRACKING_DIR / f"{pid}.json", 'w') as f:
         json.dump(info, f)
 
 
 def unregister_process():
     """Remove this process from tracking."""
     try:
-        if PROCESS_TRACKING_FILE.exists():
-            with open(PROCESS_TRACKING_FILE, 'r') as f:
-                info = json.load(f)
-            # Only remove if it's our PID
-            if info.get("pid") == os.getpid():
-                PROCESS_TRACKING_FILE.unlink()
+        pid_file = PROCESS_TRACKING_DIR / f"{os.getpid()}.json"
+        if pid_file.exists():
+            pid_file.unlink()
     except Exception:
         pass
 
 
-def get_active_process() -> dict:
-    """Get info about the currently active game process, if any."""
-    try:
-        if PROCESS_TRACKING_FILE.exists():
-            with open(PROCESS_TRACKING_FILE, 'r') as f:
+def get_active_processes() -> list:
+    """Get info about all currently active game processes."""
+    results = []
+    if not PROCESS_TRACKING_DIR.exists():
+        return results
+    for pid_file in PROCESS_TRACKING_DIR.glob("*.json"):
+        try:
+            with open(pid_file, 'r') as f:
                 info = json.load(f)
-            # Check if process is still running
             pid = info.get("pid")
             if pid:
                 try:
                     os.kill(pid, 0)  # Check if process exists
-                    return info
+                    results.append(info)
                 except OSError:
                     # Process no longer running, clean up stale file
-                    PROCESS_TRACKING_FILE.unlink()
-    except Exception:
-        pass
-    return None
+                    pid_file.unlink()
+        except Exception:
+            pass
+    return results
+
+
+def get_active_process() -> dict:
+    """Get info about an active game process (backward compat). Returns first found."""
+    processes = get_active_processes()
+    return processes[0] if processes else None
 
 # Global reference for cleanup on signals
 _active_player = None
@@ -713,7 +722,11 @@ class WebPlayer:
             self._opponent_model_updates += 1
 
             # Re-export to .mat for MATLAB (every game for now)
-            self.opponent_model.save_mat()
+            # Use PID-suffixed path to avoid concurrent write conflicts
+            from pathlib import Path as _Path
+            mat_dir = _Path(__file__).parent / 'snowdrop_tangled_agents' / 'matlab' / 'rl' / 'data'
+            mat_path = mat_dir / f'opponent_model_{os.getpid()}.mat'
+            self.opponent_model.save_mat(mat_path)
             self.logger.debug(f"Opponent model updated: {self.opponent_model.total_moves} moves "
                             f"(update #{self._opponent_model_updates})")
         except Exception as e:
@@ -2138,6 +2151,7 @@ def main():
     parser.add_argument("--games", "-n", type=int, default=5)
     parser.add_argument("--run", "-r", type=int, help="Start/resume a run of N planned games (enables run tracking)")
     parser.add_argument("--slow-mo", type=int, default=100)
+    parser.add_argument("--headless", action="store_true", help="Run browser in headless mode (no visible window)")
     parser.add_argument("--debug", action="store_true")
     parser.add_argument("--keep-open", "-k", type=int, default=5,
                         help="Seconds to keep browser open after last game (0 to close immediately)")
@@ -2203,33 +2217,34 @@ def main():
 
     # If --process-status flag, show active process info and exit
     if args.process_status:
-        active = get_active_process()
-        if active:
-            print(f"Active game process:")
-            print(f"  PID: {active['pid']}")
-            print(f"  Started: {active['started']}")
-            print(f"  Run ID: {active.get('run_id')}")
-            print(f"  Planned games: {active.get('planned_games')}")
+        processes = get_active_processes()
+        if processes:
+            print(f"Active game processes ({len(processes)}):")
+            for p in processes:
+                print(f"  PID {p['pid']}: {p.get('strategy', '?')} vs {p.get('opponent', '?')}, "
+                      f"run {p.get('run_id')}, {p.get('planned_games')} planned, "
+                      f"started {p['started']}")
         else:
-            print("No active game process")
+            print("No active game processes")
         return
 
-    # If --kill-active flag, kill the active process and exit
+    # If --kill-active flag, kill active processes and exit
     if args.kill_active:
-        active = get_active_process()
-        if active:
-            pid = active['pid']
-            print(f"Killing process {pid}...")
-            try:
-                os.kill(pid, signal.SIGTERM)
-                print(f"Sent SIGTERM to PID {pid}")
-                # Clean up tracking file
-                if PROCESS_TRACKING_FILE.exists():
-                    PROCESS_TRACKING_FILE.unlink()
-            except OSError as e:
-                print(f"Failed to kill process: {e}")
+        processes = get_active_processes()
+        if processes:
+            for p in processes:
+                pid = p['pid']
+                print(f"Killing PID {pid} ({p.get('strategy', '?')} vs {p.get('opponent', '?')})...")
+                try:
+                    os.kill(pid, signal.SIGTERM)
+                    print(f"  Sent SIGTERM to PID {pid}")
+                    pid_file = PROCESS_TRACKING_DIR / f"{pid}.json"
+                    if pid_file.exists():
+                        pid_file.unlink()
+                except OSError as e:
+                    print(f"  Failed to kill PID {pid}: {e}")
         else:
-            print("No active game process to kill")
+            print("No active game processes to kill")
         return
 
     # If --training-status flag, show training system status and exit
@@ -2320,13 +2335,12 @@ def main():
     level = "DEBUG" if args.debug else "INFO"
     coloredlogs.install(level=level, fmt="%(asctime)s %(levelname)s %(message)s")
 
-    # Check for already running process
-    active = get_active_process()
-    if active:
-        print(f"WARNING: Another game process is running (PID {active['pid']}, started {active['started']})")
-        print(f"  Run ID: {active.get('run_id')}, Planned: {active.get('planned_games')}")
-        print("  Use 'kill' command to stop it if needed, or wait for it to finish.")
-        return
+    # Show other running sessions (informational, non-blocking)
+    other_processes = get_active_processes()
+    if other_processes:
+        print(f"Note: {len(other_processes)} other session(s) running:")
+        for p in other_processes:
+            print(f"  PID {p['pid']}: {p.get('strategy', '?')} vs {p.get('opponent', '?')}")
 
     # Check MATLAB availability and get user confirmation if unavailable
     if not check_matlab_availability():
@@ -2369,7 +2383,8 @@ def main():
         print(f"Run {run_id}: {total_planned} games planned")
 
     # Register this process for tracking
-    register_process(run_id=run_id, planned_games=total_planned)
+    register_process(run_id=run_id, planned_games=total_planned,
+                     strategy=args.strategy, opponent=args.opponent)
     atexit.register(unregister_process)
 
     # Initialize live stats publisher (if configured)
@@ -2404,7 +2419,7 @@ def main():
 
         # Create player and play games
         with WebPlayer(
-            headless=False,
+            headless=args.headless,
             slow_mo=args.slow_mo,
             strategy_type=args.strategy,
             mcts_time=args.mcts_time,

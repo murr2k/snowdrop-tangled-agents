@@ -257,7 +257,8 @@ class OpponentModel:
 
         logger.info(f"Loading opponent model from {db_path}")
 
-        conn = sqlite3.connect(db_path)
+        from .collector import connect_db
+        conn = connect_db(db_path)
         conn.row_factory = sqlite3.Row
 
         try:

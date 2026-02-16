@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Optional
 from dataclasses import dataclass
 
-from .collector import DEFAULT_DB_PATH, get_collector
+from .collector import DEFAULT_DB_PATH, get_collector, connect_db
 
 
 @dataclass
@@ -83,7 +83,7 @@ def get_edge_effectiveness(
     """
     params.append(min_games)
 
-    with sqlite3.connect(db_path) as conn:
+    with connect_db(db_path) as conn:
         cursor = conn.execute(query, params)
         results = []
         for row in cursor.fetchall():
@@ -147,7 +147,7 @@ def get_winning_patterns(
     """
     params.append(min_occurrences)
 
-    with sqlite3.connect(db_path) as conn:
+    with connect_db(db_path) as conn:
         cursor = conn.execute(query, params)
         results = []
         for row in cursor.fetchall():
@@ -199,7 +199,7 @@ def get_score_progression(
 
     query += " GROUP BY m.move_number ORDER BY m.move_number"
 
-    with sqlite3.connect(db_path) as conn:
+    with connect_db(db_path) as conn:
         cursor = conn.execute(query, params)
         return {
             row[0]: {'avg_score': row[1], 'count': row[2]}
@@ -253,7 +253,7 @@ def get_opening_sequences(
         ORDER BY (wins * 1.0 / COUNT(*)) DESC, occurrences DESC
     """
 
-    with sqlite3.connect(db_path) as conn:
+    with connect_db(db_path) as conn:
         cursor = conn.execute(query, (num_moves, min_occurrences))
         return [
             {
@@ -304,7 +304,7 @@ def get_critical_positions(
         LIMIT 50
     """
 
-    with sqlite3.connect(db_path) as conn:
+    with connect_db(db_path) as conn:
         cursor = conn.execute(query, (score_swing_threshold,))
         return [
             {
@@ -337,7 +337,7 @@ def get_opponent_patterns(
     """
     db_path = db_path or DEFAULT_DB_PATH
 
-    with sqlite3.connect(db_path) as conn:
+    with connect_db(db_path) as conn:
         # First move preferences
         cursor = conn.execute("""
             SELECT m.edge, m.color, COUNT(*) as count
@@ -413,7 +413,7 @@ def get_calibration_summary(db_path: Optional[Path] = None) -> dict:
     """
     db_path = db_path or DEFAULT_DB_PATH
 
-    with sqlite3.connect(db_path) as conn:
+    with connect_db(db_path) as conn:
         # Check if calibration table exists and has data
         cursor = conn.execute("""
             SELECT COUNT(*) FROM sqlite_master
@@ -483,7 +483,7 @@ def get_calibration_details(
     """
     db_path = db_path or DEFAULT_DB_PATH
 
-    with sqlite3.connect(db_path) as conn:
+    with connect_db(db_path) as conn:
         # Check if calibration table exists
         cursor = conn.execute("""
             SELECT COUNT(*) FROM sqlite_master

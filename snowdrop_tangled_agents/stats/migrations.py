@@ -191,6 +191,11 @@ MIGRATIONS: List[Tuple[int, str, str]] = [
         CREATE INDEX IF NOT EXISTS idx_games_opening_mode
             ON games(opening_mode);
     """),
+
+    # v10: Add PID to runs for concurrent session isolation
+    (10, "Add pid column to runs for concurrent session isolation", """
+        ALTER TABLE runs ADD COLUMN pid INTEGER;
+    """),
 ]
 
 
@@ -219,18 +224,22 @@ def create_version_table(conn: sqlite3.Connection):
     conn.commit()
 
 
-def record_migration(conn: sqlite3.Connection, version: int, description: str):
+def record_migration(conn: sqlite3.Connection, version: int, description: str, commit: bool = True):
     """Record a migration as applied."""
     conn.execute(
         "INSERT OR REPLACE INTO schema_version (version, description) VALUES (?, ?)",
         (version, description)
     )
-    conn.commit()
+    if commit:
+        conn.commit()
 
 
 def run_migrations(conn: sqlite3.Connection) -> int:
     """
     Run all pending migrations.
+
+    Uses an exclusive transaction to prevent concurrent processes from
+    racing to apply the same migrations simultaneously.
 
     Args:
         conn: SQLite database connection
@@ -239,20 +248,37 @@ def run_migrations(conn: sqlite3.Connection) -> int:
         Number of migrations applied
     """
     create_version_table(conn)
-    current_version = get_schema_version(conn)
-    migrations_applied = 0
 
-    for version, description, sql in MIGRATIONS:
-        if version > current_version:
-            logger.info(f"Applying migration v{version}: {description}")
-            try:
-                conn.executescript(sql)
-                record_migration(conn, version, description)
-                migrations_applied += 1
-                logger.info(f"Migration v{version} applied successfully")
-            except Exception as e:
-                logger.error(f"Migration v{version} failed: {e}")
-                raise
+    # Acquire exclusive lock so only one process runs migrations at a time
+    conn.execute("BEGIN EXCLUSIVE")
+    try:
+        current_version = get_schema_version(conn)
+        migrations_applied = 0
+
+        for version, description, sql in MIGRATIONS:
+            if version > current_version:
+                logger.info(f"Applying migration v{version}: {description}")
+                try:
+                    # executescript issues its own COMMIT, so we run statements individually
+                    for statement in sql.split(';'):
+                        statement = statement.strip()
+                        if statement:
+                            conn.execute(statement)
+                    record_migration(conn, version, description, commit=False)
+                    migrations_applied += 1
+                    logger.info(f"Migration v{version} applied successfully")
+                except Exception as e:
+                    logger.error(f"Migration v{version} failed: {e}")
+                    conn.rollback()
+                    raise
+
+        conn.commit()
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        raise
 
     if migrations_applied == 0:
         logger.debug(f"Database schema is up to date (v{current_version})")

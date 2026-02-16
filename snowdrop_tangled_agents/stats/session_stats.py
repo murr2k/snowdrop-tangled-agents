@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Optional
 import statistics
 
-from .collector import DEFAULT_DB_PATH
+from .collector import DEFAULT_DB_PATH, connect_db
 
 
 def utc_to_local(utc_str: str) -> datetime:
@@ -85,7 +85,7 @@ def get_session_boundary(db_path: Optional[Path] = None, gap_minutes: int = SESS
     """
     db_path = db_path or DEFAULT_DB_PATH
 
-    with sqlite3.connect(db_path) as conn:
+    with connect_db(db_path) as conn:
         cursor = conn.execute("""
             SELECT id, timestamp FROM games
             WHERE result IS NULL
@@ -150,7 +150,7 @@ def get_session_stats(db_path: Optional[Path] = None, gap_minutes: int = SESSION
     if session_start is None:
         return None
 
-    with sqlite3.connect(db_path) as conn:
+    with connect_db(db_path) as conn:
         cursor = conn.execute("""
             SELECT
                 id, timestamp, opponent, result, final_score, total_moves,
@@ -233,7 +233,7 @@ def get_run_stats(run_id: int, db_path: Optional[Path] = None) -> Optional[Sessi
     """
     db_path = db_path or DEFAULT_DB_PATH
 
-    with sqlite3.connect(db_path) as conn:
+    with connect_db(db_path) as conn:
         # First get run info
         cursor = conn.execute(
             "SELECT planned_games, completed_games, started FROM runs WHERE id = ?",
@@ -350,7 +350,7 @@ def print_session_report(db_path: Optional[Path] = None, gap_minutes: int = SESS
         latest_game = stats.games[-1]
         if latest_game.run_id:
             db_path = db_path or DEFAULT_DB_PATH
-            with sqlite3.connect(db_path) as conn:
+            with connect_db(db_path) as conn:
                 cursor = conn.execute(
                     "SELECT id, planned_games, completed_games FROM runs WHERE id = ?",
                     (latest_game.run_id,)
@@ -509,7 +509,7 @@ def cleanup_stale_games(db_path: Optional[Path] = None, dry_run: bool = True) ->
     """Mark stale in-progress games as abandoned."""
     db_path = db_path or DEFAULT_DB_PATH
 
-    with sqlite3.connect(db_path) as conn:
+    with connect_db(db_path) as conn:
         cursor = conn.execute("""
             SELECT id, timestamp FROM games WHERE result IS NULL
         """)

@@ -32,7 +32,7 @@ Usage:
     queries.print_summary()
 """
 
-from .collector import StatsCollector, get_collector, DEFAULT_DB_PATH
+from .collector import StatsCollector, get_collector, DEFAULT_DB_PATH, connect_db
 from .migrations import run_migrations, get_migration_status
 from .opponent_model import OpponentModel, get_opponent_model
 from .model_metrics import GameMetricsTracker, compute_model_entropy
@@ -44,6 +44,7 @@ __all__ = [
     'StatsCollector',
     'get_collector',
     'DEFAULT_DB_PATH',
+    'connect_db',
     'run_migrations',
     'get_migration_status',
     'queries',
