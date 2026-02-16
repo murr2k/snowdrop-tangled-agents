@@ -525,12 +525,16 @@ class WebPlayer:
         opening_mode: Optional[str] = None,
         route_mode: Optional[str] = None,
         routes_file: Optional[str] = None,
+        random_turns: Optional[set] = None,
+        novel_branch: bool = False,
+        seat: int = 1,
     ):
         self.username = os.getenv("TANGLED_USERNAME")
         self.password = os.getenv("TANGLED_PASSWORD")
         self.headless = headless
         self.slow_mo = slow_mo
         self.strategy_type = strategy_type
+        self.seat = seat
 
         # Store options for MATLAB strategy
         self._use_nn = use_nn
@@ -540,6 +544,10 @@ class WebPlayer:
         # Oracle route options
         self._oracle_route_mode = route_mode or 'fixed'
         self._oracle_routes_file = routes_file
+
+        # Terminal explorer options
+        self._random_turns = random_turns
+        self._novel_branch = novel_branch
 
         self.playwright = None
         self.browser = None
@@ -683,6 +691,8 @@ class WebPlayer:
             self.strategy = TerminalExplorerStrategy(
                 fallback_strategy=fallback,
                 randomize_midgame=True,
+                random_move_turns=self._random_turns,
+                novel_branch=self._novel_branch,
             )
         else:  # "heuristic" (default)
             self.strategy = PetersenStrategy(params_path=self.params_path)
@@ -823,10 +833,14 @@ class WebPlayer:
         self.page.wait_for_load_state("networkidle")
         time.sleep(1)
 
-        # Select Player 1 (Red)
+        # Select player seat
         try:
-            self.page.locator("text=/Player 1.*Red/i").first.click(timeout=3000)
-            self.logger.info("Selected Player 1 (Red)")
+            if self.seat == 2:
+                self.page.locator("text=/Player 2.*Blue/i").first.click(timeout=3000)
+                self.logger.info("Selected Player 2 (Blue)")
+            else:
+                self.page.locator("text=/Player 1.*Red/i").first.click(timeout=3000)
+                self.logger.info("Selected Player 1 (Red)")
             time.sleep(0.5)
         except:
             pass
@@ -901,12 +915,15 @@ class WebPlayer:
             # Explicit turn indicators
             if "your turn" in text:
                 return True
-            if "player 1" in text and "turn" in text and "player 2" not in text:
+            # Seat-aware player turn detection
+            our_player = f"player {self.seat}"
+            their_player = f"player {3 - self.seat}"
+            if our_player in text and "turn" in text and their_player not in text:
                 return True
             # Explicit NOT our turn indicators
             if "opponent" in text and "turn" in text:
                 return False
-            if "player 2" in text and "turn" in text:
+            if their_player in text and "turn" in text:
                 return False
             if "waiting" in text:
                 return False
@@ -935,9 +952,11 @@ class WebPlayer:
         """Get game outcome."""
         try:
             text = self.page.inner_text("body")
-            if "Winner: Player 1" in text:
+            our_player = f"Player {self.seat}"
+            their_player = f"Player {3 - self.seat}"
+            if f"Winner: {our_player}" in text:
                 return "win"
-            if "Winner: Player 2" in text:
+            if f"Winner: {their_player}" in text:
                 return "loss"
             if "Draw" in text:
                 return "draw"
@@ -2202,6 +2221,13 @@ def main():
                         help="Oracle routes JSON filename in oracle-solver/output/ "
                              "(default: oracle_routes.json, use website_oracle_routes.json for "
                              "website-calibrated routes)")
+    parser.add_argument("--random-turns", type=str, default=None,
+                        help="Comma-separated our-move indices for random play (e.g., 0,2,4). "
+                             "Default for terminal_explorer: 0 (opening only)")
+    parser.add_argument("--novel-branch", action="store_true",
+                        help="Enable novel branch forcing: avoid repeating historical moves")
+    parser.add_argument("--seat", type=int, choices=[1, 2], default=1,
+                        help="Player seat: 1=Red/first (default), 2=Blue/second")
 
     args = parser.parse_args()
 
@@ -2418,6 +2444,11 @@ def main():
                 break
 
         # Create player and play games
+        # Parse random-turns into a set of ints
+        random_turns = None
+        if args.random_turns:
+            random_turns = {int(x.strip()) for x in args.random_turns.split(',')}
+
         with WebPlayer(
             headless=args.headless,
             slow_mo=args.slow_mo,
@@ -2429,6 +2460,9 @@ def main():
             opening_mode=getattr(args, 'opening_mode', None),
             route_mode=getattr(args, 'route_mode', None),
             routes_file=getattr(args, 'routes_file', None),
+            random_turns=random_turns,
+            novel_branch=args.novel_branch,
+            seat=args.seat,
         ) as player:
             player.login()
 

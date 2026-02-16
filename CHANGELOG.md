@@ -22,6 +22,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Headless Mode** (`play_tangled.py`)
   - `--headless` flag runs browser without visible window, useful for background campaigns
 
+- **AlphaQ Adjudicator Exploration Features** (`terminal_explorer_strategy.py`, `play_tangled.py`)
+  - Multi-point random move injection: `--random-turns 0,2,4` injects random moves at configurable turn indices to break AlphaQ's deterministic funneling into ~120 terminal states
+  - Seat swap: `--seat 2` plays as Player 2 (Blue) to test adjudicator seat-dependency hypothesis
+  - Novel branch forcing: `--novel-branch` queries historical moves from DB and deliberately plays untried (edge, color) pairs at each board state to explore new game tree branches
+
 - **Empirical Closure of the Petersen Graph Under Quantum Adjudication** (`docs/EMPIRICAL_CLOSURE_OF_THE_PETERSEN_GRAPH_UNDER_QUANTUM_ADJUDICATION.md`)
   - Formal writeup of the empirical negative result: 0 wins across 120 diverse terminal states against AlphaQ
   - Documents polarity inversion between SA and quantum adjudication (r = -0.396, p < 0.0001)
