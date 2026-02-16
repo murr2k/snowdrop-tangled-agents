@@ -33,6 +33,8 @@ class TerminalExplorerStrategy:
         self.opening_index = 0
         self.games_played = 0
         self.current_opening = None
+        self.current_game_opening = None  # (edge, color) - read by play_tangled.py
+        self.opening_mode = 'round_robin'  # read by play_tangled.py
 
     def calculate_move(
         self,
@@ -47,6 +49,7 @@ class TerminalExplorerStrategy:
         if total_moves == 0:
             edge, color = ALL_OPENINGS[self.opening_index]
             self.current_opening = (edge, color)
+            self.current_game_opening = (edge, color)
             logger.info(
                 "Explorer opening %d/30: E%d%s (game %d)",
                 self.opening_index + 1, edge, color, self.games_played + 1,
@@ -85,3 +88,4 @@ class TerminalExplorerStrategy:
         self.games_played += 1
         self.opening_index = self.games_played % len(ALL_OPENINGS)
         self.current_opening = None
+        self.current_game_opening = None
