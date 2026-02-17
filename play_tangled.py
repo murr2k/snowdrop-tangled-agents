@@ -898,6 +898,10 @@ class WebPlayer:
     # --- Event-driven wait JS functions ---
     # These run inside the browser and return a truthy string when the condition
     # is met, allowing Playwright to block efficiently instead of Python polling.
+    #
+    # Turn state machine after our move:
+    #   Phase 1: _JS_WAIT_NOT_OUR_TURN — turn must leave us (move accepted)
+    #   Phase 2: _JS_WAIT_OUR_TURN     — turn must return to us (opponent finished)
 
     # Wait for our turn OR game over
     _JS_WAIT_OUR_TURN = """() => {
@@ -907,50 +911,43 @@ class WebPlayer:
         return false;
     }"""
 
-    # Wait for move acceptance: turn leaves us, game over, or board edge count increased
-    _JS_WAIT_MOVE_ACCEPTED = """(edgesBefore) => {
+    # Wait for NOT our turn OR game over (Phase 1: confirms move was accepted)
+    _JS_WAIT_NOT_OUR_TURN = """() => {
         const t = document.body.innerText;
         if (t.includes('Game Over') || t.includes('Winner:')) return 'game_over';
-        if (!t.toLowerCase().includes('your turn')) return 'turn_switched';
-        let colored = 0;
-        document.querySelectorAll('line').forEach(l => {
-            const s = l.getAttribute('stroke') || '';
-            if (/green|purple|#10b981|#a855f7|168,\\s*85|16,\\s*185/i.test(s)) colored++;
-        });
-        if (colored > edgesBefore) return 'board_changed';
-        return false;
-    }"""
-
-    # Wait for opponent to finish: our turn returns OR game over OR board changed
-    _JS_WAIT_OPPONENT_DONE = """(greyBefore) => {
-        const t = document.body.innerText;
-        if (t.includes('Game Over') || t.includes('Winner:')) return 'game_over';
-        if (t.toLowerCase().includes('your turn')) return 'our_turn';
-        let grey = 0;
-        document.querySelectorAll('line').forEach(l => {
-            const s = l.getAttribute('stroke') || '';
-            if (/grey|gray|#e5e7eb|229,\\s*231/i.test(s)) grey++;
-        });
-        if (grey < greyBefore) return 'board_changed';
+        if (!t.toLowerCase().includes('your turn')) return 'not_our_turn';
         return false;
     }"""
 
     def _wait_for_condition(self, js_func: str, timeout_ms: int, description: str, arg=None) -> str:
-        """Wait for a browser condition using Playwright's event-driven wait.
+        """Wait for a browser condition by polling with generous sleep intervals.
 
-        The JS function runs inside the browser and is re-evaluated on DOM changes.
-        Returns the truthy string from the JS function, or 'timeout' on timeout.
+        Evaluates a JS function in the browser every 2s. The JS function should
+        return a truthy string when the condition is met, or false to keep waiting.
+        Uses Python-side timeout control (Playwright's wait_for_function can hang).
         """
+        start = time.time()
+        timeout_s = timeout_ms / 1000.0
+        poll_count = 0
+        while time.time() - start < timeout_s:
+            try:
+                result = self.page.evaluate(js_func, arg)
+                if result:
+                    return result
+            except Exception as e:
+                self.logger.debug(f"Poll error ({description}): {e}")
+            poll_count += 1
+            time.sleep(2.0)  # 2s between polls — low CPU, reliable timeout
+
+        # Timeout — log page text for debugging
         try:
-            handle = self.page.wait_for_function(js_func, arg=arg, timeout=timeout_ms)
-            result = handle.json_value()
-            return result
-        except Exception as e:
-            if 'timeout' in str(e).lower():
-                self.logger.warning(f"TIMEOUT: {description} after {timeout_ms/1000:.0f}s")
-                return 'timeout'
-            self.logger.warning(f"Wait error ({description}): {e}")
-            return 'error'
+            page_text = self.page.inner_text("body")
+            turn_lines = [line.strip() for line in page_text.split('\n')
+                          if any(w in line.lower() for w in ['turn', 'player', 'your', 'game over', 'winner'])]
+            self.logger.warning(f"TIMEOUT: {description} after {timeout_ms/1000:.0f}s ({poll_count} polls) — page: {turn_lines[:5]}")
+        except:
+            self.logger.warning(f"TIMEOUT: {description} after {timeout_ms/1000:.0f}s ({poll_count} polls)")
+        return 'timeout'
 
     def read_page_state(self) -> dict:
         """Read page text once and return parsed game state signals.
@@ -1627,35 +1624,27 @@ class WebPlayer:
         return True  # 'our_turn' or timeout — try anyway
 
     def wait_for_opponent_to_play(self, timeout: float = 30.0, stuck_timeout: float = 180.0, initial_grey_count: int = None) -> bool:
-        """Wait for opponent to take their turn (event-driven).
+        """Wait for opponent to finish their turn (Phase 2 of turn state machine).
 
-        Uses browser-side JS to efficiently wait for:
-        1. Turn indicator returning to us ("your turn")
-        2. Game over popup
-        3. Board state change (grey count decreased)
+        Caller must have already completed Phase 1 (wait for NOT our turn) via
+        move acceptance. This method is Phase 2: wait for our turn to return.
 
         Returns False if game is over, True when opponent has played.
         Raises StuckOpponentError if stuck_timeout exceeded.
         """
-        grey_arg = initial_grey_count if initial_grey_count is not None else 99
-
         result = self._wait_for_condition(
-            self._JS_WAIT_OPPONENT_DONE,
+            self._JS_WAIT_OUR_TURN,
             timeout_ms=int(stuck_timeout * 1000),
-            description=f"opponent to play (stuck_timeout={stuck_timeout:.0f}s)",
-            arg=grey_arg
+            description=f"opponent to finish (Phase 2, {stuck_timeout:.0f}s)"
         )
-
         if result == 'game_over':
             return False
-        if result in ('our_turn', 'board_changed'):
-            self.logger.debug(f"Opponent done: {result}")
+        if result == 'our_turn':
+            self.logger.debug(f"Opponent done: turn returned to us")
             return True
         if result == 'timeout':
-            elapsed = stuck_timeout
-            self.logger.error(f"Opponent stuck! No response after {elapsed:.0f}s")
+            self.logger.error(f"Opponent stuck! No response after {stuck_timeout:.0f}s")
             raise StuckOpponentError(f"Opponent did not play within {stuck_timeout}s")
-        # 'error' or unexpected
         self.logger.warning(f"Unexpected wait result: {result}, proceeding")
         return True
 
@@ -1803,9 +1792,10 @@ class WebPlayer:
 
         while True:
             # Event-driven wait: block until browser says it's our turn or game over
+            self.logger.debug(f"Main loop: waiting for our turn (move_count={move_count})")
             wait_result = self._wait_for_condition(
                 self._JS_WAIT_OUR_TURN,
-                timeout_ms=300000,  # 5 min max idle
+                timeout_ms=300000,  # 5 min max idle between turns
                 description="our turn (main loop)"
             )
             if wait_result == 'game_over':
@@ -1927,24 +1917,25 @@ class WebPlayer:
 
             # Try to execute with retries (retry same edge, don't re-ask strategy)
             success = False
+            move_ended_game = False  # Track if our move ended the game
             for attempt in range(max_retries):
                 state_before = self.read_board()
                 if self.execute_move(edge, color):
-                    # Event-driven wait for move acceptance. The JS function checks:
-                    # 1. Turn switched away from us (primary signal)
-                    # 2. Game over popup appeared (last move of game)
-                    # 3. Board edge count increased (catches fast opponent response)
-                    edges_before = sum(1 for c in state_before if c != '-')
+                    # Phase 1 of turn state machine: wait for turn to leave us.
+                    # This confirms the move was registered by the game.
                     accept_result = self._wait_for_condition(
-                        self._JS_WAIT_MOVE_ACCEPTED,
-                        timeout_ms=60000,
-                        description=f"E{edge} acceptance (attempt {attempt+1})",
-                        arg=edges_before
+                        self._JS_WAIT_NOT_OUR_TURN,
+                        timeout_ms=15000,  # 15s — click either works immediately or didn't register
+                        description=f"E{edge} acceptance (attempt {attempt+1})"
                     )
-                    if accept_result in ('turn_switched', 'game_over', 'board_changed'):
-                        self.logger.info(f"Move E{edge} accepted: {accept_result}")
-                        # Wait for board SVG to catch up before reading state
-                        time.sleep(1.0)
+                    if accept_result == 'game_over':
+                        self.logger.info(f"Move E{edge} accepted: game_over")
+                        move_ended_game = True
+                        success = True
+                        break
+                    elif accept_result == 'not_our_turn':
+                        self.logger.info(f"Move E{edge} accepted: turn switched to opponent")
+                        time.sleep(0.5)
                         success = True
                         break
                     else:
@@ -2025,14 +2016,23 @@ class WebPlayer:
                 time.sleep(5.0)  # Cooldown before retrying same edge
                 continue
 
-            # Save board state after our move (for opponent detection)
-            our_post_move_state = self.read_board()
+            # If our move ended the game, skip opponent wait
+            if move_ended_game:
+                self.logger.info("Our move ended the game — skipping opponent wait")
+                break
+
+            # Construct our post-move board state deterministically
+            # (reading the board now is unreliable — AlphaQ may have already played)
+            post_move_list = list(state_before)
+            post_move_list[edge] = color
+            our_post_move_state = ''.join(post_move_list)
             our_grey_count = our_post_move_state.count('-')
 
-            # Wait for opponent to play (using both turn indicator and board state)
+            # Phase 2 of turn state machine: wait for opponent to finish
+            # (Phase 1 already confirmed turn left us during move acceptance)
             opponent_start_time = time.time()
             try:
-                if not self.wait_for_opponent_to_play(timeout=30.0, stuck_timeout=240.0, initial_grey_count=our_grey_count):
+                if not self.wait_for_opponent_to_play(timeout=30.0, stuck_timeout=240.0):
                     break
             except StuckOpponentError:
                 # Opponent is stuck - abandon this game and signal restart needed
