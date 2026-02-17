@@ -1697,6 +1697,7 @@ class WebPlayer:
     def play_game(self, opponent: str = "melissa") -> dict:
         """Play one complete game."""
         self.score_history = []
+        self.full_move_history = []  # All moves in order: (player, edge, color, score)
         self.opponent = opponent  # Store for dashboard display
 
         # Initialize opponent model for online learning
@@ -1757,11 +1758,23 @@ class WebPlayer:
                 break
             time.sleep(0.3)
 
+        # Capture opponent's opening move if we're Player 2
+        if self.seat == 2:
+            opening_state = self.read_board()
+            opening_score = self.read_score()
+            for i in range(15):
+                if opening_state[i] != '-':
+                    self.full_move_history.append(("opp", i, opening_state[i], opening_score))
+                    self.logger.debug(f"Opponent opening: E{i}{opening_state[i]}")
+
         move_count = 0
         loop_iterations = 0
         max_iterations = 30  # Safety limit: Petersen has 15 edges, ~8 moves max per player
         prev_score = self.read_score()
         max_retries = 3  # Max retries per move attempt
+        pending_move = None  # (edge, color, solver_stats) to retry on failure
+        pending_retries = 0  # How many times we've retried the pending move
+        max_pending_retries = 3  # Give up on same edge after this many full retry cycles
 
         while not self.is_game_over():
             if not self.is_our_turn():
@@ -1801,89 +1814,121 @@ class WebPlayer:
             if not available:
                 break
 
-            # Calculate move (track our thinking time)
-            our_start_time = time.time()
-            result = self.strategy.calculate_move(state, score, self.score_history)
-            our_think_time = time.time() - our_start_time
+            # Use pending move from previous failed attempt, or calculate new one
+            need_new_move = True
+            if pending_move:
+                edge, color, solver_stats = pending_move
+                our_think_time = 0.0
+                pending_move = None
+                pending_retries += 1
+                # Verify the pending edge is still available and we haven't exhausted retries
+                current_state = self.read_board()
+                state = current_state
+                if pending_retries > max_pending_retries:
+                    self.logger.warning(f"E{edge} failed {pending_retries} retry cycles, abandoning and recalculating")
+                    pending_retries = 0
+                elif current_state[edge] == '-':
+                    self.logger.info(f"Retrying previous move E{edge} {color} (retry {pending_retries}/{max_pending_retries})")
+                    need_new_move = False
+                else:
+                    self.logger.warning(f"Pending E{edge} no longer available, recalculating")
+                    pending_retries = 0
 
-            if result is None:
-                break
+            if need_new_move:
+                # Calculate move (track our thinking time)
+                our_start_time = time.time()
+                result = self.strategy.calculate_move(state, score, self.score_history)
+                our_think_time = time.time() - our_start_time
 
-            # Handle both (edge, color) and (edge, color, solver_stats) returns
-            solver_stats = {}
-            if len(result) == 3:
-                edge, color, solver_stats = result
-            else:
-                edge, color = result
+                if result is None:
+                    break
 
-            # Safety check: verify strategy returned a valid edge
-            # (Turn-based game means opponent can't play during our calculation,
-            # but strategy might return invalid edge due to bug or stale internal state)
-            current_state = self.read_board()
-            state = current_state  # Update state for next iteration
-            available = [i for i, c in enumerate(current_state) if c == '-']
+                # Handle both (edge, color) and (edge, color, solver_stats) returns
+                solver_stats = {}
+                if len(result) == 3:
+                    edge, color, solver_stats = result
+                else:
+                    edge, color = result
 
-            # Verify edge is actually available
-            if current_state[edge] != '-':
-                if available:
-                    self.logger.warning(f"E{edge} not available - strategy returned invalid edge")
-                    # Re-read board to ensure we have latest state
-                    time.sleep(0.5)  # Brief wait for DOM to stabilize
-                    fresh_state = self.read_board()
-                    fresh_available = [i for i, c in enumerate(fresh_state) if c == '-']
-                    self.logger.info(f"Fresh state: {sum(1 for c in fresh_state if c == '-')} grey edges")
-                    # Recalculate move with updated state instead of picking blindly
-                    recalc_result = self.strategy.calculate_move(fresh_state, score, self.score_history)
-                    if recalc_result is not None:
-                        if len(recalc_result) == 3:
-                            edge, color, solver_stats = recalc_result
+                # Safety check: verify strategy returned a valid edge
+                current_state = self.read_board()
+                state = current_state
+                available = [i for i, c in enumerate(current_state) if c == '-']
+
+                if current_state[edge] != '-':
+                    if available:
+                        self.logger.warning(f"E{edge} not available - strategy returned invalid edge")
+                        time.sleep(0.5)
+                        fresh_state = self.read_board()
+                        fresh_available = [i for i, c in enumerate(fresh_state) if c == '-']
+                        self.logger.info(f"Fresh state: {sum(1 for c in fresh_state if c == '-')} grey edges")
+                        recalc_result = self.strategy.calculate_move(fresh_state, score, self.score_history)
+                        if recalc_result is not None:
+                            if len(recalc_result) == 3:
+                                edge, color, solver_stats = recalc_result
+                            else:
+                                edge, color = recalc_result
+                            if fresh_state[edge] != '-':
+                                self.logger.warning(f"Recalculated E{edge} also unavailable, using fallback")
+                                edge = fresh_available[0] if fresh_available else available[0]
+                                color = 'G' if edge in [9, 10, 11] else ('P' if edge in [5, 12, 13] else 'G')
                         else:
-                            edge, color = recalc_result
-                        # Verify recalculated edge is valid against fresh state
-                        if fresh_state[edge] != '-':
-                            # Strategy returned invalid edge, pick first available
-                            self.logger.warning(f"Recalculated E{edge} also unavailable, using fallback")
                             edge = fresh_available[0] if fresh_available else available[0]
-                            # Use heuristic for color: Green on our edges, Purple on opponent's
                             color = 'G' if edge in [9, 10, 11] else ('P' if edge in [5, 12, 13] else 'G')
                     else:
-                        edge = fresh_available[0] if fresh_available else available[0]
-                        color = 'G' if edge in [9, 10, 11] else ('P' if edge in [5, 12, 13] else 'G')
-                else:
-                    self.logger.warning("No available edges after rechecking")
-                    break
+                        self.logger.warning("No available edges after rechecking")
+                        break
 
             self.logger.info(f"Move: E{edge} {'Green' if color == 'G' else 'Purple'}")
 
-            # Try to execute with retries
+            # Try to execute with retries (retry same edge, don't re-ask strategy)
             success = False
             for attempt in range(max_retries):
                 state_before = self.read_board()
                 if self.execute_move(edge, color):
-                    # Wait for backend to process the move, with increasing patience
-                    board_changed = False
-                    for wait_step in range(6):  # Up to ~10s total wait
-                        time.sleep(0.3 + wait_step * 0.3)  # 0.3, 0.6, 0.9, 1.2, 1.5, 1.8s
+                    # Wait for move to be accepted. The reliable signal is the turn
+                    # indicator switching to opponent's turn — the board SVG can lag
+                    # behind significantly. Turns don't expire, so we can be patient.
+                    move_accepted = False
+                    for wait_step in range(30):  # Up to ~60s total wait
+                        time.sleep(1.0 + wait_step * 0.3)  # 1.0, 1.3, 1.6, ... ~10s
+                        # Primary signal: turn switched to opponent (move accepted)
+                        if not self.is_our_turn():
+                            move_accepted = True
+                            self.logger.debug(f"Turn switched to opponent after {wait_step+1} polls")
+                            break
+                        # Secondary signal: game over popup appeared (adjudication complete)
+                        # This catches our last move — turn won't switch, but the
+                        # browser displays a Game Over popup with the winner
+                        if self.is_game_over():
+                            move_accepted = True
+                            self.logger.debug(f"Game over popup detected after move")
+                            break
+                        # Tertiary signal: board updated (fast path)
                         state_after = self.read_board()
                         if state_after[edge] != '-':
-                            board_changed = True
+                            move_accepted = True
+                            self.logger.debug(f"Board updated after {wait_step+1} polls")
                             break
-                    if board_changed:
+                    if move_accepted:
+                        # Wait for board SVG to catch up before reading state
+                        time.sleep(1.0)
                         success = True
                         break
                     else:
-                        # Click appeared to succeed but board didn't change
-                        self.logger.warning(f"Move E{edge} click succeeded but board unchanged (attempt {attempt+1})")
-                        self.logger.debug(f"State before: {state_before}, State after: {state_after}")
+                        # Turn didn't switch and board didn't change — click truly failed
+                        self.logger.warning(f"Move E{edge} click succeeded but not accepted (attempt {attempt+1})")
+                        self.logger.debug(f"State before: {state_before}")
                 else:
                     self.logger.warning(f"Move E{edge} attempt {attempt+1}/{max_retries} failed")
-                time.sleep(1.0)
+                time.sleep(2.0)
 
             if success:
                 move_count += 1
                 time.sleep(0.5)
                 new_score = self.read_score()
                 self.score_history.append((edge, color, new_score))
+                self.full_move_history.append(("us", edge, color, new_score))
                 self.logger.info(f"Move {move_count}: E{edge} {color} -> Score: {new_score:.4f}")
 
                 # Add timing to solver stats
@@ -1936,8 +1981,12 @@ class WebPlayer:
                 if hasattr(self.strategy, 'record_move'):
                     self.strategy.record_move(edge, color, new_score)
             else:
-                self.logger.warning(f"Move E{edge} failed after {max_retries} attempts, will retry next iteration")
-                continue  # Try again next iteration without waiting for opponent
+                # Retry the SAME edge/color — don't re-ask strategy, which would
+                # pick a different move and distort the intended terminal state
+                self.logger.warning(f"Move E{edge} failed after {max_retries} attempts, retrying same edge after cooldown")
+                pending_move = (edge, color, solver_stats)
+                time.sleep(5.0)  # Cooldown before retrying same edge
+                continue
 
             # Save board state after our move (for opponent detection)
             our_post_move_state = self.read_board()
@@ -1975,8 +2024,9 @@ class WebPlayer:
                     opponent_color = state_after_opponent[i]
                     break
 
-            # Debug: Log opponent detection details
+            # Log opponent detection details
             if opponent_edge is not None:
+                self.full_move_history.append(("opp", opponent_edge, opponent_color, opponent_score))
                 self.logger.debug(f"Opponent detected: E{opponent_edge}{opponent_color} "
                                   f"(grey: {our_grey_count}->{opponent_grey_count})")
                 self.stats_collector.record_move(
@@ -2105,15 +2155,16 @@ class WebPlayer:
             except Exception as e:
                 self.logger.warning(f"Calibration error: {e}")
 
-        # Log detailed game summary
+        # Log detailed game summary with all moves (ours + opponent)
         self.logger.info(f"=" * 40)
         self.logger.info(f"GAME OVER: {result.upper()}")
         self.logger.info(f"Final Score: {final_score:.4f}")
-        self.logger.info(f"Total Moves: {move_count}")
-        self.logger.info(f"Score History:")
-        for i, (edge, color, score) in enumerate(self.score_history):
+        self.logger.info(f"Total Moves: {len(self.full_move_history)} ({move_count} ours)")
+        self.logger.info(f"Move History:")
+        for i, (player, edge, color, score) in enumerate(self.full_move_history):
             color_name = "Green" if color == 'G' else "Purple"
-            self.logger.info(f"  Move {i+1}: E{edge} {color_name} -> {score:.4f}")
+            tag = "US " if player == "us" else "OPP"
+            self.logger.info(f"  {i+1:2d}. [{tag}] E{edge} {color_name} -> {score:.4f}")
         self.logger.info(f"=" * 40)
 
         # Update strategy learning (for any strategy that supports it)

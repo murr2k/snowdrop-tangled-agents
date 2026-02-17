@@ -27,6 +27,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Seat swap: `--seat 2` plays as Player 2 (Blue) to test adjudicator seat-dependency hypothesis
   - Novel branch forcing: `--novel-branch` queries historical moves from DB and deliberately plays untried (edge, color) pairs at each board state to explore new game tree branches
 
+- **Move Verification Overhaul** (`play_tangled.py`)
+  - Turn-based move acceptance: verify moves by polling the turn indicator (switches to opponent's turn) instead of the slow-to-update board SVG
+  - Three acceptance signals in priority order: turn indicator switch, game over popup, board SVG update
+  - Same-edge retry: failed moves retry the same edge/color via `pending_move` instead of re-asking the strategy for a different edge, preserving intended terminal states
+  - Per-move retry cap (3 cycles) prevents infinite loops on genuinely unplayable edges
+  - Full game summary: move history now includes both our and opponent moves with `[US]`/`[OPP]` tags
+
 - **Empirical Closure of the Petersen Graph Under Quantum Adjudication** (`docs/EMPIRICAL_CLOSURE_OF_THE_PETERSEN_GRAPH_UNDER_QUANTUM_ADJUDICATION.md`)
   - Formal writeup of the empirical negative result: 0 wins across 120 diverse terminal states against AlphaQ
   - Documents polarity inversion between SA and quantum adjudication (r = -0.396, p < 0.0001)
