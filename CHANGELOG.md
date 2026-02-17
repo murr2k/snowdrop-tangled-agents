@@ -27,6 +27,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Seat swap: `--seat 2` plays as Player 2 (Blue) to test adjudicator seat-dependency hypothesis
   - Novel branch forcing: `--novel-branch` queries historical moves from DB and deliberately plays untried (edge, color) pairs at each board state to explore new game tree branches
 
+- **Event-Driven Browser Waits** (`play_tangled.py`)
+  - Replaced all Python polling loops with Playwright `wait_for_function()` — JS conditions evaluate inside the browser and only notify Python when triggered
+  - Five polling loops converted: main loop idle wait, initial turn wait, move verification, opponent wait, and `wait_for_turn`
+  - CPU usage during waits drops from ~12.5% (1 full core) to near zero per process
+  - Each wait has a logged timeout: main loop 5min, initial turn 60s, move acceptance 60s, opponent 240s, `wait_for_turn` 180s
+  - Game loop wrapped in try/except with full traceback logging to catch silent crashes
+
 - **Move Verification Overhaul** (`play_tangled.py`)
   - Turn-based move acceptance: verify moves by polling the turn indicator (switches to opponent's turn) instead of the slow-to-update board SVG
   - Three acceptance signals in priority order: turn indicator switch, game over popup, board SVG update
