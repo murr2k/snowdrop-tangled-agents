@@ -1761,7 +1761,6 @@ class WebPlayer:
         loop_iterations = 0
         max_iterations = 30  # Safety limit: Petersen has 15 edges, ~8 moves max per player
         prev_score = self.read_score()
-        failed_edges = set()  # Track edges that failed to click
         max_retries = 3  # Max retries per move attempt
 
         while not self.is_game_over():
@@ -1797,16 +1796,10 @@ class WebPlayer:
                 self.logger.info("All edges played")
                 break
 
-            # Get available edges (excluding failed ones)
-            available = [i for i, c in enumerate(state) if c == '-' and i not in failed_edges]
+            # Get available edges
+            available = [i for i, c in enumerate(state) if c == '-']
             if not available:
-                # If all edges failed, clear failed set and try again
-                if failed_edges:
-                    self.logger.warning("All edges failed, clearing failed list")
-                    failed_edges.clear()
-                    available = [i for i, c in enumerate(state) if c == '-']
-                if not available:
-                    break
+                break
 
             # Calculate move (track our thinking time)
             our_start_time = time.time()
@@ -1828,16 +1821,16 @@ class WebPlayer:
             # but strategy might return invalid edge due to bug or stale internal state)
             current_state = self.read_board()
             state = current_state  # Update state for next iteration
-            available = [i for i, c in enumerate(current_state) if c == '-' and i not in failed_edges]
+            available = [i for i, c in enumerate(current_state) if c == '-']
 
             # Verify edge is actually available
-            if current_state[edge] != '-' or edge in failed_edges:
+            if current_state[edge] != '-':
                 if available:
                     self.logger.warning(f"E{edge} not available - strategy returned invalid edge")
                     # Re-read board to ensure we have latest state
                     time.sleep(0.5)  # Brief wait for DOM to stabilize
                     fresh_state = self.read_board()
-                    fresh_available = [i for i, c in enumerate(fresh_state) if c == '-' and i not in failed_edges]
+                    fresh_available = [i for i, c in enumerate(fresh_state) if c == '-']
                     self.logger.info(f"Fresh state: {sum(1 for c in fresh_state if c == '-')} grey edges")
                     # Recalculate move with updated state instead of picking blindly
                     recalc_result = self.strategy.calculate_move(fresh_state, score, self.score_history)
@@ -1847,7 +1840,7 @@ class WebPlayer:
                         else:
                             edge, color = recalc_result
                         # Verify recalculated edge is valid against fresh state
-                        if fresh_state[edge] != '-' or edge in failed_edges:
+                        if fresh_state[edge] != '-':
                             # Strategy returned invalid edge, pick first available
                             self.logger.warning(f"Recalculated E{edge} also unavailable, using fallback")
                             edge = fresh_available[0] if fresh_available else available[0]
@@ -1888,7 +1881,6 @@ class WebPlayer:
 
             if success:
                 move_count += 1
-                failed_edges.discard(edge)  # Remove from failed if it worked
                 time.sleep(0.5)
                 new_score = self.read_score()
                 self.score_history.append((edge, color, new_score))
@@ -1944,9 +1936,8 @@ class WebPlayer:
                 if hasattr(self.strategy, 'record_move'):
                     self.strategy.record_move(edge, color, new_score)
             else:
-                self.logger.error(f"Move E{edge} failed after {max_retries} attempts, marking as failed")
-                failed_edges.add(edge)
-                continue  # Try another edge without waiting for opponent
+                self.logger.warning(f"Move E{edge} failed after {max_retries} attempts, will retry next iteration")
+                continue  # Try again next iteration without waiting for opponent
 
             # Save board state after our move (for opponent detection)
             our_post_move_state = self.read_board()
