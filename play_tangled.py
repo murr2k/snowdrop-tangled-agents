@@ -1758,14 +1758,7 @@ class WebPlayer:
                 break
             time.sleep(0.3)
 
-        # Capture opponent's opening move if we're Player 2
-        if self.seat == 2:
-            opening_state = self.read_board()
-            opening_score = self.read_score()
-            for i in range(15):
-                if opening_state[i] != '-':
-                    self.full_move_history.append(("opp", i, opening_state[i], opening_score))
-                    self.logger.debug(f"Opponent opening: E{i}{opening_state[i]}")
+        last_known_board = '-' * 15  # Track board state for opponent move detection
 
         move_count = 0
         loop_iterations = 0
@@ -1794,6 +1787,13 @@ class WebPlayer:
                 self.logger.debug(f"Board state unstable, waiting for sync")
                 time.sleep(0.5)
                 state_check2 = self.read_board()
+
+            # Detect opponent move(s) since our last move by diffing board state.
+            # At the start of our turn, the board SVG has definitely updated.
+            current_score = self.read_score()
+            for i in range(15):
+                if last_known_board[i] == '-' and state_check2[i] != '-':
+                    self.full_move_history.append(("opp", i, state_check2[i], current_score))
 
             # Only count iterations where it's actually our turn (move attempts)
             loop_iterations += 1
@@ -1931,6 +1931,12 @@ class WebPlayer:
                 self.full_move_history.append(("us", edge, color, new_score))
                 self.logger.info(f"Move {move_count}: E{edge} {color} -> Score: {new_score:.4f}")
 
+                # Update last_known_board: start from stable board (includes opponent's move),
+                # then apply our move
+                board_list = list(state_check2)
+                board_list[edge] = color
+                last_known_board = ''.join(board_list)
+
                 # Add timing to solver stats
                 solver_stats['wall_clock_time'] = our_think_time
 
@@ -2026,7 +2032,6 @@ class WebPlayer:
 
             # Log opponent detection details
             if opponent_edge is not None:
-                self.full_move_history.append(("opp", opponent_edge, opponent_color, opponent_score))
                 self.logger.debug(f"Opponent detected: E{opponent_edge}{opponent_color} "
                                   f"(grey: {our_grey_count}->{opponent_grey_count})")
                 self.stats_collector.record_move(
@@ -2154,6 +2159,13 @@ class WebPlayer:
                 self.logger.info(f"Calibration: predicted={predicted_score:+.4f}, actual={final_score:+.4f}, error={predicted_score - final_score:+.4f}")
             except Exception as e:
                 self.logger.warning(f"Calibration error: {e}")
+
+        # Detect any final opponent move(s) not yet captured
+        final_board = self.read_board()
+        final_score_val = self.read_score()
+        for i in range(15):
+            if last_known_board[i] == '-' and final_board[i] != '-':
+                self.full_move_history.append(("opp", i, final_board[i], final_score_val))
 
         # Log detailed game summary with all moves (ours + opponent)
         self.logger.info(f"=" * 40)
