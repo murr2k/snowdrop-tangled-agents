@@ -919,32 +919,50 @@ class WebPlayer:
         return false;
     }"""
 
+    def _eval_with_timeout(self, js_func: str, arg=None, timeout_s: float = 10.0):
+        """Evaluate JS in browser with a hard Python-side timeout.
+
+        Returns the JS result, or None if the call hangs beyond timeout_s.
+        This protects against Playwright IPC hangs where page.evaluate never returns.
+        """
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(self.page.evaluate, js_func, arg)
+            try:
+                return future.result(timeout=timeout_s)
+            except concurrent.futures.TimeoutError:
+                self.logger.warning(f"page.evaluate hung for {timeout_s:.0f}s — Playwright IPC stalled")
+                return None
+            except Exception as e:
+                self.logger.debug(f"page.evaluate error: {e}")
+                return None
+
     def _wait_for_condition(self, js_func: str, timeout_ms: int, description: str, arg=None) -> str:
         """Wait for a browser condition by polling with generous sleep intervals.
 
         Evaluates a JS function in the browser every 2s. The JS function should
         return a truthy string when the condition is met, or false to keep waiting.
-        Uses Python-side timeout control (Playwright's wait_for_function can hang).
+        Uses Python-side timeout control with per-call hang protection.
         """
         start = time.time()
         timeout_s = timeout_ms / 1000.0
         poll_count = 0
         while time.time() - start < timeout_s:
-            try:
-                result = self.page.evaluate(js_func, arg)
-                if result:
-                    return result
-            except Exception as e:
-                self.logger.debug(f"Poll error ({description}): {e}")
+            result = self._eval_with_timeout(js_func, arg=arg, timeout_s=10.0)
+            if result:
+                return result
             poll_count += 1
             time.sleep(2.0)  # 2s between polls — low CPU, reliable timeout
 
         # Timeout — log page text for debugging
         try:
-            page_text = self.page.inner_text("body")
-            turn_lines = [line.strip() for line in page_text.split('\n')
-                          if any(w in line.lower() for w in ['turn', 'player', 'your', 'game over', 'winner'])]
-            self.logger.warning(f"TIMEOUT: {description} after {timeout_ms/1000:.0f}s ({poll_count} polls) — page: {turn_lines[:5]}")
+            page_text = self._eval_with_timeout("() => document.body.innerText", timeout_s=5.0)
+            if page_text:
+                turn_lines = [line.strip() for line in page_text.split('\n')
+                              if any(w in line.lower() for w in ['turn', 'player', 'your', 'game over', 'winner'])]
+                self.logger.warning(f"TIMEOUT: {description} after {timeout_ms/1000:.0f}s ({poll_count} polls) — page: {turn_lines[:5]}")
+            else:
+                self.logger.warning(f"TIMEOUT: {description} after {timeout_ms/1000:.0f}s ({poll_count} polls) — page unresponsive")
         except:
             self.logger.warning(f"TIMEOUT: {description} after {timeout_ms/1000:.0f}s ({poll_count} polls)")
         return 'timeout'
