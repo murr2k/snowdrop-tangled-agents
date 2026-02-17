@@ -792,7 +792,7 @@ class WebPlayer:
     def login(self):
         self.logger.info(f"Navigating to {self.BASE_URL}")
         self.page.goto(self.BASE_URL)
-        self.page.wait_for_load_state("networkidle")
+        self.page.wait_for_load_state("networkidle", timeout=180000)
         time.sleep(2)
 
         # Click login button
@@ -801,7 +801,7 @@ class WebPlayer:
             if login_btn.is_visible(timeout=3000):
                 login_btn.click()
                 time.sleep(2)
-                self.page.wait_for_load_state("networkidle")
+                self.page.wait_for_load_state("networkidle", timeout=180000)
         except:
             pass
 
@@ -819,7 +819,7 @@ class WebPlayer:
             self.logger.warning(f"Login form error: {e}")
 
         time.sleep(3)
-        self.page.wait_for_load_state("networkidle")
+        self.page.wait_for_load_state("networkidle", timeout=180000)
         self.logger.info(f"Logged in, URL: {self.page.url}")
         return True
 
@@ -830,7 +830,7 @@ class WebPlayer:
 
         # Always navigate to /play fresh to clear any previous game state
         self.page.goto(f"{self.BASE_URL}/play")
-        self.page.wait_for_load_state("networkidle")
+        self.page.wait_for_load_state("networkidle", timeout=180000)
         time.sleep(1)
 
         # Select player seat
@@ -876,7 +876,7 @@ class WebPlayer:
 
         # Wait for game board
         try:
-            self.page.wait_for_selector("svg line", timeout=30000)
+            self.page.wait_for_selector("svg line", timeout=180000)
             self.logger.info("Game board ready")
             return True
         except:
