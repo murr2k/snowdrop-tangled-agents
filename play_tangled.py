@@ -1867,22 +1867,24 @@ class WebPlayer:
             for attempt in range(max_retries):
                 state_before = self.read_board()
                 if self.execute_move(edge, color):
-                    # Verify the board state actually changed
-                    time.sleep(0.3)
-                    state_after = self.read_board()
-                    if state_after[edge] != '-':
+                    # Wait for backend to process the move, with increasing patience
+                    board_changed = False
+                    for wait_step in range(6):  # Up to ~10s total wait
+                        time.sleep(0.3 + wait_step * 0.3)  # 0.3, 0.6, 0.9, 1.2, 1.5, 1.8s
+                        state_after = self.read_board()
+                        if state_after[edge] != '-':
+                            board_changed = True
+                            break
+                    if board_changed:
                         success = True
                         break
                     else:
                         # Click appeared to succeed but board didn't change
                         self.logger.warning(f"Move E{edge} click succeeded but board unchanged (attempt {attempt+1})")
-                        # Debug: show raw stroke values
-                        strokes = self.debug_edge_strokes()
-                        self.logger.debug(f"Raw strokes: E{edge}={strokes.get(f'E{edge}', 'N/A')}")
                         self.logger.debug(f"State before: {state_before}, State after: {state_after}")
                 else:
                     self.logger.warning(f"Move E{edge} attempt {attempt+1}/{max_retries} failed")
-                time.sleep(0.5)
+                time.sleep(1.0)
 
             if success:
                 move_count += 1
