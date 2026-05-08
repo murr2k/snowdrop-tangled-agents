@@ -452,7 +452,7 @@ Plus minimax extension to 1/2/3-grey states (`generate_expanded_lut_parallel.m`)
 
 ## 7. Implications for Quantum Game AI
 
-### 7.1 The REINFORFORCE Corruption Mechanism
+### 7.1 The REINFORCE Corruption Mechanism
 
 AlphaQ-style agents use REINFORCE to update edge biases based on game outcomes:
 

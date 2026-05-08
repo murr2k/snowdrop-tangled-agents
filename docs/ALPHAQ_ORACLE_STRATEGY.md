@@ -1,8 +1,9 @@
 # AlphaQ Oracle Strategy
 
-**Status:** Proposed
+**Status:** Phase A complete, Phase B blocked on evaluation function
 **Date:** February 2026
 **Prerequisite:** Run 86 data (Phase 1 opening re-exploration)
+**Phase A results:** [PHASE_A_ORACLE_RESULTS.md](PHASE_A_ORACLE_RESULTS.md)
 **Related docs:**
 [EXPERIMENT_OPENING_RE_EXPLORATION.md](EXPERIMENT_OPENING_RE_EXPLORATION.md),
 [ALPHAQ_STRATEGY.md](ALPHAQ_STRATEGY.md),
