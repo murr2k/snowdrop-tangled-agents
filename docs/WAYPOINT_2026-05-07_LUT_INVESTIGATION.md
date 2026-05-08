@@ -10,6 +10,47 @@
 
 ---
 
+## 0  Caveat: data provenance
+
+This waypoint's quantitative claims (cross-tabulations, the +0.891 max
+SA score against AlphaQ, the 95.8% sign-agreement figure, the
+1162 D / 235 L / 0 W summary, the oracle's 110-state reachable set,
+etc.) are derived from `~/.tangled/game_stats.db` and from
+`opponent_history` / `moves` data captured in games run before two
+relevant strategy/instrumentation bugs were fixed:
+
+- `8421c76` — *Remove failed_edges blacklist that incorrectly skewed strategy*.
+  The agent was avoiding edges marked "failed", which biased the
+  distribution of board states AlphaQ was asked to respond to.  Each
+  individual opponent response is still valid (AlphaQ is deterministic),
+  but the empirical state-coverage is non-uniform in a way the analysis
+  does not correct for.
+
+- `fa644f4` — *Fix interleaved move history: detect opponent moves at
+  start of our turn*.  Before this fix, opponent moves could be
+  misattributed to the wrong `state_after`, corrupting the mapping
+  from board state to opponent response that the oracle and the
+  forensic database queries depend on.
+
+The high-level conclusions of this waypoint — H1 rejected, H2 (Nash)
+supported, H3 (server-uses-SA) initially supported and later weakened
+by §8 — are **independently corroborated** by the parallel work on
+origin (`POST_SA_LUT_STRATEGY_OPTIONS.md`,
+`EMPIRICAL_LUT_CONSTRUCTION_RESULTS.md`,
+`PERSISTENT_EXPLOITABILITY_UNDER_EVALUATOR-POLICY_MISALIGNMENT.md`),
+which use website-calibrated terminal scoring rather than the
+move-history-derived oracle and so are not subject to the same
+contamination.  The qualitative agreement between two methodologies
+that fail in different ways is the main reason to treat the
+conclusions as durable despite the source-data caveat.
+
+The specific numbers in this waypoint should be read as
+"directionally correct, magnitudes from possibly-tainted data."
+A clean re-derivation against the post-fix portion of `game_stats.db`
+is recommended before citing exact figures.
+
+---
+
 ## 1  Summary
 
 The Phase A "anti-correlation" finding is **incorrect as stated**.  Direct
