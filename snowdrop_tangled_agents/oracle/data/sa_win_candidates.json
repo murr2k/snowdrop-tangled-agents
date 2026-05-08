@@ -1,0 +1,320 @@
+{
+  "calibration": {
+    "win_n": 329,
+    "win_min": 0.035,
+    "win_max": 15.365,
+    "win_median": 1.988,
+    "win_p25": 1.092,
+    "win_p75": 3.098,
+    "draw_n": 568,
+    "draw_min": -2.064,
+    "draw_max": 1.746,
+    "draw_median": 0.307,
+    "draw_p25": 0.045,
+    "draw_p75": 0.57,
+    "loss_n": 652,
+    "loss_min": -7.3,
+    "loss_max": 2.681,
+    "loss_median": 0.06,
+    "loss_p25": -0.0575,
+    "loss_p75": 0.433
+  },
+  "win_threshold": 1.092,
+  "confident_win": 1.988,
+  "n_total_candidates": 16,
+  "n_confident_candidates": 4,
+  "n_novel_confident": 0,
+  "candidates": [
+    {
+      "state": "PGPGGGPPPGPGGPG",
+      "sa_score": 2.7932000160217285,
+      "schrod_score": 3.9676401615142822,
+      "n_paths": 30,
+      "best_opening": [
+        1,
+        "G"
+      ],
+      "max_path_confidence": 1.0,
+      "known_outcomes": {
+        "alphaq": {
+          "loss": 3
+        }
+      },
+      "avg_sa_observed": -2.703666666666667,
+      "is_novel": false
+    },
+    {
+      "state": "PGPGGGPPGGPPGPG",
+      "sa_score": 2.5819199085235596,
+      "schrod_score": 7.943015098571777,
+      "n_paths": 10,
+      "best_opening": [
+        1,
+        "G"
+      ],
+      "max_path_confidence": 0.75,
+      "known_outcomes": {
+        "alphaq": {
+          "loss": 6
+        }
+      },
+      "avg_sa_observed": -8.806166666666668,
+      "is_novel": false
+    },
+    {
+      "state": "PGPGGPPPPPPGGPG",
+      "sa_score": 2.492840051651001,
+      "schrod_score": 3.9694948196411133,
+      "n_paths": 4,
+      "best_opening": [
+        1,
+        "G"
+      ],
+      "max_path_confidence": 1.0,
+      "known_outcomes": {
+        "alphaq": {
+          "loss": 7
+        }
+      },
+      "avg_sa_observed": -4.466428571428572,
+      "is_novel": false
+    },
+    {
+      "state": "PPPGPPGGPPGPGPP",
+      "sa_score": 2.190160036087036,
+      "schrod_score": 3.976827383041382,
+      "n_paths": 3,
+      "best_opening": [
+        0,
+        "P"
+      ],
+      "max_path_confidence": 1.0,
+      "known_outcomes": {
+        "alphaq": {
+          "draw": 8
+        }
+      },
+      "avg_sa_observed": 0.006125,
+      "is_novel": false
+    },
+    {
+      "state": "PPGPPGGGGGGGGPP",
+      "sa_score": 1.66048002243042,
+      "schrod_score": 1.9943602085113525,
+      "n_paths": 2,
+      "best_opening": [
+        9,
+        "G"
+      ],
+      "max_path_confidence": 1.0,
+      "known_outcomes": {
+        "alphaq": {
+          "loss": 9
+        }
+      },
+      "avg_sa_observed": 0.6497777777777778,
+      "is_novel": false
+    },
+    {
+      "state": "PPGGPPGPGGGGGGP",
+      "sa_score": 1.6573200225830078,
+      "schrod_score": 1.9943602085113525,
+      "n_paths": 1,
+      "best_opening": [
+        9,
+        "G"
+      ],
+      "max_path_confidence": 1.0,
+      "known_outcomes": {
+        "alphaq": {
+          "loss": 9
+        }
+      },
+      "avg_sa_observed": 0.6696666666666666,
+      "is_novel": false
+    },
+    {
+      "state": "PGGGGPGPPPPPPPP",
+      "sa_score": 1.6375999450683594,
+      "schrod_score": 1.9804227352142334,
+      "n_paths": 2,
+      "best_opening": [
+        1,
+        "G"
+      ],
+      "max_path_confidence": 1.0,
+      "known_outcomes": {
+        "alphaq": {
+          "loss": 8
+        }
+      },
+      "avg_sa_observed": 0.488375,
+      "is_novel": false
+    },
+    {
+      "state": "PGGPGPPPPGGGGPP",
+      "sa_score": 1.6061999797821045,
+      "schrod_score": 1.5957573652267456,
+      "n_paths": 1,
+      "best_opening": [
+        3,
+        "P"
+      ],
+      "max_path_confidence": 1.0,
+      "known_outcomes": {
+        "alphaq": {
+          "draw": 1
+        }
+      },
+      "avg_sa_observed": 0.316,
+      "is_novel": false
+    },
+    {
+      "state": "PGGPPGGPPGGGGPG",
+      "sa_score": 1.5930399894714355,
+      "schrod_score": 1.5962289571762085,
+      "n_paths": 3,
+      "best_opening": [
+        1,
+        "G"
+      ],
+      "max_path_confidence": 1.0,
+      "known_outcomes": {
+        "alphaq": {
+          "loss": 2
+        }
+      },
+      "avg_sa_observed": -0.388,
+      "is_novel": false
+    },
+    {
+      "state": "GPGPGPPPPGPGPPP",
+      "sa_score": 1.5820800065994263,
+      "schrod_score": 1.5957573652267456,
+      "n_paths": 1,
+      "best_opening": [
+        12,
+        "P"
+      ],
+      "max_path_confidence": 1.0,
+      "known_outcomes": {
+        "alphaq": {
+          "draw": 68
+        },
+        "melissa": {
+          "draw": 1
+        }
+      },
+      "avg_sa_observed": 0.14577205882352942,
+      "is_novel": false
+    },
+    {
+      "state": "PGGPGGPPPGPPPPP",
+      "sa_score": 1.5357999801635742,
+      "schrod_score": 1.9847099781036377,
+      "n_paths": 2,
+      "best_opening": [
+        1,
+        "G"
+      ],
+      "max_path_confidence": 1.0,
+      "known_outcomes": {
+        "alphaq": {
+          "draw": 143
+        }
+      },
+      "avg_sa_observed": 0.032615384615384616,
+      "is_novel": false
+    },
+    {
+      "state": "PGGPGGPPPGGPGPP",
+      "sa_score": 1.5104399919509888,
+      "schrod_score": 1.983785629272461,
+      "n_paths": 2,
+      "best_opening": [
+        1,
+        "G"
+      ],
+      "max_path_confidence": 1.0,
+      "known_outcomes": {
+        "alphaq": {
+          "draw": 81
+        }
+      },
+      "avg_sa_observed": -0.049024691358024695,
+      "is_novel": false
+    },
+    {
+      "state": "PGPGGGPPPGPGGPP",
+      "sa_score": 1.33187997341156,
+      "schrod_score": 3.974146842956543,
+      "n_paths": 30,
+      "best_opening": [
+        1,
+        "G"
+      ],
+      "max_path_confidence": 1.0,
+      "known_outcomes": {
+        "alphaq": {
+          "loss": 20
+        }
+      },
+      "avg_sa_observed": -0.40685000000000004,
+      "is_novel": false
+    },
+    {
+      "state": "PGGGGPPGPPGPGGG",
+      "sa_score": 1.3215199708938599,
+      "schrod_score": 1.9798243045806885,
+      "n_paths": 2,
+      "best_opening": [
+        1,
+        "G"
+      ],
+      "max_path_confidence": 1.0,
+      "known_outcomes": {
+        "alphaq": {
+          "draw": 52
+        }
+      },
+      "avg_sa_observed": 0.08973076923076924,
+      "is_novel": false
+    },
+    {
+      "state": "PGGPGPPPGGGGGPP",
+      "sa_score": 1.31496000289917,
+      "schrod_score": 0.018709631636738777,
+      "n_paths": 1,
+      "best_opening": [
+        3,
+        "P"
+      ],
+      "max_path_confidence": 1.0,
+      "known_outcomes": {
+        "alphaq": {
+          "loss": 1
+        }
+      },
+      "avg_sa_observed": 0.064,
+      "is_novel": false
+    },
+    {
+      "state": "GPGPGPPGPGPGPPP",
+      "sa_score": 1.3070800304412842,
+      "schrod_score": 0.018709631636738777,
+      "n_paths": 1,
+      "best_opening": [
+        12,
+        "P"
+      ],
+      "max_path_confidence": 1.0,
+      "known_outcomes": {
+        "alphaq": {
+          "draw": 38
+        }
+      },
+      "avg_sa_observed": 0.4852105263157894,
+      "is_novel": false
+    }
+  ]
+}

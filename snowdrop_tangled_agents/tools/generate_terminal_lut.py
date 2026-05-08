@@ -376,6 +376,11 @@ def main():
         '--dry-run', action='store_true',
         help='Print plan without running any adjudication.'
     )
+    parser.add_argument(
+        '--output', type=str, default=None,
+        help='Output filename (relative to data dir or absolute). '
+             'Default: terminal_scores.mat'
+    )
     args = parser.parse_args()
 
     # ---------------------------------------------------------------------------
@@ -449,8 +454,13 @@ def main():
     # ---------------------------------------------------------------------------
     script_dir   = Path(__file__).parent
     project_root = script_dir.parent.parent
-    output_path  = (project_root / "snowdrop_tangled_agents"
-                    / "matlab" / "rl" / "data" / "terminal_scores.mat")
+    data_dir     = (project_root / "snowdrop_tangled_agents"
+                    / "matlab" / "rl" / "data")
+    if args.output:
+        out_arg = Path(args.output)
+        output_path = out_arg if out_arg.is_absolute() else (data_dir / out_arg)
+    else:
+        output_path = data_dir / "terminal_scores.mat"
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     # ---------------------------------------------------------------------------

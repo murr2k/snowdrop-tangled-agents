@@ -1,0 +1,1832 @@
+[
+  {
+    "state": "PGPGGGPPGGPPGPG",
+    "lut_score": 7.943015,
+    "lut_index": 21307,
+    "known_outcome": "loss",
+    "known_outcome_count": 6,
+    "known_avg_score": -8.8062,
+    "num_paths": 10,
+    "min_path_confidence": 0.75,
+    "max_path_confidence": 0.75,
+    "openings": [
+      "E1G",
+      "E2P",
+      "E3G",
+      "E4G",
+      "E6P"
+    ],
+    "best_opening": "E1G"
+  },
+  {
+    "state": "PPPGPPGGPPGPGPP",
+    "lut_score": 3.976827,
+    "lut_index": 5321,
+    "known_outcome": "draw",
+    "known_outcome_count": 8,
+    "known_avg_score": 0.0061,
+    "num_paths": 3,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E0P",
+      "E1P",
+      "E4P"
+    ],
+    "best_opening": "E1P"
+  },
+  {
+    "state": "PGPGGGPPPGPGGPP",
+    "lut_score": 3.974147,
+    "lut_index": 6715,
+    "known_outcome": "loss",
+    "known_outcome_count": 20,
+    "known_avg_score": -0.4069,
+    "num_paths": 30,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E1G",
+      "E2P",
+      "E3G",
+      "E4G",
+      "E7P",
+      "E8P"
+    ],
+    "best_opening": "E1G"
+  },
+  {
+    "state": "PGPGGPPPPPPGGPG",
+    "lut_score": 3.969495,
+    "lut_index": 22555,
+    "known_outcome": "loss",
+    "known_outcome_count": 5,
+    "known_avg_score": -4.4752,
+    "num_paths": 4,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E14G",
+      "E1G",
+      "E3G"
+    ],
+    "best_opening": "E1G"
+  },
+  {
+    "state": "PGPGGGPPPGPGGPG",
+    "lut_score": 3.96764,
+    "lut_index": 23099,
+    "known_outcome": "loss",
+    "known_outcome_count": 3,
+    "known_avg_score": -2.7037,
+    "num_paths": 30,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E1G",
+      "E2P",
+      "E3G",
+      "E4G",
+      "E7P",
+      "E8P"
+    ],
+    "best_opening": "E1G"
+  },
+  {
+    "state": "PPGGPPGPGGGGGGP",
+    "lut_score": 1.99436,
+    "lut_index": 16205,
+    "known_outcome": "loss",
+    "known_outcome_count": 9,
+    "known_avg_score": 0.6697,
+    "num_paths": 1,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E9G"
+    ],
+    "best_opening": "E9G"
+  },
+  {
+    "state": "PPGPPGGGGGGGGPP",
+    "lut_score": 1.99436,
+    "lut_index": 8165,
+    "known_outcome": "loss",
+    "known_outcome_count": 9,
+    "known_avg_score": 0.6498,
+    "num_paths": 2,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E11G",
+      "E9G"
+    ],
+    "best_opening": "E9G"
+  },
+  {
+    "state": "PGGPGGPPPGPPPPP",
+    "lut_score": 1.98471,
+    "lut_index": 567,
+    "known_outcome": "draw",
+    "known_outcome_count": 140,
+    "known_avg_score": 0.0326,
+    "num_paths": 2,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E1G",
+      "E2G"
+    ],
+    "best_opening": "E1G"
+  },
+  {
+    "state": "PGGPGGPPPGGPGPP",
+    "lut_score": 1.983786,
+    "lut_index": 5687,
+    "known_outcome": "draw",
+    "known_outcome_count": 81,
+    "known_avg_score": -0.049,
+    "num_paths": 2,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E1G",
+      "E2G"
+    ],
+    "best_opening": "E1G"
+  },
+  {
+    "state": "PGGGGPGPPPPPPPP",
+    "lut_score": 1.980423,
+    "lut_index": 95,
+    "known_outcome": "loss",
+    "known_outcome_count": 8,
+    "known_avg_score": 0.4884,
+    "num_paths": 2,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E1G",
+      "E6G"
+    ],
+    "best_opening": "E1G"
+  },
+  {
+    "state": "PGGGGPPGPPGPGGG",
+    "lut_score": 1.979824,
+    "lut_index": 29855,
+    "known_outcome": "draw",
+    "known_outcome_count": 52,
+    "known_avg_score": 0.0897,
+    "num_paths": 2,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E1G",
+      "E7G"
+    ],
+    "best_opening": "E1G"
+  },
+  {
+    "state": "PGPGGPGPGPPPGPG",
+    "lut_score": 1.972459,
+    "lut_index": 20827,
+    "known_outcome": "loss",
+    "known_outcome_count": 4,
+    "known_avg_score": -1.555,
+    "num_paths": 4,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E1G",
+      "E3G",
+      "E9P"
+    ],
+    "best_opening": "E1G"
+  },
+  {
+    "state": "PGGPPGGPPGGGGPG",
+    "lut_score": 1.596229,
+    "lut_index": 24167,
+    "known_outcome": "loss",
+    "known_outcome_count": 2,
+    "known_avg_score": -0.388,
+    "num_paths": 3,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E1G",
+      "E2G",
+      "E9G"
+    ],
+    "best_opening": "E9G"
+  },
+  {
+    "state": "PGGPGPPPPGGGGPP",
+    "lut_score": 1.595757,
+    "lut_index": 7703,
+    "known_outcome": "draw",
+    "known_outcome_count": 1,
+    "known_avg_score": 0.316,
+    "num_paths": 1,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E3P"
+    ],
+    "best_opening": "E3P"
+  },
+  {
+    "state": "GPGPGPPPPGPGPPP",
+    "lut_score": 1.595757,
+    "lut_index": 2582,
+    "known_outcome": "draw",
+    "known_outcome_count": 65,
+    "known_avg_score": 0.0177,
+    "num_paths": 1,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E12P"
+    ],
+    "best_opening": "E12P"
+  },
+  {
+    "state": "PPPPGGGGPGGGPGP",
+    "lut_score": 0.797879,
+    "lut_index": 12017,
+    "known_outcome": "loss",
+    "known_outcome_count": 11,
+    "known_avg_score": -2.3102,
+    "num_paths": 3,
+    "min_path_confidence": 0.6667,
+    "max_path_confidence": 0.6667,
+    "openings": [
+      "E0P",
+      "E1P",
+      "E2P"
+    ],
+    "best_opening": "E1P"
+  },
+  {
+    "state": "PPGPPGPPGGGGGPP",
+    "lut_score": 0.797879,
+    "lut_index": 7973,
+    "known_outcome": "draw",
+    "known_outcome_count": 2,
+    "known_avg_score": 0.056,
+    "num_paths": 2,
+    "min_path_confidence": 0.375,
+    "max_path_confidence": 0.375,
+    "openings": [
+      "E0P",
+      "E1P"
+    ],
+    "best_opening": "E1P"
+  },
+  {
+    "state": "PGGPGPPPGGGGGPP",
+    "lut_score": 0.01871,
+    "lut_index": 7959,
+    "known_outcome": "loss",
+    "known_outcome_count": 1,
+    "known_avg_score": 0.064,
+    "num_paths": 1,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E3P"
+    ],
+    "best_opening": "E3P"
+  },
+  {
+    "state": "GPGPGPPGPGPGPPP",
+    "lut_score": 0.01871,
+    "lut_index": 2710,
+    "known_outcome": "draw",
+    "known_outcome_count": 38,
+    "known_avg_score": 0.4852,
+    "num_paths": 1,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E12P"
+    ],
+    "best_opening": "E12P"
+  },
+  {
+    "state": "PPPPGGGGPGGGPGG",
+    "lut_score": 0.012941,
+    "lut_index": 28401,
+    "known_outcome": null,
+    "known_outcome_count": 0,
+    "known_avg_score": null,
+    "num_paths": 3,
+    "min_path_confidence": 0.6667,
+    "max_path_confidence": 0.6667,
+    "openings": [
+      "E0P",
+      "E1P",
+      "E2P"
+    ],
+    "best_opening": "E1P"
+  },
+  {
+    "state": "PPGGPPGGGGGGGPP",
+    "lut_score": 0.012368,
+    "lut_index": 8141,
+    "known_outcome": "draw",
+    "known_outcome_count": 9,
+    "known_avg_score": 0.5363,
+    "num_paths": 1,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E7G"
+    ],
+    "best_opening": "E7G"
+  },
+  {
+    "state": "PPGPPPGGGGGGGPP",
+    "lut_score": 0.012211,
+    "lut_index": 8133,
+    "known_outcome": null,
+    "known_outcome_count": 0,
+    "known_avg_score": null,
+    "num_paths": 1,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E7G"
+    ],
+    "best_opening": "E7G"
+  },
+  {
+    "state": "PPGGPPGPGGGGGPP",
+    "lut_score": 0.012211,
+    "lut_index": 8013,
+    "known_outcome": null,
+    "known_outcome_count": 0,
+    "known_avg_score": null,
+    "num_paths": 1,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E9G"
+    ],
+    "best_opening": "E9G"
+  },
+  {
+    "state": "GPGPPGPPPGGGGPG",
+    "lut_score": 0.010401,
+    "lut_index": 24102,
+    "known_outcome": "draw",
+    "known_outcome_count": 58,
+    "known_avg_score": 0.5406,
+    "num_paths": 2,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E0G",
+      "E13P"
+    ],
+    "best_opening": "E0G"
+  },
+  {
+    "state": "GPPGPPPGPGGGGPG",
+    "lut_score": 0.010068,
+    "lut_index": 24202,
+    "known_outcome": "draw",
+    "known_outcome_count": 3,
+    "known_avg_score": 0.205,
+    "num_paths": 1,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E0G"
+    ],
+    "best_opening": "E0G"
+  },
+  {
+    "state": "GPGPGPPPGGPGPPP",
+    "lut_score": 0.008847,
+    "lut_index": 2838,
+    "known_outcome": null,
+    "known_outcome_count": 0,
+    "known_avg_score": null,
+    "num_paths": 1,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E12P"
+    ],
+    "best_opening": "E12P"
+  },
+  {
+    "state": "PPGPGGGGGGGGGPP",
+    "lut_score": 0.008813,
+    "lut_index": 8181,
+    "known_outcome": null,
+    "known_outcome_count": 0,
+    "known_avg_score": null,
+    "num_paths": 2,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E11G",
+      "E9G"
+    ],
+    "best_opening": "E9G"
+  },
+  {
+    "state": "PGGGGPGPPPGGGPG",
+    "lut_score": 0.008656,
+    "lut_index": 23647,
+    "known_outcome": "loss",
+    "known_outcome_count": 4,
+    "known_avg_score": -1.6852,
+    "num_paths": 2,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E1G",
+      "E6G"
+    ],
+    "best_opening": "E1G"
+  },
+  {
+    "state": "GPPGPPPPPGGGGPG",
+    "lut_score": 0.008654,
+    "lut_index": 24074,
+    "known_outcome": "draw",
+    "known_outcome_count": 10,
+    "known_avg_score": 0.7431,
+    "num_paths": 3,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E0G"
+    ],
+    "best_opening": "E0G"
+  },
+  {
+    "state": "PGGPPPPPPGGGGPG",
+    "lut_score": 0.008621,
+    "lut_index": 24071,
+    "known_outcome": "loss",
+    "known_outcome_count": 3,
+    "known_avg_score": -0.4663,
+    "num_paths": 3,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E1G",
+      "E2G",
+      "E9G"
+    ],
+    "best_opening": "E9G"
+  },
+  {
+    "state": "GPPGPPPPPGGGGPP",
+    "lut_score": 0.008513,
+    "lut_index": 7690,
+    "known_outcome": null,
+    "known_outcome_count": 0,
+    "known_avg_score": null,
+    "num_paths": 2,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E0G"
+    ],
+    "best_opening": "E0G"
+  },
+  {
+    "state": "PPPPGGPGGGGGGPP",
+    "lut_score": 0.007634,
+    "lut_index": 8113,
+    "known_outcome": "draw",
+    "known_outcome_count": 1,
+    "known_avg_score": 0.105,
+    "num_paths": 1,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E6P"
+    ],
+    "best_opening": "E6P"
+  },
+  {
+    "state": "PGGPPPGPPGGGGPP",
+    "lut_score": 0.007495,
+    "lut_index": 7751,
+    "known_outcome": "draw",
+    "known_outcome_count": 81,
+    "known_avg_score": 0.0383,
+    "num_paths": 4,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E1G",
+      "E2G",
+      "E5P"
+    ],
+    "best_opening": "E1G"
+  },
+  {
+    "state": "PGGGGPGPPPGGGPP",
+    "lut_score": 0.007214,
+    "lut_index": 7263,
+    "known_outcome": null,
+    "known_outcome_count": 0,
+    "known_avg_score": null,
+    "num_paths": 2,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E1G",
+      "E6G"
+    ],
+    "best_opening": "E1G"
+  },
+  {
+    "state": "PGPGGPPGPPPGPPG",
+    "lut_score": 0.007198,
+    "lut_index": 18587,
+    "known_outcome": "loss",
+    "known_outcome_count": 4,
+    "known_avg_score": 0.1422,
+    "num_paths": 8,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E14G",
+      "E1G",
+      "E3G",
+      "E9P"
+    ],
+    "best_opening": "E1G"
+  },
+  {
+    "state": "PPGPGGGGGPGGPPP",
+    "lut_score": 0.007068,
+    "lut_index": 3573,
+    "known_outcome": "loss",
+    "known_outcome_count": 4,
+    "known_avg_score": 0.102,
+    "num_paths": 3,
+    "min_path_confidence": 0.5714,
+    "max_path_confidence": 0.5714,
+    "openings": [
+      "E0P",
+      "E1P",
+      "E2G"
+    ],
+    "best_opening": "E1P"
+  },
+  {
+    "state": "PGPGGPPPPPPGPPG",
+    "lut_score": 0.006823,
+    "lut_index": 18459,
+    "known_outcome": null,
+    "known_outcome_count": 0,
+    "known_avg_score": null,
+    "num_paths": 4,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E14G",
+      "E1G",
+      "E3G"
+    ],
+    "best_opening": "E1G"
+  },
+  {
+    "state": "PGGPGGGPPGGGGPG",
+    "lut_score": 0.006823,
+    "lut_index": 24183,
+    "known_outcome": null,
+    "known_outcome_count": 0,
+    "known_avg_score": null,
+    "num_paths": 3,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E1G",
+      "E2G",
+      "E9G"
+    ],
+    "best_opening": "E9G"
+  },
+  {
+    "state": "PGPGPPPPGGPPPPG",
+    "lut_score": 0.006718,
+    "lut_index": 17163,
+    "known_outcome": "draw",
+    "known_outcome_count": 115,
+    "known_avg_score": 0.4261,
+    "num_paths": 16,
+    "min_path_confidence": 0.9521,
+    "max_path_confidence": 0.9521,
+    "openings": [
+      "E11P",
+      "E1G",
+      "E3G",
+      "E8G"
+    ],
+    "best_opening": "E1G"
+  },
+  {
+    "state": "PPGGPGGGPGGGGPP",
+    "lut_score": 0.006613,
+    "lut_index": 7917,
+    "known_outcome": "draw",
+    "known_outcome_count": 4,
+    "known_avg_score": 0.0808,
+    "num_paths": 2,
+    "min_path_confidence": 0.625,
+    "max_path_confidence": 0.625,
+    "openings": [
+      "E0P",
+      "E1P"
+    ],
+    "best_opening": "E1P"
+  },
+  {
+    "state": "PGGGGPPGGPGGGPP",
+    "lut_score": 0.006545,
+    "lut_index": 7583,
+    "known_outcome": "draw",
+    "known_outcome_count": 162,
+    "known_avg_score": 0.7793,
+    "num_paths": 2,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E1G",
+      "E7G"
+    ],
+    "best_opening": "E1G"
+  },
+  {
+    "state": "GPGPGGPPGGGGGPP",
+    "lut_score": 0.006291,
+    "lut_index": 7990,
+    "known_outcome": "draw",
+    "known_outcome_count": 74,
+    "known_avg_score": 0.2307,
+    "num_paths": 1,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E10G"
+    ],
+    "best_opening": "E10G"
+  },
+  {
+    "state": "GPGPPGPPGPPGPPG",
+    "lut_score": 0.006211,
+    "lut_index": 18726,
+    "known_outcome": "loss",
+    "known_outcome_count": 1,
+    "known_avg_score": -0.336,
+    "num_paths": 2,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E0G",
+      "E13P"
+    ],
+    "best_opening": "E0G"
+  },
+  {
+    "state": "GPPPPGPPGPPGGPG",
+    "lut_score": 0.006024,
+    "lut_index": 22818,
+    "known_outcome": "loss",
+    "known_outcome_count": 5,
+    "known_avg_score": 0.2528,
+    "num_paths": 4,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E10P",
+      "E12G"
+    ],
+    "best_opening": "E10P"
+  },
+  {
+    "state": "PGGPPPGPPGGGGPG",
+    "lut_score": 0.005983,
+    "lut_index": 24135,
+    "known_outcome": null,
+    "known_outcome_count": 0,
+    "known_avg_score": null,
+    "num_paths": 7,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E1G",
+      "E2G",
+      "E5P",
+      "E9G"
+    ],
+    "best_opening": "E1G"
+  },
+  {
+    "state": "PGGPPPGPGPGGGPP",
+    "lut_score": 0.005745,
+    "lut_index": 7495,
+    "known_outcome": "draw",
+    "known_outcome_count": 52,
+    "known_avg_score": 0.0513,
+    "num_paths": 4,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E1G",
+      "E2G",
+      "E5P"
+    ],
+    "best_opening": "E1G"
+  },
+  {
+    "state": "GPGPGGPGGGGGGPP",
+    "lut_score": 0.005598,
+    "lut_index": 8118,
+    "known_outcome": null,
+    "known_outcome_count": 0,
+    "known_avg_score": null,
+    "num_paths": 1,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E10G"
+    ],
+    "best_opening": "E10G"
+  },
+  {
+    "state": "PPGPGPGPPGGPGPG",
+    "lut_score": 0.005358,
+    "lut_index": 22101,
+    "known_outcome": "draw",
+    "known_outcome_count": 9,
+    "known_avg_score": 0.5239,
+    "num_paths": 1,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E6G"
+    ],
+    "best_opening": "E6G"
+  },
+  {
+    "state": "PPPPGPGPPGGPGPG",
+    "lut_score": 0.005267,
+    "lut_index": 22097,
+    "known_outcome": null,
+    "known_outcome_count": 0,
+    "known_avg_score": null,
+    "num_paths": 1,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E6G"
+    ],
+    "best_opening": "E6G"
+  },
+  {
+    "state": "PGPPGGGPPPGGPPG",
+    "lut_score": 0.005262,
+    "lut_index": 19571,
+    "known_outcome": "loss",
+    "known_outcome_count": 12,
+    "known_avg_score": 0.012,
+    "num_paths": 10,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E1G",
+      "E2P",
+      "E3P",
+      "E4G",
+      "E5G"
+    ],
+    "best_opening": "E1G"
+  },
+  {
+    "state": "PGPPGGPPPGPGPPG",
+    "lut_score": 0.005161,
+    "lut_index": 18995,
+    "known_outcome": "draw",
+    "known_outcome_count": 26,
+    "known_avg_score": 0.174,
+    "num_paths": 10,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E1G",
+      "E2P",
+      "E3P",
+      "E4G",
+      "E5G"
+    ],
+    "best_opening": "E1G"
+  },
+  {
+    "state": "PPPGGPPGGPGGGPP",
+    "lut_score": 0.004893,
+    "lut_index": 7577,
+    "known_outcome": "draw",
+    "known_outcome_count": 13,
+    "known_avg_score": 0.1297,
+    "num_paths": 3,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E0P",
+      "E14P",
+      "E1P"
+    ],
+    "best_opening": "E1P"
+  },
+  {
+    "state": "PPGPPGPGGGGGGPP",
+    "lut_score": 0.004802,
+    "lut_index": 8101,
+    "known_outcome": null,
+    "known_outcome_count": 0,
+    "known_avg_score": null,
+    "num_paths": 2,
+    "min_path_confidence": 0.375,
+    "max_path_confidence": 0.375,
+    "openings": [
+      "E0P",
+      "E1P"
+    ],
+    "best_opening": "E1P"
+  },
+  {
+    "state": "PPGPGGGGPGGGPGP",
+    "lut_score": 0.004755,
+    "lut_index": 12021,
+    "known_outcome": "loss",
+    "known_outcome_count": 3,
+    "known_avg_score": -2.104,
+    "num_paths": 3,
+    "min_path_confidence": 0.4286,
+    "max_path_confidence": 0.4286,
+    "openings": [
+      "E0P",
+      "E1P",
+      "E2G"
+    ],
+    "best_opening": "E1P"
+  },
+  {
+    "state": "PPGPGGGGPGPGPGP",
+    "lut_score": 0.004703,
+    "lut_index": 10997,
+    "known_outcome": null,
+    "known_outcome_count": 0,
+    "known_avg_score": null,
+    "num_paths": 3,
+    "min_path_confidence": 0.4286,
+    "max_path_confidence": 0.4286,
+    "openings": [
+      "E0P",
+      "E1P",
+      "E2G"
+    ],
+    "best_opening": "E1P"
+  },
+  {
+    "state": "GPGPGPPGGGPGPPP",
+    "lut_score": 0.0041,
+    "lut_index": 2966,
+    "known_outcome": null,
+    "known_outcome_count": 0,
+    "known_avg_score": null,
+    "num_paths": 1,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E12P"
+    ],
+    "best_opening": "E12P"
+  },
+  {
+    "state": "PGPPPPGPPPGGPGP",
+    "lut_score": 0.003333,
+    "lut_index": 11331,
+    "known_outcome": "loss",
+    "known_outcome_count": 5,
+    "known_avg_score": -3.095,
+    "num_paths": 4,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E1G",
+      "E3P",
+      "E4P"
+    ],
+    "best_opening": "E1G"
+  },
+  {
+    "state": "PGGPPPGPGGGGGPP",
+    "lut_score": 0.003226,
+    "lut_index": 8007,
+    "known_outcome": null,
+    "known_outcome_count": 0,
+    "known_avg_score": null,
+    "num_paths": 4,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E1G",
+      "E2G",
+      "E5P"
+    ],
+    "best_opening": "E1G"
+  },
+  {
+    "state": "PPGGPGGPPGGGGPP",
+    "lut_score": 0.003092,
+    "lut_index": 7789,
+    "known_outcome": null,
+    "known_outcome_count": 0,
+    "known_avg_score": null,
+    "num_paths": 2,
+    "min_path_confidence": 0.625,
+    "max_path_confidence": 0.625,
+    "openings": [
+      "E0P",
+      "E1P"
+    ],
+    "best_opening": "E1P"
+  },
+  {
+    "state": "PPPPGGPPGGGGGPP",
+    "lut_score": 0.002755,
+    "lut_index": 7985,
+    "known_outcome": null,
+    "known_outcome_count": 0,
+    "known_avg_score": null,
+    "num_paths": 1,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E6P"
+    ],
+    "best_opening": "E6P"
+  },
+  {
+    "state": "PGPGPPPPGGGPPPG",
+    "lut_score": 0.002478,
+    "lut_index": 18187,
+    "known_outcome": null,
+    "known_outcome_count": 0,
+    "known_avg_score": null,
+    "num_paths": 8,
+    "min_path_confidence": 0.9521,
+    "max_path_confidence": 0.9521,
+    "openings": [
+      "E11P",
+      "E1G",
+      "E3G",
+      "E8G"
+    ],
+    "best_opening": "E1G"
+  },
+  {
+    "state": "PGPPGGPPPGPGPPP",
+    "lut_score": 0.002229,
+    "lut_index": 2611,
+    "known_outcome": null,
+    "known_outcome_count": 0,
+    "known_avg_score": null,
+    "num_paths": 10,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E1G",
+      "E2P",
+      "E3P",
+      "E4G",
+      "E5G"
+    ],
+    "best_opening": "E1G"
+  },
+  {
+    "state": "PGGGGPGPPPPGPPP",
+    "lut_score": 0.002163,
+    "lut_index": 2143,
+    "known_outcome": null,
+    "known_outcome_count": 0,
+    "known_avg_score": null,
+    "num_paths": 2,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E1G",
+      "E6G"
+    ],
+    "best_opening": "E1G"
+  },
+  {
+    "state": "PPPGPPGGPPGPGPG",
+    "lut_score": 0.001988,
+    "lut_index": 21705,
+    "known_outcome": null,
+    "known_outcome_count": 0,
+    "known_avg_score": null,
+    "num_paths": 3,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E0P",
+      "E1P",
+      "E4P"
+    ],
+    "best_opening": "E1P"
+  },
+  {
+    "state": "PPPGGPPGGPGPGPP",
+    "lut_score": 0.001988,
+    "lut_index": 5529,
+    "known_outcome": null,
+    "known_outcome_count": 0,
+    "known_avg_score": null,
+    "num_paths": 3,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E0P",
+      "E14P",
+      "E1P"
+    ],
+    "best_opening": "E1P"
+  },
+  {
+    "state": "GPGPGGPGPGGGGPP",
+    "lut_score": 0.001969,
+    "lut_index": 7862,
+    "known_outcome": "draw",
+    "known_outcome_count": 53,
+    "known_avg_score": 0.0659,
+    "num_paths": 1,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E10G"
+    ],
+    "best_opening": "E10G"
+  },
+  {
+    "state": "GPGPPGPPPPPGPPG",
+    "lut_score": 0.001743,
+    "lut_index": 18470,
+    "known_outcome": "draw",
+    "known_outcome_count": 40,
+    "known_avg_score": 0.4198,
+    "num_paths": 2,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E0G",
+      "E13P"
+    ],
+    "best_opening": "E0G"
+  },
+  {
+    "state": "GPGPGGPPPGGGGPP",
+    "lut_score": 0.001486,
+    "lut_index": 7734,
+    "known_outcome": null,
+    "known_outcome_count": 0,
+    "known_avg_score": null,
+    "num_paths": 1,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E10G"
+    ],
+    "best_opening": "E10G"
+  },
+  {
+    "state": "PGPGPPPGGGPPPPG",
+    "lut_score": 0.001257,
+    "lut_index": 17291,
+    "known_outcome": null,
+    "known_outcome_count": 0,
+    "known_avg_score": null,
+    "num_paths": 8,
+    "min_path_confidence": 0.9521,
+    "max_path_confidence": 0.9521,
+    "openings": [
+      "E11P",
+      "E1G",
+      "E3G",
+      "E8G"
+    ],
+    "best_opening": "E1G"
+  },
+  {
+    "state": "PPPGGPPPPPPPPPP",
+    "lut_score": 0.000456,
+    "lut_index": 25,
+    "known_outcome": "draw",
+    "known_outcome_count": 39,
+    "known_avg_score": 0.047,
+    "num_paths": 3,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E0P",
+      "E1P",
+      "E8P"
+    ],
+    "best_opening": "E1P"
+  },
+  {
+    "state": "PGPGGGPGPGPPPGP",
+    "lut_score": 0.000107,
+    "lut_index": 8891,
+    "known_outcome": "loss",
+    "known_outcome_count": 2,
+    "known_avg_score": 0.017,
+    "num_paths": 10,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E13G",
+      "E1G",
+      "E2P",
+      "E3G",
+      "E4G"
+    ],
+    "best_opening": "E1G"
+  },
+  {
+    "state": "PPPGGPPPPPPPPPG",
+    "lut_score": -0.000105,
+    "lut_index": 16409,
+    "known_outcome": null,
+    "known_outcome_count": 0,
+    "known_avg_score": null,
+    "num_paths": 3,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E0P",
+      "E1P",
+      "E8P"
+    ],
+    "best_opening": "E1P"
+  },
+  {
+    "state": "PPPPGGGPPPGGPPG",
+    "lut_score": -0.00061,
+    "lut_index": 19569,
+    "known_outcome": "loss",
+    "known_outcome_count": 5,
+    "known_avg_score": 0.8612,
+    "num_paths": 6,
+    "min_path_confidence": 0.3333,
+    "max_path_confidence": 0.3333,
+    "openings": [
+      "E0P",
+      "E1P",
+      "E2P"
+    ],
+    "best_opening": "E1P"
+  },
+  {
+    "state": "PGPGGGGPGGPPPPG",
+    "lut_score": -0.000855,
+    "lut_index": 17275,
+    "known_outcome": "loss",
+    "known_outcome_count": 9,
+    "known_avg_score": -1.0227,
+    "num_paths": 18,
+    "min_path_confidence": 0.5,
+    "max_path_confidence": 0.5,
+    "openings": [
+      "E1G",
+      "E2P",
+      "E3G",
+      "E4G"
+    ],
+    "best_opening": "E1G"
+  },
+  {
+    "state": "PGPPPPGPPPGGPGG",
+    "lut_score": -0.000858,
+    "lut_index": 27715,
+    "known_outcome": null,
+    "known_outcome_count": 0,
+    "known_avg_score": null,
+    "num_paths": 4,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E1G",
+      "E3P",
+      "E4P"
+    ],
+    "best_opening": "E1G"
+  },
+  {
+    "state": "PGPGGGGPGGPPPPP",
+    "lut_score": -0.001669,
+    "lut_index": 891,
+    "known_outcome": null,
+    "known_outcome_count": 0,
+    "known_avg_score": null,
+    "num_paths": 18,
+    "min_path_confidence": 0.5,
+    "max_path_confidence": 0.5,
+    "openings": [
+      "E1G",
+      "E2P",
+      "E3G",
+      "E4G"
+    ],
+    "best_opening": "E1G"
+  },
+  {
+    "state": "PGGGGPPGPPGPGGP",
+    "lut_score": -0.0019,
+    "lut_index": 13471,
+    "known_outcome": null,
+    "known_outcome_count": 0,
+    "known_avg_score": null,
+    "num_paths": 2,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E1G",
+      "E7G"
+    ],
+    "best_opening": "E1G"
+  },
+  {
+    "state": "GPGPPGPPPGGGGPP",
+    "lut_score": -0.001939,
+    "lut_index": 7718,
+    "known_outcome": null,
+    "known_outcome_count": 0,
+    "known_avg_score": null,
+    "num_paths": 2,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E0G",
+      "E13P"
+    ],
+    "best_opening": "E0G"
+  },
+  {
+    "state": "PGPGPGPPPPPPPPP",
+    "lut_score": -0.002372,
+    "lut_index": 43,
+    "known_outcome": "loss",
+    "known_outcome_count": 4,
+    "known_avg_score": -2.6365,
+    "num_paths": 4,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E14P",
+      "E1G",
+      "E3G"
+    ],
+    "best_opening": "E1G"
+  },
+  {
+    "state": "GGGPPPPPGGPGGPG",
+    "lut_score": -0.00246,
+    "lut_index": 23304,
+    "known_outcome": "loss",
+    "known_outcome_count": 2,
+    "known_avg_score": 0.12,
+    "num_paths": 2,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E10P",
+      "E12G"
+    ],
+    "best_opening": "E10P"
+  },
+  {
+    "state": "GPPPPGPPGPPGGPP",
+    "lut_score": -0.002677,
+    "lut_index": 6434,
+    "known_outcome": null,
+    "known_outcome_count": 0,
+    "known_avg_score": null,
+    "num_paths": 4,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E10P",
+      "E12G"
+    ],
+    "best_opening": "E10P"
+  },
+  {
+    "state": "PGPGPGPPPPPGPPP",
+    "lut_score": -0.003,
+    "lut_index": 2091,
+    "known_outcome": null,
+    "known_outcome_count": 0,
+    "known_avg_score": null,
+    "num_paths": 4,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E14P",
+      "E1G",
+      "E3G"
+    ],
+    "best_opening": "E1G"
+  },
+  {
+    "state": "PGPGPGPGPPPPPGP",
+    "lut_score": -0.003226,
+    "lut_index": 8363,
+    "known_outcome": "loss",
+    "known_outcome_count": 7,
+    "known_avg_score": -0.173,
+    "num_paths": 4,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E13G",
+      "E1G",
+      "E3G"
+    ],
+    "best_opening": "E1G"
+  },
+  {
+    "state": "PGGPGGPPPGGPGPG",
+    "lut_score": -0.003456,
+    "lut_index": 22071,
+    "known_outcome": null,
+    "known_outcome_count": 0,
+    "known_avg_score": null,
+    "num_paths": 2,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E1G",
+      "E2G"
+    ],
+    "best_opening": "E1G"
+  },
+  {
+    "state": "PGGPGGPPPGPPPPG",
+    "lut_score": -0.003456,
+    "lut_index": 16951,
+    "known_outcome": null,
+    "known_outcome_count": 0,
+    "known_avg_score": null,
+    "num_paths": 2,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E1G",
+      "E2G"
+    ],
+    "best_opening": "E1G"
+  },
+  {
+    "state": "PGPPGGGPPPGGGPG",
+    "lut_score": -0.003721,
+    "lut_index": 23667,
+    "known_outcome": null,
+    "known_outcome_count": 0,
+    "known_avg_score": null,
+    "num_paths": 10,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E1G",
+      "E2P",
+      "E3P",
+      "E4G",
+      "E5G"
+    ],
+    "best_opening": "E1G"
+  },
+  {
+    "state": "GPGPGGGPPPPGPGP",
+    "lut_score": -0.005358,
+    "lut_index": 10358,
+    "known_outcome": "loss",
+    "known_outcome_count": 5,
+    "known_avg_score": -1.6732,
+    "num_paths": 2,
+    "min_path_confidence": 0.7143,
+    "max_path_confidence": 0.7143,
+    "openings": [
+      "E0G"
+    ],
+    "best_opening": "E0G"
+  },
+  {
+    "state": "PGPGGGPPPPGGGPG",
+    "lut_score": -0.005583,
+    "lut_index": 23611,
+    "known_outcome": null,
+    "known_outcome_count": 0,
+    "known_avg_score": null,
+    "num_paths": 10,
+    "min_path_confidence": 0.25,
+    "max_path_confidence": 0.25,
+    "openings": [
+      "E1G",
+      "E2P",
+      "E3G",
+      "E4G",
+      "E6P"
+    ],
+    "best_opening": "E1G"
+  },
+  {
+    "state": "PGPGGGPGGGPPPPP",
+    "lut_score": -0.005763,
+    "lut_index": 955,
+    "known_outcome": "loss",
+    "known_outcome_count": 10,
+    "known_avg_score": -2.6306,
+    "num_paths": 10,
+    "min_path_confidence": 0.75,
+    "max_path_confidence": 0.75,
+    "openings": [
+      "E1G",
+      "E2P",
+      "E3G",
+      "E4G",
+      "E6P"
+    ],
+    "best_opening": "E1G"
+  },
+  {
+    "state": "GPPPPGGPPPPGGPG",
+    "lut_score": -0.006559,
+    "lut_index": 22626,
+    "known_outcome": "loss",
+    "known_outcome_count": 8,
+    "known_avg_score": -2.0559,
+    "num_paths": 4,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E10P",
+      "E12G"
+    ],
+    "best_opening": "E10P"
+  },
+  {
+    "state": "PGPGGGPPPPGGGPP",
+    "lut_score": -0.007094,
+    "lut_index": 7227,
+    "known_outcome": "loss",
+    "known_outcome_count": 6,
+    "known_avg_score": -0.084,
+    "num_paths": 10,
+    "min_path_confidence": 0.25,
+    "max_path_confidence": 0.25,
+    "openings": [
+      "E1G",
+      "E2P",
+      "E3G",
+      "E4G",
+      "E6P"
+    ],
+    "best_opening": "E1G"
+  },
+  {
+    "state": "GGGGPGPPPGGPGGP",
+    "lut_score": -0.007608,
+    "lut_index": 13872,
+    "known_outcome": "loss",
+    "known_outcome_count": 4,
+    "known_avg_score": -0.5995,
+    "num_paths": 1,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E9G"
+    ],
+    "best_opening": "E9G"
+  },
+  {
+    "state": "PGPGGGPGGGPPPGP",
+    "lut_score": -0.007835,
+    "lut_index": 9147,
+    "known_outcome": null,
+    "known_outcome_count": 0,
+    "known_avg_score": null,
+    "num_paths": 10,
+    "min_path_confidence": 0.75,
+    "max_path_confidence": 0.75,
+    "openings": [
+      "E1G",
+      "E2P",
+      "E3G",
+      "E4G",
+      "E6P"
+    ],
+    "best_opening": "E1G"
+  },
+  {
+    "state": "PPPPGGGPGPPGGGG",
+    "lut_score": -0.010009,
+    "lut_index": 31089,
+    "known_outcome": null,
+    "known_outcome_count": 0,
+    "known_avg_score": null,
+    "num_paths": 3,
+    "min_path_confidence": 0.3333,
+    "max_path_confidence": 0.3333,
+    "openings": [
+      "E0P",
+      "E1P",
+      "E2P"
+    ],
+    "best_opening": "E1P"
+  },
+  {
+    "state": "PPPPGGGPGPPGGPG",
+    "lut_score": -0.010428,
+    "lut_index": 22897,
+    "known_outcome": "loss",
+    "known_outcome_count": 1,
+    "known_avg_score": -0.213,
+    "num_paths": 3,
+    "min_path_confidence": 0.3333,
+    "max_path_confidence": 0.3333,
+    "openings": [
+      "E0P",
+      "E1P",
+      "E2P"
+    ],
+    "best_opening": "E1P"
+  },
+  {
+    "state": "PGPGGGPGPGPGPGP",
+    "lut_score": -0.012686,
+    "lut_index": 10939,
+    "known_outcome": null,
+    "known_outcome_count": 0,
+    "known_avg_score": null,
+    "num_paths": 10,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E13G",
+      "E1G",
+      "E2P",
+      "E3G",
+      "E4G"
+    ],
+    "best_opening": "E1G"
+  },
+  {
+    "state": "PGPGPGPGPPPPGGP",
+    "lut_score": -0.013413,
+    "lut_index": 12459,
+    "known_outcome": null,
+    "known_outcome_count": 0,
+    "known_avg_score": null,
+    "num_paths": 4,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E13G",
+      "E1G",
+      "E3G"
+    ],
+    "best_opening": "E1G"
+  },
+  {
+    "state": "GPGPGGGPGPPPPGP",
+    "lut_score": -0.013895,
+    "lut_index": 8566,
+    "known_outcome": null,
+    "known_outcome_count": 0,
+    "known_avg_score": null,
+    "num_paths": 2,
+    "min_path_confidence": 0.2857,
+    "max_path_confidence": 0.2857,
+    "openings": [
+      "E0G"
+    ],
+    "best_opening": "E0G"
+  },
+  {
+    "state": "GPGPGGGPPPPPPGP",
+    "lut_score": -0.015567,
+    "lut_index": 8310,
+    "known_outcome": "loss",
+    "known_outcome_count": 6,
+    "known_avg_score": -2.2298,
+    "num_paths": 4,
+    "min_path_confidence": 0.2857,
+    "max_path_confidence": 0.7143,
+    "openings": [
+      "E0G"
+    ],
+    "best_opening": "E0G"
+  },
+  {
+    "state": "PGPGGGPPGGPPGPP",
+    "lut_score": -0.016829,
+    "lut_index": 4923,
+    "known_outcome": null,
+    "known_outcome_count": 0,
+    "known_avg_score": null,
+    "num_paths": 10,
+    "min_path_confidence": 0.75,
+    "max_path_confidence": 0.75,
+    "openings": [
+      "E1G",
+      "E2P",
+      "E3G",
+      "E4G",
+      "E6P"
+    ],
+    "best_opening": "E1G"
+  },
+  {
+    "state": "PGPGGGGPPPPGPGG",
+    "lut_score": -0.017467,
+    "lut_index": 26747,
+    "known_outcome": "loss",
+    "known_outcome_count": 6,
+    "known_avg_score": -0.5013,
+    "num_paths": 6,
+    "min_path_confidence": 0.3846,
+    "max_path_confidence": 0.3846,
+    "openings": [
+      "E1G",
+      "E2P",
+      "E3G",
+      "E4G"
+    ],
+    "best_opening": "E1G"
+  },
+  {
+    "state": "PGPGGPPGPPPGGPG",
+    "lut_score": -1.969239,
+    "lut_index": 22683,
+    "known_outcome": null,
+    "known_outcome_count": 0,
+    "known_avg_score": null,
+    "num_paths": 8,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E14G",
+      "E1G",
+      "E3G",
+      "E9P"
+    ],
+    "best_opening": "E1G"
+  },
+  {
+    "state": "GGGPPPGPGGPGGPG",
+    "lut_score": -1.974651,
+    "lut_index": 23368,
+    "known_outcome": null,
+    "known_outcome_count": 0,
+    "known_avg_score": null,
+    "num_paths": 2,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E10P",
+      "E12G"
+    ],
+    "best_opening": "E10P"
+  },
+  {
+    "state": "PPGPGGGGPPGGPPP",
+    "lut_score": -1.980568,
+    "lut_index": 3317,
+    "known_outcome": null,
+    "known_outcome_count": 0,
+    "known_avg_score": null,
+    "num_paths": 3,
+    "min_path_confidence": 0.5714,
+    "max_path_confidence": 0.5714,
+    "openings": [
+      "E0P",
+      "E1P",
+      "E2G"
+    ],
+    "best_opening": "E1P"
+  },
+  {
+    "state": "PPPPGGGPPPGGPGG",
+    "lut_score": -1.989474,
+    "lut_index": 27761,
+    "known_outcome": null,
+    "known_outcome_count": 0,
+    "known_avg_score": null,
+    "num_paths": 6,
+    "min_path_confidence": 0.3333,
+    "max_path_confidence": 0.3333,
+    "openings": [
+      "E0P",
+      "E1P",
+      "E2P"
+    ],
+    "best_opening": "E1P"
+  },
+  {
+    "state": "PGGGGPPGGPGPGPP",
+    "lut_score": -3.97001,
+    "lut_index": 5535,
+    "known_outcome": null,
+    "known_outcome_count": 0,
+    "known_avg_score": null,
+    "num_paths": 2,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E1G",
+      "E7G"
+    ],
+    "best_opening": "E1G"
+  },
+  {
+    "state": "PGPGGPGPGPPPGPP",
+    "lut_score": -3.971247,
+    "lut_index": 4443,
+    "known_outcome": null,
+    "known_outcome_count": 0,
+    "known_avg_score": null,
+    "num_paths": 4,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E1G",
+      "E3G",
+      "E9P"
+    ],
+    "best_opening": "E1G"
+  },
+  {
+    "state": "GPPPPGGPGPPGGPG",
+    "lut_score": -3.973885,
+    "lut_index": 22882,
+    "known_outcome": null,
+    "known_outcome_count": 0,
+    "known_avg_score": null,
+    "num_paths": 4,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E10P",
+      "E12G"
+    ],
+    "best_opening": "E10P"
+  },
+  {
+    "state": "PGPGGGGPPPPGGGG",
+    "lut_score": -3.987614,
+    "lut_index": 30843,
+    "known_outcome": null,
+    "known_outcome_count": 0,
+    "known_avg_score": null,
+    "num_paths": 6,
+    "min_path_confidence": 0.3846,
+    "max_path_confidence": 0.3846,
+    "openings": [
+      "E1G",
+      "E2P",
+      "E3G",
+      "E4G"
+    ],
+    "best_opening": "E1G"
+  },
+  {
+    "state": "GGGGPGPPPGGGGGP",
+    "lut_score": -7.951164,
+    "lut_index": 15920,
+    "known_outcome": null,
+    "known_outcome_count": 0,
+    "known_avg_score": null,
+    "num_paths": 1,
+    "min_path_confidence": 1.0,
+    "max_path_confidence": 1.0,
+    "openings": [
+      "E9G"
+    ],
+    "best_opening": "E9G"
+  }
+]
