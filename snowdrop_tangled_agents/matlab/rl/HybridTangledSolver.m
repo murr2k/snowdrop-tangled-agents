@@ -82,6 +82,13 @@ classdef HybridTangledSolver < handle
         %   grey=9  -> shallow minimax (depth=MinimaxDepth, <1s)
         %   grey>=10 -> greedy prior (EdgeBias + heuristic, sub-ms)
         EarlyGameThreshold int32 = 0
+
+        % Late-game MCTS boost (0 = disabled).
+        % When colored edges >= LateGameBoostThreshold, multiply MCTS
+        % iterations by LateGameBoostMultiplier for that solve call.
+        % Applied regardless of score so losing positions get deeper search.
+        LateGameBoostThreshold int32 = 0
+        LateGameBoostMultiplier double = 1.5
     end
 
     methods
@@ -101,6 +108,8 @@ classdef HybridTangledSolver < handle
                 options.ExpandedLUTFile char = 'expanded_lut.mat'
                 options.OpponentModelFile char = 'opponent_model.mat'
                 options.EarlyGameThreshold int32 = 0
+                options.LateGameBoostThreshold int32 = 0
+                options.LateGameBoostMultiplier double = 1.5
             end
 
             this.TimeLimit = options.TimeLimit;
@@ -112,6 +121,8 @@ classdef HybridTangledSolver < handle
             this.ExpandedLUTFile = options.ExpandedLUTFile;
             this.OpponentModelFile = options.OpponentModelFile;
             this.EarlyGameThreshold = options.EarlyGameThreshold;
+            this.LateGameBoostThreshold = options.LateGameBoostThreshold;
+            this.LateGameBoostMultiplier = options.LateGameBoostMultiplier;
 
             % Initialize component solvers
             this.initializeSolvers();
@@ -215,6 +226,15 @@ classdef HybridTangledSolver < handle
                 this.LastMethod = info.strategy;
                 this.LastScore = info.score;
                 return;
+            end
+
+            % Sync MCTS.Iterations from MCTSIterations property (may have been
+            % changed externally) and apply late-game boost when colored >= threshold.
+            numColored = 15 - numGrey;
+            if this.LateGameBoostThreshold > 0 && numColored >= this.LateGameBoostThreshold
+                this.MCTS.Iterations = int32(round(double(this.MCTSIterations) * this.LateGameBoostMultiplier));
+            else
+                this.MCTS.Iterations = this.MCTSIterations;
             end
 
             % Strategy selection based on game phase

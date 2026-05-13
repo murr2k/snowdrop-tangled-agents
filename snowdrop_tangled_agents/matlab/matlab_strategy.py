@@ -458,6 +458,8 @@ class HybridSolverStrategy:
         expanded_lut_file: str = 'expanded_lut.mat',
         opponent_model_file: str = 'opponent_model.mat',
         early_game_threshold: int = 0,
+        late_game_boost_threshold: int = 0,
+        late_game_boost_multiplier: float = 1.5,
     ):
         """
         Initialize HybridSolverStrategy.
@@ -479,6 +481,8 @@ class HybridSolverStrategy:
         self.expanded_lut_file = expanded_lut_file
         self.opponent_model_file = opponent_model_file
         self.early_game_threshold = early_game_threshold
+        self.late_game_boost_threshold = late_game_boost_threshold
+        self.late_game_boost_multiplier = late_game_boost_multiplier
 
         self.bridge = get_bridge()
         self.engine = None
@@ -563,7 +567,9 @@ class HybridSolverStrategy:
                 f"'MCTSLUTFile', '{lut_file}', "
                 f"'ExpandedLUTFile', '{expanded_lut_file}', "
                 f"'OpponentModelFile', '{opponent_model_file}', "
-                f"'EarlyGameThreshold', {self.early_game_threshold});",
+                f"'EarlyGameThreshold', {self.early_game_threshold}, "
+                f"'LateGameBoostThreshold', {self.late_game_boost_threshold}, "
+                f"'LateGameBoostMultiplier', {self.late_game_boost_multiplier});",
                 nargout=0
             )
 
@@ -1630,7 +1636,8 @@ class AlphaQExplorerStrategy:
 
         # SA LUTs align with server adjudicator; alphaq opponent model for
         # accurate rollouts; early_game_threshold=9 skips MCTS for moves 2-4
-        # (grey=13,11 → greedy prior; grey=9 → depth-4 minimax)
+        # (grey=13,11 → greedy prior; grey=9 → depth-4 minimax);
+        # late_game_boost kicks in at grey=5 (colored=10) with 1.5x iterations
         self.solver = HybridSolverStrategy(
             time_limit=time_limit,
             minimax_depth=minimax_depth,
@@ -1641,6 +1648,8 @@ class AlphaQExplorerStrategy:
             expanded_lut_file='expanded_lut_sa.mat',
             opponent_model_file='opponent_model_alphaq.mat',
             early_game_threshold=9,
+            late_game_boost_threshold=10,
+            late_game_boost_multiplier=1.5,
         )
 
         # Persistent state
@@ -1848,47 +1857,11 @@ class AlphaQExplorerStrategy:
             }
             return (edge, color, stats)
 
-        # After first move, delegate to underlying solver
+        # After first move, delegate to underlying solver.
+        # Late-game boost is handled inside HybridSolverStrategy via
+        # LateGameBoostThreshold (MATLAB-side, phase-based, score-independent).
         self.move_count += 1
-
-        # Approach E: Winning-push heuristic
-        # When score >0.75, we're in winning territory - be more careful/thorough
-        if score > 0.75:
-            # Save original MCTS iterations
-            original_iterations = self.solver.mcts_iterations
-
-            # Increase MCTS iterations by 50% for critical winning positions
-            boosted_iterations = int(original_iterations * 1.5)
-            self.solver.mcts_iterations = boosted_iterations
-
-            # Update MATLAB solver with boosted iterations
-            if self.solver.solver_initialized and self.solver.engine:
-                try:
-                    self.solver.engine.eval(
-                        f"hybridSolver.MCTSIterations = {boosted_iterations};",
-                        nargout=0
-                    )
-                    logger.info(f"AlphaQ [winning-push]: Score {score:+.3f} >0.75, boosted MCTS {original_iterations} → {boosted_iterations}")
-                except Exception as e:
-                    logger.warning(f"Failed to boost MCTS iterations: {e}")
-
-            # Calculate move with boosted iterations
-            result = self.solver.calculate_move(state, score, score_history)
-
-            # Restore original iterations
-            self.solver.mcts_iterations = original_iterations
-            if self.solver.solver_initialized and self.solver.engine:
-                try:
-                    self.solver.engine.eval(
-                        f"hybridSolver.MCTSIterations = {original_iterations};",
-                        nargout=0
-                    )
-                except Exception:
-                    pass
-
-            return result
-        else:
-            return self.solver.calculate_move(state, score, score_history)
+        return self.solver.calculate_move(state, score, score_history)
 
     def _push_edge_bias(self):
         """
