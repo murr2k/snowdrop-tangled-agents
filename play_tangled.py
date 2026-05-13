@@ -1944,7 +1944,7 @@ class WebPlayer:
                     # This confirms the move was registered by the game.
                     accept_result = self._wait_for_condition(
                         self._JS_WAIT_NOT_OUR_TURN,
-                        timeout_ms=15000,  # 15s — click either works immediately or didn't register
+                        timeout_ms=30000,  # 30s — server indicator update can lag the edge color by 15-20s
                         description=f"E{edge} acceptance (attempt {attempt+1})"
                     )
                     if accept_result == 'game_over':
@@ -1958,7 +1958,12 @@ class WebPlayer:
                         success = True
                         break
                     else:
-                        # Timeout or error — click truly failed
+                        # Timeout — check if edge was actually colored (move accepted, indicator lagging)
+                        board_after = self.read_board()
+                        if board_after[edge] != '-':
+                            self.logger.info(f"Move E{edge} accepted (edge colored, indicator lagged): treating as success")
+                            success = True
+                            break
                         self.logger.warning(f"Move E{edge} click succeeded but not accepted: {accept_result} (attempt {attempt+1})")
                 else:
                     self.logger.warning(f"Move E{edge} attempt {attempt+1}/{max_retries} failed")
