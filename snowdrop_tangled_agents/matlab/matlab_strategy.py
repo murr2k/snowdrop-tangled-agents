@@ -454,6 +454,7 @@ class HybridSolverStrategy:
         player: int = 1,
         learning_rate: float = 0.03,
         adjustments_path: Optional[Path] = None,
+        lut_file: str = 'terminal_scores.mat',
     ):
         """
         Initialize HybridSolverStrategy.
@@ -465,12 +466,13 @@ class HybridSolverStrategy:
             player: Player perspective (1 or 2)
             learning_rate: Rate for edge adjustment learning (default 0.03)
             adjustments_path: Path to persist learned adjustments (default ~/.tangled/hybrid_solver_adjustments.json)
+            lut_file: Terminal score LUT filename passed to TangledMCTS (default Schrödinger; use terminal_scores_sa.mat for SA alignment)
         """
         self.time_limit = time_limit
         self.minimax_depth = minimax_depth
         self.mcts_iterations = mcts_iterations
         self.player = player
-        self.lut_file = 'terminal_scores.mat'  # override per-strategy after construction
+        self.lut_file = lut_file
 
         self.bridge = get_bridge()
         self.engine = None
@@ -1622,8 +1624,8 @@ class AlphaQExplorerStrategy:
             mcts_iterations=mcts_iterations,
             player=player,
             learning_rate=0.0,
+            lut_file='terminal_scores_sa.mat',
         )
-        self.solver.lut_file = 'terminal_scores_sa.mat'
 
         # Persistent state
         self.state_path = state_path or Path.home() / ".tangled" / "alphaq_explorer_state.json"
