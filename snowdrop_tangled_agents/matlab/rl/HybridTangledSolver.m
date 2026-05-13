@@ -67,6 +67,9 @@ classdef HybridTangledSolver < handle
 
         % Opponent name for conditional calibration (empty = generic)
         OpponentName char = ''
+
+        % LUT filename for MCTS terminal evaluation (override for SA vs Schrödinger)
+        MCTSLUTFile char = 'terminal_scores.mat'
     end
 
     methods
@@ -82,6 +85,7 @@ classdef HybridTangledSolver < handle
                 options.MCTSIterations int32 = 5000
                 options.Player int32 = 1
                 options.Opponent char = ''
+                options.MCTSLUTFile char = 'terminal_scores.mat'
             end
 
             this.TimeLimit = options.TimeLimit;
@@ -89,6 +93,7 @@ classdef HybridTangledSolver < handle
             this.MCTSIterations = options.MCTSIterations;
             this.PlayerPerspective = options.Player;
             this.OpponentName = options.Opponent;
+            this.MCTSLUTFile = options.MCTSLUTFile;
 
             % Initialize component solvers
             this.initializeSolvers();
@@ -115,7 +120,8 @@ classdef HybridTangledSolver < handle
                                     'TimeLimit', mctsTime, ...
                                     'Player', this.PlayerPerspective, ...
                                     'Opponent', this.OpponentName, ...
-                                    'Exploration', 1.8);
+                                    'Exploration', 1.8, ...
+                                    'LUTFile', this.MCTSLUTFile);
         end
 
         function loadLUT(this)
@@ -452,7 +458,8 @@ classdef HybridTangledSolver < handle
                                     'TimeLimit', mctsTime, ...
                                     'Player', player, ...
                                     'Opponent', this.OpponentName, ...
-                                    'Exploration', 1.8);
+                                    'Exploration', 1.8, ...
+                                    'LUTFile', this.MCTSLUTFile);
 
             % Re-apply any previously set edge bias to new MCTS instance
             if any(this.EdgeBias ~= 0)

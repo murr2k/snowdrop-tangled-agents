@@ -470,6 +470,7 @@ class HybridSolverStrategy:
         self.minimax_depth = minimax_depth
         self.mcts_iterations = mcts_iterations
         self.player = player
+        self.lut_file = 'terminal_scores.mat'  # override per-strategy after construction
 
         self.bridge = get_bridge()
         self.engine = None
@@ -539,15 +540,17 @@ class HybridSolverStrategy:
             except Exception as e:
                 logger.debug(f"Pool cleanup failed (non-critical): {e}")
 
-            # Sanitize opponent name for safe MATLAB string embedding
+            # Sanitize string args for safe MATLAB string embedding
             opponent_name = (opponent or '').replace("'", "''")
+            lut_file = self.lut_file.replace("'", "''")
             self.engine.eval(
                 f"hybridSolver = HybridTangledSolver("
                 f"'TimeLimit', {self.time_limit}, "
                 f"'MinimaxDepth', {self.minimax_depth}, "
                 f"'MCTSIterations', {self.mcts_iterations}, "
                 f"'Player', {self.player}, "
-                f"'Opponent', '{opponent_name}');",
+                f"'Opponent', '{opponent_name}', "
+                f"'MCTSLUTFile', '{lut_file}');",
                 nargout=0
             )
 
@@ -1612,7 +1615,7 @@ class AlphaQExplorerStrategy:
         self.rr_index = 0
         self.rr_games_per_opening = 3  # Phase 1: 3 games per opening
 
-        # Start with learning disabled
+        # Start with learning disabled; use SA LUT to match server adjudicator
         self.solver = HybridSolverStrategy(
             time_limit=time_limit,
             minimax_depth=minimax_depth,
@@ -1620,6 +1623,7 @@ class AlphaQExplorerStrategy:
             player=player,
             learning_rate=0.0,
         )
+        self.solver.lut_file = 'terminal_scores_sa.mat'
 
         # Persistent state
         self.state_path = state_path or Path.home() / ".tangled" / "alphaq_explorer_state.json"

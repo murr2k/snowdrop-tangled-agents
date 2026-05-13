@@ -56,6 +56,7 @@ classdef TangledMCTS < handle
         TerminalScoreLUT               % 32768x1 double array
         LUTLoaded logical = false      % Whether LUT was successfully loaded
         LUTPath char = ''              % Path to the LUT file
+        LUTFile char = 'terminal_scores.mat'  % LUT filename (override for SA vs Schrödinger)
 
         % Opponent model for learned rollout policy
         OpponentModel struct           % Loaded from opponent_model.mat
@@ -98,6 +99,7 @@ classdef TangledMCTS < handle
                 options.Player int32 = 1
                 options.EdgeBias double = zeros(1, 15)
                 options.Opponent char = ''
+                options.LUTFile char = 'terminal_scores.mat'
             end
 
             this.Iterations = options.Iterations;
@@ -109,6 +111,7 @@ classdef TangledMCTS < handle
             this.PlayerPerspective = options.Player;
             this.EdgeBias = options.EdgeBias;
             this.OpponentName = options.Opponent;
+            this.LUTFile = options.LUTFile;
 
             % Set edge classifications based on player perspective
             if this.PlayerPerspective == 1
@@ -144,13 +147,13 @@ classdef TangledMCTS < handle
             % Find the LUT file relative to this script
             scriptPath = mfilename('fullpath');
             scriptDir = fileparts(scriptPath);
-            lutPath = fullfile(scriptDir, 'data', 'terminal_scores.mat');
+            lutPath = fullfile(scriptDir, 'data', this.LUTFile);
 
             if ~isfile(lutPath)
                 % Try alternative paths
                 altPaths = {
-                    fullfile(pwd, 'data', 'terminal_scores.mat'),
-                    fullfile(pwd, 'snowdrop_tangled_agents', 'matlab', 'rl', 'data', 'terminal_scores.mat')
+                    fullfile(pwd, 'data', this.LUTFile),
+                    fullfile(pwd, 'snowdrop_tangled_agents', 'matlab', 'rl', 'data', this.LUTFile)
                 };
                 for i = 1:length(altPaths)
                     if isfile(altPaths{i})
