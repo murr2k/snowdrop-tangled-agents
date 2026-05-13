@@ -352,7 +352,7 @@ classdef AlphaBetaSearch < handle
 
                 for s = 1:numSamples
                     sampleState = state;
-                    for e = greyEdges'
+                    for e = greyEdges
                         prior = this.computePrior(e, 'G', true);
                         if rand() < prior
                             sampleState(e) = 'G';

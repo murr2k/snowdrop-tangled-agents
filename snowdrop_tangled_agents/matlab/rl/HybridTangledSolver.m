@@ -440,7 +440,7 @@ classdef HybridTangledSolver < handle
             hubE = this.MCTS.HubEdges;
             bias = this.EdgeBias;
 
-            for e = greyEdges'
+            for e = greyEdges
                 for c = 1:2
                     isGreen = (c == 1);
                     col = char('G' + (c - 1) * ('P' - 'G'));
@@ -465,7 +465,7 @@ classdef HybridTangledSolver < handle
 
             startTime = tic;
 
-            for edge = greyEdges'
+            for edge = greyEdges
                 for color = ['G', 'P']
                     if toc(startTime) > timeLimit
                         break;
