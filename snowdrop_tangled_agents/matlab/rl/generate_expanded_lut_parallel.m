@@ -1,4 +1,4 @@
-function generate_expanded_lut_parallel()
+function generate_expanded_lut_parallel(terminalLutFile, outputFile)
 %GENERATE_EXPANDED_LUT_PARALLEL Parallel version of expanded LUT generation
 %
 %   Uses MATLAB Parallel Computing Toolbox to accelerate generation.
@@ -11,12 +11,22 @@ function generate_expanded_lut_parallel()
 %
 %   Total: ~4 million exact minimax values
 %
-%   Output: data/expanded_lut.mat
+%   Args:
+%       terminalLutFile: Terminal LUT filename in data/ dir (default: terminal_scores.mat)
+%       outputFile:      Output filename in data/ dir (default: expanded_lut.mat)
 %
 %   Based on D-Wave's approach of precomputing subproblem solutions.
 %
 %   Usage:
 %       generate_expanded_lut_parallel()
+%       generate_expanded_lut_parallel('terminal_scores_sa.mat', 'expanded_lut_sa.mat')
+
+    if nargin < 1 || isempty(terminalLutFile)
+        terminalLutFile = 'terminal_scores.mat';
+    end
+    if nargin < 2 || isempty(outputFile)
+        outputFile = 'expanded_lut.mat';
+    end
 
     fprintf('╔════════════════════════════════════════════════════════════╗\n');
     fprintf('║      PARALLEL EXPANDED LUT GENERATION FOR TANGLED GAME    ║\n');
@@ -38,7 +48,7 @@ function generate_expanded_lut_parallel()
     %% Load existing terminal LUT
     fprintf('\n[1/4] Loading terminal state LUT...\n');
 
-    terminalLutPath = fullfile(scriptDir, 'data', 'terminal_scores.mat');
+    terminalLutPath = fullfile(scriptDir, 'data', terminalLutFile);
     if ~isfile(terminalLutPath)
         error('Terminal LUT not found at %s.\nRun generate_terminal_lut.py first.', terminalLutPath);
     end
@@ -177,7 +187,7 @@ function generate_expanded_lut_parallel()
     %% Save expanded LUT
     fprintf('\n[4/4] Saving expanded LUT...\n');
 
-    outputPath = fullfile(scriptDir, 'data', 'expanded_lut.mat');
+    outputPath = fullfile(scriptDir, 'data', outputFile);
 
     % Store metadata
     metadata = struct();

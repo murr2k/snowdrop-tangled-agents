@@ -455,6 +455,7 @@ class HybridSolverStrategy:
         learning_rate: float = 0.03,
         adjustments_path: Optional[Path] = None,
         lut_file: str = 'terminal_scores.mat',
+        expanded_lut_file: str = 'expanded_lut.mat',
     ):
         """
         Initialize HybridSolverStrategy.
@@ -473,6 +474,7 @@ class HybridSolverStrategy:
         self.mcts_iterations = mcts_iterations
         self.player = player
         self.lut_file = lut_file
+        self.expanded_lut_file = expanded_lut_file
 
         self.bridge = get_bridge()
         self.engine = None
@@ -545,6 +547,7 @@ class HybridSolverStrategy:
             # Sanitize string args for safe MATLAB string embedding
             opponent_name = (opponent or '').replace("'", "''")
             lut_file = self.lut_file.replace("'", "''")
+            expanded_lut_file = self.expanded_lut_file.replace("'", "''")
             self.engine.eval(
                 f"hybridSolver = HybridTangledSolver("
                 f"'TimeLimit', {self.time_limit}, "
@@ -552,7 +555,8 @@ class HybridSolverStrategy:
                 f"'MCTSIterations', {self.mcts_iterations}, "
                 f"'Player', {self.player}, "
                 f"'Opponent', '{opponent_name}', "
-                f"'MCTSLUTFile', '{lut_file}');",
+                f"'MCTSLUTFile', '{lut_file}', "
+                f"'ExpandedLUTFile', '{expanded_lut_file}');",
                 nargout=0
             )
 
@@ -1617,7 +1621,7 @@ class AlphaQExplorerStrategy:
         self.rr_index = 0
         self.rr_games_per_opening = 3  # Phase 1: 3 games per opening
 
-        # Start with learning disabled; use SA LUT to match server adjudicator
+        # Start with learning disabled; use SA LUTs to match server adjudicator
         self.solver = HybridSolverStrategy(
             time_limit=time_limit,
             minimax_depth=minimax_depth,
@@ -1625,6 +1629,7 @@ class AlphaQExplorerStrategy:
             player=player,
             learning_rate=0.0,
             lut_file='terminal_scores_sa.mat',
+            expanded_lut_file='expanded_lut_sa.mat',
         )
 
         # Persistent state

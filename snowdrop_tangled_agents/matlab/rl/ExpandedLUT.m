@@ -35,6 +35,9 @@ classdef ExpandedLUT < handle
         HasThreeGreyData logical = false
         HasFourGreyData logical = false
 
+        % LUT filename to load (override for SA vs Schrödinger)
+        LUTFile char = 'expanded_lut.mat'
+
         % Metadata
         Version char = ''
         Generated char = ''
@@ -51,8 +54,12 @@ classdef ExpandedLUT < handle
     end
 
     methods
-        function this = ExpandedLUT()
+        function this = ExpandedLUT(options)
             %EXPANDEDLUT Constructor - loads LUT data
+            arguments
+                options.LUTFile char = 'expanded_lut.mat'
+            end
+            this.LUTFile = options.LUTFile;
             this.loadLUT();
         end
 
@@ -62,7 +69,7 @@ classdef ExpandedLUT < handle
             scriptDir = fileparts(mfilename('fullpath'));
 
             % Try expanded LUT first
-            expandedPath = fullfile(scriptDir, 'data', 'expanded_lut.mat');
+            expandedPath = fullfile(scriptDir, 'data', this.LUTFile);
             terminalPath = fullfile(scriptDir, 'data', 'terminal_scores.mat');
 
             if isfile(expandedPath)
