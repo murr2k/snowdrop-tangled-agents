@@ -73,6 +73,9 @@ classdef HybridTangledSolver < handle
 
         % Expanded LUT filename (override for SA vs Schrödinger)
         ExpandedLUTFile char = 'expanded_lut.mat'
+
+        % Opponent model filename for MCTS rollout policy
+        OpponentModelFile char = 'opponent_model.mat'
     end
 
     methods
@@ -90,6 +93,7 @@ classdef HybridTangledSolver < handle
                 options.Opponent char = ''
                 options.MCTSLUTFile char = 'terminal_scores.mat'
                 options.ExpandedLUTFile char = 'expanded_lut.mat'
+                options.OpponentModelFile char = 'opponent_model.mat'
             end
 
             this.TimeLimit = options.TimeLimit;
@@ -99,6 +103,7 @@ classdef HybridTangledSolver < handle
             this.OpponentName = options.Opponent;
             this.MCTSLUTFile = options.MCTSLUTFile;
             this.ExpandedLUTFile = options.ExpandedLUTFile;
+            this.OpponentModelFile = options.OpponentModelFile;
 
             % Initialize component solvers
             this.initializeSolvers();
@@ -126,7 +131,8 @@ classdef HybridTangledSolver < handle
                                     'Player', this.PlayerPerspective, ...
                                     'Opponent', this.OpponentName, ...
                                     'Exploration', 1.8, ...
-                                    'LUTFile', this.MCTSLUTFile);
+                                    'LUTFile', this.MCTSLUTFile, ...
+                                    'OpponentModelFile', this.OpponentModelFile);
         end
 
         function loadLUT(this)

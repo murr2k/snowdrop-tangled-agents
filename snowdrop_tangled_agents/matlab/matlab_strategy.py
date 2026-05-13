@@ -456,6 +456,7 @@ class HybridSolverStrategy:
         adjustments_path: Optional[Path] = None,
         lut_file: str = 'terminal_scores.mat',
         expanded_lut_file: str = 'expanded_lut.mat',
+        opponent_model_file: str = 'opponent_model.mat',
     ):
         """
         Initialize HybridSolverStrategy.
@@ -475,6 +476,7 @@ class HybridSolverStrategy:
         self.player = player
         self.lut_file = lut_file
         self.expanded_lut_file = expanded_lut_file
+        self.opponent_model_file = opponent_model_file
 
         self.bridge = get_bridge()
         self.engine = None
@@ -548,6 +550,7 @@ class HybridSolverStrategy:
             opponent_name = (opponent or '').replace("'", "''")
             lut_file = self.lut_file.replace("'", "''")
             expanded_lut_file = self.expanded_lut_file.replace("'", "''")
+            opponent_model_file = self.opponent_model_file.replace("'", "''")
             self.engine.eval(
                 f"hybridSolver = HybridTangledSolver("
                 f"'TimeLimit', {self.time_limit}, "
@@ -556,7 +559,8 @@ class HybridSolverStrategy:
                 f"'Player', {self.player}, "
                 f"'Opponent', '{opponent_name}', "
                 f"'MCTSLUTFile', '{lut_file}', "
-                f"'ExpandedLUTFile', '{expanded_lut_file}');",
+                f"'ExpandedLUTFile', '{expanded_lut_file}', "
+                f"'OpponentModelFile', '{opponent_model_file}');",
                 nargout=0
             )
 
@@ -1622,6 +1626,7 @@ class AlphaQExplorerStrategy:
         self.rr_games_per_opening = 3  # Phase 1: 3 games per opening
 
         # Start with learning disabled; use SA LUTs to match server adjudicator
+        # and alphaq-specific opponent model for accurate rollout simulation
         self.solver = HybridSolverStrategy(
             time_limit=time_limit,
             minimax_depth=minimax_depth,
@@ -1630,6 +1635,7 @@ class AlphaQExplorerStrategy:
             learning_rate=0.0,
             lut_file='terminal_scores_sa.mat',
             expanded_lut_file='expanded_lut_sa.mat',
+            opponent_model_file='opponent_model_alphaq.mat',
         )
 
         # Persistent state

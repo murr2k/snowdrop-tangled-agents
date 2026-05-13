@@ -62,6 +62,7 @@ classdef TangledMCTS < handle
         OpponentModel struct           % Loaded from opponent_model.mat
         OpponentModelLoaded logical = false
         UseOpponentModel logical = true  % Whether to use opponent model in rollouts
+        OpponentModelFile char = 'opponent_model.mat'  % Model filename (override per opponent)
 
         % Learned edge bias from REINFORCE (1x15, default zeros)
         EdgeBias double = zeros(1, 15)
@@ -100,6 +101,7 @@ classdef TangledMCTS < handle
                 options.EdgeBias double = zeros(1, 15)
                 options.Opponent char = ''
                 options.LUTFile char = 'terminal_scores.mat'
+                options.OpponentModelFile char = 'opponent_model.mat'
             end
 
             this.Iterations = options.Iterations;
@@ -112,6 +114,7 @@ classdef TangledMCTS < handle
             this.EdgeBias = options.EdgeBias;
             this.OpponentName = options.Opponent;
             this.LUTFile = options.LUTFile;
+            this.OpponentModelFile = options.OpponentModelFile;
 
             % Set edge classifications based on player perspective
             if this.PlayerPerspective == 1
@@ -210,13 +213,13 @@ classdef TangledMCTS < handle
             % Find the model file relative to this script
             scriptPath = mfilename('fullpath');
             scriptDir = fileparts(scriptPath);
-            modelPath = fullfile(scriptDir, 'data', 'opponent_model.mat');
+            modelPath = fullfile(scriptDir, 'data', this.OpponentModelFile);
 
             if ~isfile(modelPath)
                 % Try alternative paths
                 altPaths = {
-                    fullfile(pwd, 'data', 'opponent_model.mat'),
-                    fullfile(pwd, 'snowdrop_tangled_agents', 'matlab', 'rl', 'data', 'opponent_model.mat')
+                    fullfile(pwd, 'data', this.OpponentModelFile),
+                    fullfile(pwd, 'snowdrop_tangled_agents', 'matlab', 'rl', 'data', this.OpponentModelFile)
                 };
                 for i = 1:length(altPaths)
                     if isfile(altPaths{i})
