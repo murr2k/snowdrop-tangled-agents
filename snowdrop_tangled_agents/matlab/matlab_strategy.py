@@ -457,6 +457,7 @@ class HybridSolverStrategy:
         lut_file: str = 'terminal_scores.mat',
         expanded_lut_file: str = 'expanded_lut.mat',
         opponent_model_file: str = 'opponent_model.mat',
+        early_game_threshold: int = 0,
     ):
         """
         Initialize HybridSolverStrategy.
@@ -477,6 +478,7 @@ class HybridSolverStrategy:
         self.lut_file = lut_file
         self.expanded_lut_file = expanded_lut_file
         self.opponent_model_file = opponent_model_file
+        self.early_game_threshold = early_game_threshold
 
         self.bridge = get_bridge()
         self.engine = None
@@ -560,7 +562,8 @@ class HybridSolverStrategy:
                 f"'Opponent', '{opponent_name}', "
                 f"'MCTSLUTFile', '{lut_file}', "
                 f"'ExpandedLUTFile', '{expanded_lut_file}', "
-                f"'OpponentModelFile', '{opponent_model_file}');",
+                f"'OpponentModelFile', '{opponent_model_file}', "
+                f"'EarlyGameThreshold', {self.early_game_threshold});",
                 nargout=0
             )
 
@@ -1625,8 +1628,9 @@ class AlphaQExplorerStrategy:
         self.rr_index = 0
         self.rr_games_per_opening = 3  # Phase 1: 3 games per opening
 
-        # Start with learning disabled; use SA LUTs to match server adjudicator
-        # and alphaq-specific opponent model for accurate rollout simulation
+        # SA LUTs align with server adjudicator; alphaq opponent model for
+        # accurate rollouts; early_game_threshold=9 skips MCTS for moves 2-4
+        # (grey=13,11 → greedy prior; grey=9 → depth-4 minimax)
         self.solver = HybridSolverStrategy(
             time_limit=time_limit,
             minimax_depth=minimax_depth,
@@ -1636,6 +1640,7 @@ class AlphaQExplorerStrategy:
             lut_file='terminal_scores_sa.mat',
             expanded_lut_file='expanded_lut_sa.mat',
             opponent_model_file='opponent_model_alphaq.mat',
+            early_game_threshold=9,
         )
 
         # Persistent state

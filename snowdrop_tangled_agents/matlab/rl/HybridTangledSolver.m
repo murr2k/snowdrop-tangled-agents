@@ -76,6 +76,12 @@ classdef HybridTangledSolver < handle
 
         % Opponent model filename for MCTS rollout policy
         OpponentModelFile char = 'opponent_model.mat'
+
+        % Early-game fast selection threshold (0 = disabled).
+        % When numGrey >= this value, skip MCTS and use fast heuristic:
+        %   grey=9  -> shallow minimax (depth=MinimaxDepth, <1s)
+        %   grey>=10 -> greedy prior (EdgeBias + heuristic, sub-ms)
+        EarlyGameThreshold int32 = 0
     end
 
     methods
@@ -94,6 +100,7 @@ classdef HybridTangledSolver < handle
                 options.MCTSLUTFile char = 'terminal_scores.mat'
                 options.ExpandedLUTFile char = 'expanded_lut.mat'
                 options.OpponentModelFile char = 'opponent_model.mat'
+                options.EarlyGameThreshold int32 = 0
             end
 
             this.TimeLimit = options.TimeLimit;
@@ -104,6 +111,7 @@ classdef HybridTangledSolver < handle
             this.MCTSLUTFile = options.MCTSLUTFile;
             this.ExpandedLUTFile = options.ExpandedLUTFile;
             this.OpponentModelFile = options.OpponentModelFile;
+            this.EarlyGameThreshold = options.EarlyGameThreshold;
 
             % Initialize component solvers
             this.initializeSolvers();
@@ -197,6 +205,16 @@ classdef HybridTangledSolver < handle
                         return;
                     end
                 end
+            end
+
+            % Early-game fast selection: skip MCTS for grey >= threshold.
+            % Moves 2-4 (grey=13,11,9) have trees too large for useful MCTS.
+            if this.EarlyGameThreshold > 0 && numGrey >= this.EarlyGameThreshold
+                [edge, color, info] = this.solveEarlyGame(state, startTime);
+                this.LastSearchTime = info.time;
+                this.LastMethod = info.strategy;
+                this.LastScore = info.score;
+                return;
             end
 
             % Strategy selection based on game phase
@@ -378,6 +396,66 @@ classdef HybridTangledSolver < handle
             info.time = toc(startTime);
         end
 
+        function [edge, color, info] = solveEarlyGame(this, state, startTime)
+            %SOLVEEARLYEGAME Fast move selection for early game (grey >= EarlyGameThreshold)
+            %
+            %   grey == 9: shallow alpha-beta at MinimaxDepth (depth 4), no MCTS.
+            %   grey >= 10: greedy prior — argmax over EdgeBias + heuristic priors.
+            %
+            %   Both avoid spawning the parallel pool.
+
+            greyEdges = find(state == '-');
+            numGrey = length(greyEdges);
+
+            if numGrey <= 9
+                % Shallow minimax: exact search 4-ply deep. Fast (~0.1s).
+                this.AlphaBeta.MaxDepth = this.MinimaxDepth;
+                this.AlphaBeta.clearTransTable();
+                [edge, color, score, abInfo] = this.AlphaBeta.search(state, true);
+                info = struct('strategy', 'early_minimax', 'score', score, ...
+                    'time', toc(startTime), 'nodesSearched', abInfo.nodesSearched, ...
+                    'tabuImproved', false);
+            else
+                % Greedy prior: sub-millisecond heuristic selection.
+                [edge, color, score] = this.greedyPrior(state, greyEdges);
+                info = struct('strategy', 'early_prior', 'score', score, ...
+                    'time', toc(startTime), 'tabuImproved', false);
+            end
+        end
+
+        function [edge, color, score] = greedyPrior(this, state, greyEdges)
+            %GREEDYPRIOR Argmax move selection using heuristic priors + EdgeBias
+            %
+            %   Scores every (edge, color) pair with computeRolloutPriorStatic
+            %   (which incorporates the learned EdgeBias) and returns the best.
+            %   Edge is returned 0-indexed to match the convention of search().
+
+            bestScore = -Inf;
+            edge = greyEdges(1) - 1;  % 0-indexed fallback
+            color = 'G';
+            score = 0;
+
+            myE  = this.MCTS.MyEdges;
+            oppE = this.MCTS.OppEdges;
+            hubE = this.MCTS.HubEdges;
+            bias = this.EdgeBias;
+
+            for e = greyEdges'
+                for c = 1:2
+                    isGreen = (c == 1);
+                    col = char('G' + (c - 1) * ('P' - 'G'));
+                    w = TangledMCTS.computeRolloutPriorStatic( ...
+                        e, isGreen, true, myE, oppE, hubE, bias);
+                    if w > bestScore
+                        bestScore = w;
+                        edge = e - 1;  % 0-indexed
+                        color = col;
+                        score = w;
+                    end
+                end
+            end
+        end
+
         function topMoves = getTopMovesFromMinimax(this, state, numMoves, timeLimit)
             %GETTOPMOVESFROMMINIMAX Get candidate moves ranked by alpha-beta
 
@@ -470,7 +548,8 @@ classdef HybridTangledSolver < handle
                                     'Player', player, ...
                                     'Opponent', this.OpponentName, ...
                                     'Exploration', 1.8, ...
-                                    'LUTFile', this.MCTSLUTFile);
+                                    'LUTFile', this.MCTSLUTFile, ...
+                                    'OpponentModelFile', this.OpponentModelFile);
 
             % Re-apply any previously set edge bias to new MCTS instance
             if any(this.EdgeBias ~= 0)
