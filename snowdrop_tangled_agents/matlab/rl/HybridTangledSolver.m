@@ -94,6 +94,11 @@ classdef HybridTangledSolver < handle
         % Applied regardless of score so losing positions get deeper search.
         LateGameBoostThreshold int32 = 0
         LateGameBoostMultiplier double = 1.5
+
+        % Oracle lookup (true = use retrograde minimax oracle when available).
+        % At P1's turns (grey=9,7,5,3,1) with the oracle loaded, solveOracle()
+        % replaces early_minimax + greedy prior + MCTS with an O(1) exact answer.
+        UseOracle logical = true
     end
 
     methods
@@ -116,6 +121,7 @@ classdef HybridTangledSolver < handle
                 options.EarlyGameMinimaxDepth int32 = 5
                 options.LateGameBoostThreshold int32 = 0
                 options.LateGameBoostMultiplier double = 1.5
+                options.UseOracle logical = true
             end
 
             this.TimeLimit = options.TimeLimit;
@@ -130,6 +136,7 @@ classdef HybridTangledSolver < handle
             this.EarlyGameMinimaxDepth = options.EarlyGameMinimaxDepth;
             this.LateGameBoostThreshold = options.LateGameBoostThreshold;
             this.LateGameBoostMultiplier = options.LateGameBoostMultiplier;
+            this.UseOracle = options.UseOracle;
 
             % Initialize component solvers
             this.initializeSolvers();
@@ -224,6 +231,19 @@ classdef HybridTangledSolver < handle
                         return;
                     end
                 end
+            end
+
+            % Oracle: exact O(1) solution when the retrograde LUT covers grey-1.
+            % P1 moves at odd numGrey (1,3,5,7,9). Oracle covers levels 0-9, so
+            % child-state lookup is available for all P1 turns where numGrey <= 9.
+            % This supersedes early_minimax, greedy prior, and MCTS for those turns.
+            if this.UseOracle && this.LUTLoaded && ...
+               mod(numGrey, 2) == 1 && this.LUT.hasLevel(numGrey - 1)
+                [edge, color, info] = this.solveOracle(state, startTime);
+                this.LastSearchTime = info.time;
+                this.LastMethod = info.strategy;
+                this.LastScore = info.score;
+                return;
             end
 
             % Early-game fast selection: skip MCTS for grey >= threshold.
@@ -451,6 +471,46 @@ classdef HybridTangledSolver < handle
                 info = struct('strategy', 'early_prior', 'score', score, ...
                     'time', toc(startTime), 'tabuImproved', false);
             end
+        end
+
+        function [edge, color, info] = solveOracle(this, state, startTime)
+            %SOLVEORACLE Exact move via retrograde oracle lookup (O(numGrey) LUT queries)
+            %
+            %   For each candidate move, apply it to get child state (grey-1), then
+            %   look up the oracle value. Return the move with the highest child value
+            %   (P1 maximizes at odd-grey positions).
+            %
+            %   Sub-millisecond. Replaces early_minimax / greedy prior / MCTS for
+            %   all P1 decision turns (grey = 9, 7, 5, 3, 1) when oracle is loaded.
+
+            greyEdges = find(state == '-');
+            numGrey = length(greyEdges);
+
+            bestScore = -Inf;
+            bestEdge = greyEdges(1);
+            bestColor = 'G';
+
+            for e = greyEdges'
+                for c = 'GP'
+                    childState = state;
+                    childState(e) = c;
+                    childScore = this.LUT.evaluate(childState);
+                    if childScore > bestScore
+                        bestScore = childScore;
+                        bestEdge = e;
+                        bestColor = c;
+                    end
+                end
+            end
+
+            edge = bestEdge - 1;  % 0-indexed
+            color = bestColor;
+
+            info = struct();
+            info.strategy = 'oracle';
+            info.score = bestScore;
+            info.numGrey = numGrey;
+            info.time = toc(startTime);
         end
 
         function [edge, color, score] = greedyPrior(this, state, greyEdges)

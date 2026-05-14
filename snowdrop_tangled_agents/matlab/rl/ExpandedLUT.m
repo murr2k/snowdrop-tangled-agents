@@ -486,6 +486,23 @@ classdef ExpandedLUT < handle
             end
         end
 
+        function ok = hasLevel(this, k)
+            %HASLEVEL True if oracle covers states with exactly k grey edges
+            switch k
+                case 0,  ok = this.Loaded;
+                case 1,  ok = this.HasExpandedData;
+                case 2,  ok = this.HasExpandedData;
+                case 3,  ok = this.HasThreeGreyData;
+                case 4,  ok = this.HasFourGreyData;
+                case 5,  ok = this.HasFiveGreyData;
+                case 6,  ok = this.HasSixGreyData;
+                case 7,  ok = this.HasSevenGreyData;
+                case 8,  ok = this.HasEightGreyData;
+                case 9,  ok = this.HasNineGreyData;
+                otherwise, ok = false;
+            end
+        end
+
         function levels = oracleLevels(this)
             %ORACLELEVELS Return vector of levels covered by oracle (0-indexed grey count)
             flags = [this.HasExpandedData, this.HasExpandedData, ...
