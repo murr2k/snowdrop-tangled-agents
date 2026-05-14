@@ -448,7 +448,7 @@ class HybridSolverStrategy:
 
     def __init__(
         self,
-        time_limit: float = 10.0,
+        time_limit: float = 30.0,
         minimax_depth: int = 4,
         mcts_iterations: int = 5000,
         player: int = 1,
@@ -621,14 +621,15 @@ class HybridSolverStrategy:
             import time
             start = time.time()
 
-            # Call MATLAB solver with timeout protection
-            # Use async mode to enable timeout
-            # With parallel rollouts (6 workers × 100 rollouts/worker = 600/iter),
-            # each MCTS iteration takes ~65ms (dominated by parfor overhead).
-            # Hybrid path evaluates up to 5 candidate moves, each with full
-            # iteration count: 5 × iterations × 0.065s + pool/minimax overhead.
-            # Examples: 5K iters ≈ 28 min worst case, 20K ≈ 108 min, 100K ≈ 9 hr.
-            timeout_seconds = max(3600, self.mcts_iterations // 2)  # 1 hr minimum, scales with iterations
+            # Python-side safety net: kill the MATLAB call if it exceeds this.
+            # With time_limit=30s, MATLAB stops MCTS at 24s internally; give
+            # 2× budget + 2 min for parfor startup and result extraction.
+            # With time_limit=inf (user explicitly chose unlimited), cap at 2 hrs.
+            import math
+            if math.isinf(self.time_limit):
+                timeout_seconds = 7200
+            else:
+                timeout_seconds = self.time_limit * 2 + 120
             try:
                 future = self.engine.eval(
                     f"[solverEdge, solverColor, solverInfo] = hybridSolver.solve('{state}');",
@@ -963,7 +964,7 @@ class AmaraExplorerStrategy:
 
     def __init__(
         self,
-        time_limit: float = 10.0,
+        time_limit: float = 30.0,
         minimax_depth: int = 4,
         mcts_iterations: int = 5000,
         player: int = 1,
@@ -1193,7 +1194,7 @@ class AmaraKillerStrategy:
 
     def __init__(
         self,
-        time_limit: float = 10.0,
+        time_limit: float = 30.0,
         minimax_depth: int = 4,
         mcts_iterations: int = 5000,
         player: int = 1,
@@ -1422,7 +1423,7 @@ class MelissaKillerStrategy:
 
     def __init__(
         self,
-        time_limit: float = 10.0,
+        time_limit: float = 30.0,
         minimax_depth: int = 4,
         mcts_iterations: int = 5000,
         player: int = 1,
@@ -1608,7 +1609,7 @@ class AlphaQExplorerStrategy:
 
     def __init__(
         self,
-        time_limit: float = 10.0,
+        time_limit: float = 30.0,
         minimax_depth: int = 4,
         mcts_iterations: int = 5000,
         player: int = 1,

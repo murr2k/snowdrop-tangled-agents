@@ -2287,8 +2287,8 @@ def main():
                         help="Seconds to keep browser open after last game (0 to close immediately)")
     parser.add_argument("--strategy", "-s", choices=["heuristic", "mcts", "hybrid", "matlab", "rl", "ensemble", "matlab_mcts", "hybrid_solver", "amara_explorer", "amara_killer", "melissa_killer", "alphaq_explorer", "oracle_route", "terminal_explorer"], default="hybrid_solver",
                         help="Strategy to use: hybrid_solver (DEFAULT: D-Wave inspired minimax+MCTS+learning), alphaq_explorer (explore/exploit vs AlphaQ Up with closed learning loop), amara_killer (uses E14P against Amara), melissa_killer (cycles E12P/E13P against Melissa - 40%% win rate), amara_explorer (cycles all 30 openings), hybrid (MCTS with opening), mcts (Monte Carlo, 30s/move), heuristic (fast), matlab (MATLAB-enhanced), rl (trained PPO), ensemble (RL + MC rollouts), matlab_mcts (MATLAB MCTS)")
-    parser.add_argument("--mcts-time", type=float, default=float('inf'),
-                        help="MCTS time limit per move in seconds (default unlimited)")
+    parser.add_argument("--mcts-time", type=float, default=30.0,
+                        help="MCTS time limit per move in seconds (default 30; use 'inf' for unlimited)")
     parser.add_argument("--mcts-iterations", type=int, default=500000,
                         help="Maximum MCTS iterations per move (default 500K for optimal quality)")
     parser.add_argument("--stats", action="store_true",

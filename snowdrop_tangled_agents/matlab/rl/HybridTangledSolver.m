@@ -28,7 +28,7 @@ classdef HybridTangledSolver < handle
 
     properties
         % Search parameters
-        TimeLimit double = 10.0         % Total time budget (seconds)
+        TimeLimit double = 30.0         % Total time budget (seconds)
         MinimaxDepth int32 = 4          % Depth for exact alpha-beta search
         MCTSIterations int32 = 5000     % MCTS iterations after minimax
 
@@ -106,10 +106,10 @@ classdef HybridTangledSolver < handle
             %HYBRIDTANGLEDSOLVER Constructor
             %
             %   solver = HybridTangledSolver()
-            %   solver = HybridTangledSolver('TimeLimit', 15.0, 'Player', 2)
+            %   solver = HybridTangledSolver('TimeLimit', 60.0, 'Player', 2)
 
             arguments
-                options.TimeLimit double = 10.0
+                options.TimeLimit double = 30.0
                 options.MinimaxDepth int32 = 4
                 options.MCTSIterations int32 = 5000
                 options.Player int32 = 1
