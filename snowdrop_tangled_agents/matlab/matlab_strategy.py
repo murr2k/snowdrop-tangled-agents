@@ -458,6 +458,7 @@ class HybridSolverStrategy:
         expanded_lut_file: str = 'expanded_lut.mat',
         opponent_model_file: str = 'opponent_model.mat',
         early_game_threshold: int = 0,
+        early_game_minimax_depth: int = 5,
         late_game_boost_threshold: int = 0,
         late_game_boost_multiplier: float = 1.5,
     ):
@@ -481,6 +482,7 @@ class HybridSolverStrategy:
         self.expanded_lut_file = expanded_lut_file
         self.opponent_model_file = opponent_model_file
         self.early_game_threshold = early_game_threshold
+        self.early_game_minimax_depth = early_game_minimax_depth
         self.late_game_boost_threshold = late_game_boost_threshold
         self.late_game_boost_multiplier = late_game_boost_multiplier
 
@@ -568,6 +570,7 @@ class HybridSolverStrategy:
                 f"'ExpandedLUTFile', '{expanded_lut_file}', "
                 f"'OpponentModelFile', '{opponent_model_file}', "
                 f"'EarlyGameThreshold', {self.early_game_threshold}, "
+                f"'EarlyGameMinimaxDepth', {self.early_game_minimax_depth}, "
                 f"'LateGameBoostThreshold', {self.late_game_boost_threshold}, "
                 f"'LateGameBoostMultiplier', {self.late_game_boost_multiplier});",
                 nargout=0
@@ -1648,6 +1651,7 @@ class AlphaQExplorerStrategy:
             expanded_lut_file='expanded_lut_sa.mat',
             opponent_model_file='opponent_model_alphaq.mat',
             early_game_threshold=9,
+            early_game_minimax_depth=5,
             late_game_boost_threshold=10,
             late_game_boost_multiplier=1.5,
         )
@@ -1822,11 +1826,6 @@ class AlphaQExplorerStrategy:
                     # Beta parameters: draws count as half-wins
                     alpha = 1 + counts['wins'] + 0.5 * counts['draws']
                     beta = 1 + counts['losses'] + 0.5 * counts['draws']
-
-                    # Approach C: E7G bias - add virtual draws to favor proven best opening
-                    if key == 'E7G':
-                        alpha += 25  # Equivalent to 50 virtual draws (50 * 0.5 = 25)
-                        beta += 25   # Keep ratio balanced
 
                     sample = random.betavariate(alpha, beta)
 

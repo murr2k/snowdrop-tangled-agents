@@ -31,6 +31,7 @@ classdef AlphaBetaSearch < handle
         % LUT for evaluation
         LUT ExpandedLUT
         LUTLoaded logical = false
+        LUTFile char = 'expanded_lut.mat'
 
         % Statistics
         NodesSearched int32 = 0
@@ -54,10 +55,12 @@ classdef AlphaBetaSearch < handle
             arguments
                 options.MaxDepth int32 = 4
                 options.UseTransposition logical = true
+                options.LUTFile char = 'expanded_lut.mat'
             end
 
             this.MaxDepth = options.MaxDepth;
             this.UseTransposition = options.UseTransposition;
+            this.LUTFile = options.LUTFile;
 
             if this.UseTransposition
                 this.TransTable = containers.Map('KeyType', 'char', 'ValueType', 'any');
@@ -70,7 +73,7 @@ classdef AlphaBetaSearch < handle
             %LOADLUT Load expanded LUT for evaluation
 
             try
-                this.LUT = ExpandedLUT();
+                this.LUT = ExpandedLUT('LUTFile', this.LUTFile);
                 this.LUTLoaded = this.LUT.Loaded;
             catch ME
                 warning('AlphaBetaSearch:LUTError', 'Failed to load LUT: %s', ME.message);

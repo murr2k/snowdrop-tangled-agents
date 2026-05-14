@@ -79,9 +79,14 @@ classdef HybridTangledSolver < handle
 
         % Early-game fast selection threshold (0 = disabled).
         % When numGrey >= this value, skip MCTS and use fast heuristic:
-        %   grey=9  -> shallow minimax (depth=MinimaxDepth, <1s)
+        %   grey=9  -> shallow minimax (depth=EarlyGameMinimaxDepth, ~0.5s)
         %   grey>=10 -> greedy prior (EdgeBias + heuristic, sub-ms)
         EarlyGameThreshold int32 = 0
+
+        % Minimax depth for the grey=9 early-game path.
+        % Depth 5 → leaves at grey=4 → exact LUT lookup (HasFourGreyData).
+        % Depth 4 → leaves at grey=5 → stochastic heuristic (less accurate).
+        EarlyGameMinimaxDepth int32 = 5
 
         % Late-game MCTS boost (0 = disabled).
         % When colored edges >= LateGameBoostThreshold, multiply MCTS
@@ -108,6 +113,7 @@ classdef HybridTangledSolver < handle
                 options.ExpandedLUTFile char = 'expanded_lut.mat'
                 options.OpponentModelFile char = 'opponent_model.mat'
                 options.EarlyGameThreshold int32 = 0
+                options.EarlyGameMinimaxDepth int32 = 5
                 options.LateGameBoostThreshold int32 = 0
                 options.LateGameBoostMultiplier double = 1.5
             end
@@ -121,6 +127,7 @@ classdef HybridTangledSolver < handle
             this.ExpandedLUTFile = options.ExpandedLUTFile;
             this.OpponentModelFile = options.OpponentModelFile;
             this.EarlyGameThreshold = options.EarlyGameThreshold;
+            this.EarlyGameMinimaxDepth = options.EarlyGameMinimaxDepth;
             this.LateGameBoostThreshold = options.LateGameBoostThreshold;
             this.LateGameBoostMultiplier = options.LateGameBoostMultiplier;
 
@@ -134,9 +141,10 @@ classdef HybridTangledSolver < handle
         function initializeSolvers(this)
             %INITIALIZESOLVERS Create component solver instances
 
-            % Alpha-beta search
+            % Alpha-beta search — use the same SA LUT as everything else
             this.AlphaBeta = AlphaBetaSearch('MaxDepth', this.MinimaxDepth, ...
-                                             'UseTransposition', true);
+                                             'UseTransposition', true, ...
+                                             'LUTFile', this.ExpandedLUTFile);
 
             % Tabu search
             this.TabuSearcher = TabuSearch('MaxIterations', 500, ...
@@ -419,7 +427,8 @@ classdef HybridTangledSolver < handle
         function [edge, color, info] = solveEarlyGame(this, state, startTime)
             %SOLVEEARLYEGAME Fast move selection for early game (grey >= EarlyGameThreshold)
             %
-            %   grey == 9: shallow alpha-beta at MinimaxDepth (depth 4), no MCTS.
+            %   grey == 9: alpha-beta at EarlyGameMinimaxDepth (default 5), no MCTS.
+            %              Depth 5 → leaves at grey=4 → exact SA LUT evaluation.
             %   grey >= 10: greedy prior — argmax over EdgeBias + heuristic priors.
             %
             %   Both avoid spawning the parallel pool.
@@ -428,8 +437,9 @@ classdef HybridTangledSolver < handle
             numGrey = length(greyEdges);
 
             if numGrey <= 9
-                % Shallow minimax: exact search 4-ply deep. Fast (~0.1s).
-                this.AlphaBeta.MaxDepth = this.MinimaxDepth;
+                % Shallow minimax at EarlyGameMinimaxDepth (default 5).
+                % Depth 5 → leaves at grey=4 → exact LUT lookup (~0.5s).
+                this.AlphaBeta.MaxDepth = this.EarlyGameMinimaxDepth;
                 this.AlphaBeta.clearTransTable();
                 [edge, color, score, abInfo] = this.AlphaBeta.search(state, true);
                 info = struct('strategy', 'early_minimax', 'score', score, ...
