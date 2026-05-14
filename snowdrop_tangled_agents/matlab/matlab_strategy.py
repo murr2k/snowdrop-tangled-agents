@@ -1641,9 +1641,9 @@ class AlphaQExplorerStrategy:
         self.rr_games_per_opening = 3  # Phase 1: 3 games per opening
 
         # SA LUTs align with server adjudicator; alphaq opponent model for
-        # accurate rollouts; oracle gives exact P1 moves at grey=9,7,5,3,1;
-        # early_game_threshold=9 is fallback if oracle not loaded;
-        # late_game_boost kicks in at grey=5 (colored=10) with 1.5x iterations
+        # accurate rollouts; oracle handles all P1 decisions at grey=9,7,5,3,1
+        # exactly — no greedy prior or MCTS boost needed for those turns.
+        # MCTS handles grey=13,11 with the corrected SA LUT + opponent model.
         self.solver = HybridSolverStrategy(
             time_limit=time_limit,
             minimax_depth=minimax_depth,
@@ -1653,9 +1653,9 @@ class AlphaQExplorerStrategy:
             lut_file='terminal_scores_sa.mat',
             expanded_lut_file='expanded_lut_sa.mat',
             opponent_model_file='opponent_model_alphaq.mat',
-            early_game_threshold=9,
+            early_game_threshold=0,
             early_game_minimax_depth=5,
-            late_game_boost_threshold=10,
+            late_game_boost_threshold=0,
             late_game_boost_multiplier=1.5,
         )
 

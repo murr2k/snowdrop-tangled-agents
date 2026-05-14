@@ -490,7 +490,7 @@ classdef HybridTangledSolver < handle
             bestEdge = greyEdges(1);
             bestColor = 'G';
 
-            for e = greyEdges'
+            for e = greyEdges  % row vector: iterates as scalars
                 for c = 'GP'
                     childState = state;
                     childState(e) = c;

@@ -104,11 +104,31 @@ classdef ExpandedLUT < handle
             end
         end
 
+        function data = readMatOrH5(~, path)
+            %READMATORH5 Read .mat file via load(), falling back to h5read()
+            %   h5py-written HDF5 files are valid HDF5 but not in MATLAB's
+            %   internal format, so load() fails. h5read() handles both.
+            try
+                data = load(path);
+            catch
+                info = h5info(path);
+                data = struct();
+                for i = 1:length(info.Datasets)
+                    name = info.Datasets(i).Name;
+                    try
+                        val = h5read(path, ['/' name]);
+                        data.(name) = val;
+                    catch
+                    end
+                end
+            end
+        end
+
         function loadExpandedLUT(this, path)
             %LOADEXPANDEDLUT Load full expanded LUT
 
             try
-                data = load(path);
+                data = this.readMatOrH5(path);
 
                 this.TerminalLUT = double(data.terminalLUT(:));
                 this.OneGreyScores = single(data.oneGreyScores(:));
@@ -206,7 +226,7 @@ classdef ExpandedLUT < handle
             %LOADTERMINALONLY Load terminal-only LUT as fallback
 
             try
-                data = load(path);
+                data = this.readMatOrH5(path);
                 this.TerminalLUT = double(data.terminal_scores(:));
                 this.Loaded = true;
                 this.HasExpandedData = false;
