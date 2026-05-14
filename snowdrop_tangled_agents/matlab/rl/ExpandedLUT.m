@@ -1,19 +1,13 @@
 classdef ExpandedLUT < handle
 %EXPANDEDLUT Lookup table for Tangled game state evaluation
 %
-%   Provides O(1) lookup for:
-%   - Terminal states (0 grey edges): 32,768 entries
-%   - One-grey states: 491,520 entries
-%   - Two-grey states: 3,440,640 entries
-%   - Three-grey states: 14,909,440 entries
+%   Provides O(1) lookup for terminal states and states with 1-9 grey edges
+%   via retrograde minimax oracle (generate_sa_oracle.py).
 %
-%   For states with 4+ grey edges, falls back to heuristic or
-%   Monte Carlo estimation.
-%
-%   Based on D-Wave's precomputation strategy for hybrid solvers.
+%   Turn conventions (correct): k-odd -> P1 maximizes, k-even -> P2 minimizes.
 %
 %   Example:
-%       lut = ExpandedLUT();
+%       lut = ExpandedLUT('LUTFile', 'expanded_lut_sa.mat');
 %       score = lut.evaluate('GGGGGGGGGGGGGG-');  % One grey
 %       score = lut.evaluate('GGGGGGGGGGGGGGG');  % Terminal
 
@@ -23,17 +17,37 @@ classdef ExpandedLUT < handle
         TwoGreyScores       % 3440640x1 single
         ThreeGreyScores     % 14909440x1 single
         FourGreyScores      % 44748800x1 single
-        GreyPairs           % 105x2 - pairs of grey positions
-        GreyTriples         % 455x3 - triples of grey positions
-        GreyQuads           % 1365x4 - quads of grey positions
-        GreyPairIndex       % Map from (pos1,pos2) to pair index
-        GreyTripleIndex     % Map from (pos1,pos2,pos3) to triple index
-        GreyQuadIndex       % Map from (pos1,pos2,pos3,pos4) to quad index
+        FiveGreyScores      % 98402304x1 single
+        SixGreyScores       % 164003840x1 single
+        SevenGreyScores     % 210862080x1 single
+        EightGreyScores     % 210862080x1 single
+        NineGreyScores      % 164003840x1 single
+        GreyPairs           % 105x2
+        GreyTriples         % 455x3
+        GreyQuads           % 1365x4
+        GreyFives           % 3003x5
+        GreySixes           % 5005x6
+        GreySevens          % 6435x7
+        GreyEights          % 6435x8
+        GreyNines           % 5005x9
+        GreyPairIndex       % containers.Map: key -> 1-based combo index
+        GreyTripleIndex
+        GreyQuadIndex
+        GreyFiveIndex
+        GreySixIndex
+        GreySevenIndex
+        GreyEightIndex
+        GreyNineIndex
 
         Loaded logical = false
         HasExpandedData logical = false
         HasThreeGreyData logical = false
         HasFourGreyData logical = false
+        HasFiveGreyData logical = false
+        HasSixGreyData logical = false
+        HasSevenGreyData logical = false
+        HasEightGreyData logical = false
+        HasNineGreyData logical = false
 
         % LUT filename to load (override for SA vs Schrödinger)
         LUTFile char = 'expanded_lut.mat'
@@ -51,6 +65,13 @@ classdef ExpandedLUT < handle
         NUM_TWO_GREY = 3440640
         NUM_THREE_GREY = 14909440
         NUM_FOUR_GREY = 44748800
+        NUM_FIVE_GREY = 98402304
+        NUM_SIX_GREY = 164003840
+        NUM_SEVEN_GREY = 210862080
+        NUM_EIGHT_GREY = 210862080
+        NUM_NINE_GREY = 164003840
+        % C(15,k) combo counts for linear index formula
+        N_COMBOS = [1, 15, 105, 455, 1365, 3003, 5005, 6435, 6435, 5005]
     end
 
     methods
@@ -131,10 +152,45 @@ classdef ExpandedLUT < handle
                     this.HasFourGreyData = true;
                 end
 
+                % Load levels 5-9 (oracle extension)
+                levelDefs = {
+                    'fiveGreyScores',  'greyFives',  'GreyFiveIndex',  'HasFiveGreyData',  'FiveGreyScores',  'GreyFives';
+                    'sixGreyScores',   'greySixes',  'GreySixIndex',   'HasSixGreyData',   'SixGreyScores',   'GreySixes';
+                    'sevenGreyScores', 'greySevens', 'GreySevenIndex', 'HasSevenGreyData', 'SevenGreyScores', 'GreySevens';
+                    'eightGreyScores', 'greyEights', 'GreyEightIndex', 'HasEightGreyData', 'EightGreyScores', 'GreyEights';
+                    'nineGreyScores',  'greyNines',  'GreyNineIndex',  'HasNineGreyData',  'NineGreyScores',  'GreyNines';
+                };
+                for row = 1:size(levelDefs, 1)
+                    scoresField  = levelDefs{row, 1};
+                    combosField  = levelDefs{row, 2};
+                    indexProp    = levelDefs{row, 3};
+                    flagProp     = levelDefs{row, 4};
+                    scoresProp   = levelDefs{row, 5};
+                    combosProp   = levelDefs{row, 6};
+                    if isfield(data, scoresField) && isfield(data, combosField)
+                        this.(scoresProp) = single(data.(scoresField)(:));
+                        comboArr = data.(combosField);
+                        this.(combosProp) = comboArr;
+                        idx = containers.Map('KeyType', 'char', 'ValueType', 'uint32');
+                        for i = 1:size(comboArr, 1)
+                            idx(this.comboKey(comboArr(i,:))) = i;
+                        end
+                        this.(indexProp) = idx;
+                        this.(flagProp) = true;
+                    end
+                end
+
                 if isfield(data, 'metadata')
-                    this.Version = data.metadata.version;
-                    this.Generated = data.metadata.generated;
-                    this.TotalEntries = data.metadata.totalCount;
+                    try
+                        % MATLAB-generated file: metadata is a struct
+                        this.Version = data.metadata.version;
+                        this.Generated = data.metadata.generated;
+                        this.TotalEntries = data.metadata.totalCount;
+                    catch
+                        % Python-generated oracle file: metadata is a plain string
+                        this.Version = 'oracle_sa';
+                        this.Generated = char(data.metadata);
+                    end
                 end
 
                 this.Loaded = true;
@@ -203,23 +259,63 @@ classdef ExpandedLUT < handle
                     end
 
                 case 3
-                    % Three grey edges
                     if this.HasThreeGreyData
-                        score = this.lookupThreeGrey(state, greyPositions);
+                        score = this.lookupKGrey(state, greyPositions, ...
+                            this.ThreeGreyScores, this.GreyTripleIndex, 455);
                     else
                         score = this.evaluateHeuristic(state, greyPositions);
                     end
 
                 case 4
-                    % Four grey edges
                     if this.HasFourGreyData
-                        score = this.lookupFourGrey(state, greyPositions);
+                        score = this.lookupKGrey(state, greyPositions, ...
+                            this.FourGreyScores, this.GreyQuadIndex, 1365);
+                    else
+                        score = this.evaluateHeuristic(state, greyPositions);
+                    end
+
+                case 5
+                    if this.HasFiveGreyData
+                        score = this.lookupKGrey(state, greyPositions, ...
+                            this.FiveGreyScores, this.GreyFiveIndex, 3003);
+                    else
+                        score = this.evaluateHeuristic(state, greyPositions);
+                    end
+
+                case 6
+                    if this.HasSixGreyData
+                        score = this.lookupKGrey(state, greyPositions, ...
+                            this.SixGreyScores, this.GreySixIndex, 5005);
+                    else
+                        score = this.evaluateHeuristic(state, greyPositions);
+                    end
+
+                case 7
+                    if this.HasSevenGreyData
+                        score = this.lookupKGrey(state, greyPositions, ...
+                            this.SevenGreyScores, this.GreySevenIndex, 6435);
+                    else
+                        score = this.evaluateHeuristic(state, greyPositions);
+                    end
+
+                case 8
+                    if this.HasEightGreyData
+                        score = this.lookupKGrey(state, greyPositions, ...
+                            this.EightGreyScores, this.GreyEightIndex, 6435);
+                    else
+                        score = this.evaluateHeuristic(state, greyPositions);
+                    end
+
+                case 9
+                    if this.HasNineGreyData
+                        score = this.lookupKGrey(state, greyPositions, ...
+                            this.NineGreyScores, this.GreyNineIndex, 5005);
                     else
                         score = this.evaluateHeuristic(state, greyPositions);
                     end
 
                 otherwise
-                    % 5+ grey edges - use heuristic
+                    % 10+ grey edges — heuristic only (early game, not oracle-covered)
                     score = this.evaluateHeuristic(state, greyPositions);
             end
         end
@@ -258,100 +354,61 @@ classdef ExpandedLUT < handle
             score = double(this.TwoGreyScores(linearIdx));
         end
 
-        function score = lookupThreeGrey(this, state, greyPositions)
-            %LOOKUPTHREEGREY O(1) lookup for three-grey state
+        function score = lookupKGrey(this, state, greyPositions, scores, indexMap, nCombos)
+            %LOOKUPKGREY Generic O(1) lookup for k-grey state (k=3..9)
 
             sortedPos = sort(greyPositions);
-            pos1 = sortedPos(1);
-            pos2 = sortedPos(2);
-            pos3 = sortedPos(3);
 
-            % Get base pattern (with all grey positions as 'P')
             baseState = state;
-            baseState(pos1) = 'P';
-            baseState(pos2) = 'P';
-            baseState(pos3) = 'P';
+            for i = 1:length(sortedPos)
+                baseState(sortedPos(i)) = 'P';
+            end
             baseIdx = this.state2idx(baseState);
 
-            % Find triple index
-            key = sprintf('%d_%d_%d', pos1, pos2, pos3);
-            tripleIdx = this.GreyTripleIndex(key);
+            comboIdx = indexMap(this.comboKey(sortedPos));
+            linearIdx = (baseIdx - 1) * nCombos + comboIdx;
+            score = double(scores(linearIdx));
+        end
 
-            % Linear index into threeGreyScores
-            linearIdx = (baseIdx - 1) * 455 + tripleIdx;
-            score = double(this.ThreeGreyScores(linearIdx));
+        function key = comboKey(~, sortedPos)
+            %COMBOKEY Build underscore-joined string key from sorted position vector
+            parts = arrayfun(@(x) sprintf('%d', x), sortedPos, 'UniformOutput', false);
+            key = strjoin(parts, '_');
         end
 
         function score = evaluateOneGreyDirect(this, state, greyPos)
-            %EVALUATEONEGREYDIRECT Compute one-grey value directly
+            %EVALUATEONEGREYDIRECT Fallback: compute one-grey value without LUT
+            % k=1 is odd -> P1 maximizes
 
-            greenState = state;
-            greenState(greyPos) = 'G';
-            greenScore = this.TerminalLUT(this.state2idx(greenState));
-
-            purpleState = state;
-            purpleState(greyPos) = 'P';
-            purpleScore = this.TerminalLUT(this.state2idx(purpleState));
-
-            % Opponent minimizes
-            score = min(greenScore, purpleScore);
+            greenState = state; greenState(greyPos) = 'G';
+            purpleState = state; purpleState(greyPos) = 'P';
+            score = max(this.TerminalLUT(this.state2idx(greenState)), ...
+                        this.TerminalLUT(this.state2idx(purpleState)));
         end
 
         function score = evaluateTwoGreyDirect(this, state, greyPositions)
-            %EVALUATETWOGREYDIRECT Compute two-grey value directly
+            %EVALUATETWOGREYDIRECT Fallback: compute two-grey value without LUT
+            % k=2 is even -> P2 minimizes first, then P1 maximizes at k=1
 
             pos1 = greyPositions(1);
             pos2 = greyPositions(2);
+            worstCase = Inf;  % P2 minimizes
 
-            bestScore = -Inf;
+            for p2Pos = [pos1, pos2]
+                for p2Color = ['G', 'P']
+                    afterP2 = state;
+                    afterP2(p2Pos) = p2Color;
+                    p1Pos = pos1 + pos2 - p2Pos;
 
-            for ourPos = [pos1, pos2]
-                for ourColor = ['G', 'P']
-                    afterOur = state;
-                    afterOur(ourPos) = ourColor;
-
-                    oppPos = pos1 + pos2 - ourPos;  % The other position
-
-                    greenState = afterOur;
-                    greenState(oppPos) = 'G';
-                    scoreG = this.TerminalLUT(this.state2idx(greenState));
-
-                    purpleState = afterOur;
-                    purpleState(oppPos) = 'P';
-                    scoreP = this.TerminalLUT(this.state2idx(purpleState));
-
-                    worstForUs = min(scoreG, scoreP);
-                    bestScore = max(bestScore, worstForUs);
+                    g = afterP2; g(p1Pos) = 'G';
+                    p = afterP2; p(p1Pos) = 'P';
+                    p1Best = max(this.TerminalLUT(this.state2idx(g)), ...
+                                 this.TerminalLUT(this.state2idx(p)));
+                    worstCase = min(worstCase, p1Best);
                 end
             end
 
-            score = bestScore;
-        end
-
-        function score = lookupFourGrey(this, state, greyPositions)
-            %LOOKUPFOURGREY O(1) lookup for four-grey state
-
-            sortedPos = sort(greyPositions);
-            pos1 = sortedPos(1);
-            pos2 = sortedPos(2);
-            pos3 = sortedPos(3);
-            pos4 = sortedPos(4);
-
-            % Get base pattern (with all grey positions as 'P')
-            baseState = state;
-            baseState(pos1) = 'P';
-            baseState(pos2) = 'P';
-            baseState(pos3) = 'P';
-            baseState(pos4) = 'P';
-            baseIdx = this.state2idx(baseState);
-
-            % Find quad index
-            key = sprintf('%d_%d_%d_%d', pos1, pos2, pos3, pos4);
-            quadIdx = this.GreyQuadIndex(key);
-
-            % Linear index into fourGreyScores
-            linearIdx = (baseIdx - 1) * 1365 + quadIdx;
-            score = double(this.FourGreyScores(linearIdx));
+            score = worstCase;
         end
 
         function score = evaluateHeuristic(this, state, greyPositions)
@@ -405,8 +462,7 @@ classdef ExpandedLUT < handle
             info = struct();
             info.loaded = this.Loaded;
             info.hasExpandedData = this.HasExpandedData;
-            info.hasThreeGreyData = this.HasThreeGreyData;
-            info.hasFourGreyData = this.HasFourGreyData;
+            info.oracleLevels = this.oracleLevels();
             info.totalEntries = this.TotalEntries;
             info.version = this.Version;
             info.generated = this.Generated;
@@ -415,23 +471,29 @@ classdef ExpandedLUT < handle
                 info.terminalCount = length(this.TerminalLUT);
                 info.terminalRange = [min(this.TerminalLUT), max(this.TerminalLUT)];
 
+                % Report each level without eagerly copying large arrays into a cell
                 if this.HasExpandedData
-                    info.oneGreyCount = length(this.OneGreyScores);
-                    info.twoGreyCount = length(this.TwoGreyScores);
-                    info.oneGreyRange = [min(this.OneGreyScores), max(this.OneGreyScores)];
-                    info.twoGreyRange = [min(this.TwoGreyScores), max(this.TwoGreyScores)];
+                    info.oneGreyCount  = length(this.OneGreyScores);
+                    info.twoGreyCount  = length(this.TwoGreyScores);
                 end
-
-                if this.HasThreeGreyData
-                    info.threeGreyCount = length(this.ThreeGreyScores);
-                    info.threeGreyRange = [min(this.ThreeGreyScores), max(this.ThreeGreyScores)];
-                end
-
-                if this.HasFourGreyData
-                    info.fourGreyCount = length(this.FourGreyScores);
-                    info.fourGreyRange = [min(this.FourGreyScores), max(this.FourGreyScores)];
-                end
+                if this.HasThreeGreyData, info.threeGreyCount = length(this.ThreeGreyScores); end
+                if this.HasFourGreyData,  info.fourGreyCount  = length(this.FourGreyScores);  end
+                if this.HasFiveGreyData,  info.fiveGreyCount  = length(this.FiveGreyScores);  end
+                if this.HasSixGreyData,   info.sixGreyCount   = length(this.SixGreyScores);   end
+                if this.HasSevenGreyData, info.sevenGreyCount = length(this.SevenGreyScores); end
+                if this.HasEightGreyData, info.eightGreyCount = length(this.EightGreyScores); end
+                if this.HasNineGreyData,  info.nineGreyCount  = length(this.NineGreyScores);  end
             end
+        end
+
+        function levels = oracleLevels(this)
+            %ORACLELEVELS Return vector of levels covered by oracle (0-indexed grey count)
+            flags = [this.HasExpandedData, this.HasExpandedData, ...
+                     this.HasThreeGreyData, this.HasFourGreyData, ...
+                     this.HasFiveGreyData, this.HasSixGreyData, ...
+                     this.HasSevenGreyData, this.HasEightGreyData, ...
+                     this.HasNineGreyData];
+            levels = [0, find(flags)];  % 0 always covered (terminal LUT)
         end
     end
 end
