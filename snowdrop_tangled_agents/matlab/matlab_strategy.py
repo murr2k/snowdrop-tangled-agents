@@ -461,6 +461,7 @@ class HybridSolverStrategy:
         early_game_minimax_depth: int = 5,
         late_game_boost_threshold: int = 0,
         late_game_boost_multiplier: float = 1.5,
+        use_oracle: bool = True,
     ):
         """
         Initialize HybridSolverStrategy.
@@ -485,6 +486,7 @@ class HybridSolverStrategy:
         self.early_game_minimax_depth = early_game_minimax_depth
         self.late_game_boost_threshold = late_game_boost_threshold
         self.late_game_boost_multiplier = late_game_boost_multiplier
+        self.use_oracle = use_oracle
 
         self.bridge = get_bridge()
         self.engine = None
@@ -572,7 +574,8 @@ class HybridSolverStrategy:
                 f"'EarlyGameThreshold', {self.early_game_threshold}, "
                 f"'EarlyGameMinimaxDepth', {self.early_game_minimax_depth}, "
                 f"'LateGameBoostThreshold', {self.late_game_boost_threshold}, "
-                f"'LateGameBoostMultiplier', {self.late_game_boost_multiplier});",
+                f"'LateGameBoostMultiplier', {self.late_game_boost_multiplier}, "
+                f"'UseOracle', {str(self.use_oracle).lower()});",
                 nargout=0
             )
 
@@ -1638,8 +1641,8 @@ class AlphaQExplorerStrategy:
         self.rr_games_per_opening = 3  # Phase 1: 3 games per opening
 
         # SA LUTs align with server adjudicator; alphaq opponent model for
-        # accurate rollouts; early_game_threshold=9 skips MCTS for moves 2-4
-        # (grey=13,11 → greedy prior; grey=9 → depth-4 minimax);
+        # accurate rollouts; oracle gives exact P1 moves at grey=9,7,5,3,1;
+        # early_game_threshold=9 is fallback if oracle not loaded;
         # late_game_boost kicks in at grey=5 (colored=10) with 1.5x iterations
         self.solver = HybridSolverStrategy(
             time_limit=time_limit,
