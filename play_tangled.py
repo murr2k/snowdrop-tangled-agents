@@ -1944,8 +1944,8 @@ class WebPlayer:
                     # This confirms the move was registered by the game.
                     accept_result = self._wait_for_condition(
                         self._JS_WAIT_NOT_OUR_TURN,
-                        timeout_ms=30000,  # 30s — server indicator update can lag the edge color by 15-20s
-                        description=f"E{edge} acceptance (attempt {attempt+1})"
+                        timeout_ms=3000,  # 3s — if AlphaQ responds before our next poll, turn cycles
+                        description=f"E{edge} acceptance (attempt {attempt+1})"  # back to ours before we see 'not_our_turn'; fallback checks edge colored
                     )
                     if accept_result == 'game_over':
                         self.logger.info(f"Move E{edge} accepted: game_over")
