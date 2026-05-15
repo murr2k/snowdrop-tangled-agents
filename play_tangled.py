@@ -530,6 +530,8 @@ class WebPlayer:
         novel_branch: bool = False,
         seat: int = 1,
         oracle_overrides: Optional[dict] = None,
+        expanded_lut_file: str = 'expanded_lut_sa.mat',
+        terminal_lut_file: str = 'terminal_scores_sa.mat',
     ):
         self.username = os.getenv("TANGLED_USERNAME")
         self.password = os.getenv("TANGLED_PASSWORD")
@@ -543,6 +545,8 @@ class WebPlayer:
         self._adapt_opponent = adapt_opponent
         self._opening_mode = opening_mode
         self._force_opening = force_opening
+        self._expanded_lut_file = expanded_lut_file
+        self._terminal_lut_file = terminal_lut_file
 
         # Oracle route options
         self._oracle_route_mode = route_mode or 'fixed'
@@ -624,8 +628,8 @@ class WebPlayer:
                     minimax_depth=4,
                     mcts_iterations=mcts_iterations,
                     player=1,
-                    lut_file='terminal_scores_sa.mat',
-                    expanded_lut_file='expanded_lut_sa.mat',
+                    lut_file=self._terminal_lut_file,
+                    expanded_lut_file=self._expanded_lut_file,
                     move_overrides=oracle_overrides,
                 )
         elif strategy_type == "amara_explorer":
@@ -2351,6 +2355,10 @@ def main():
                         metavar=("GREY", "EDGE", "COLOR"),
                         help="Override oracle move at a specific grey count: GREY EDGE COLOR. "
                              "E.g. '--oracle-override 11 10 G' forces E10G at grey=11. Repeatable.")
+    parser.add_argument("--lut-variant", choices=["sa", "schr"], default="sa",
+                        help="Which oracle LUT to use: 'sa' (simulated annealing, default) "
+                             "or 'schr' (Schrodinger adjudicator). "
+                             "Selects expanded_lut_sa.mat vs expanded_lut_schr.mat.")
 
     args = parser.parse_args()
 
@@ -2515,6 +2523,17 @@ def main():
             oracle_overrides[int(grey_str)] = (int(edge_str), color.upper())
         print(f"Oracle overrides active: {oracle_overrides}")
 
+    # Resolve LUT filenames from --lut-variant
+    lut_variant = getattr(args, 'lut_variant', 'sa')
+    if lut_variant == 'schr':
+        expanded_lut_file = 'expanded_lut_schr.mat'
+        terminal_lut_file = 'terminal_scores.mat'
+    else:
+        expanded_lut_file = 'expanded_lut_sa.mat'
+        terminal_lut_file = 'terminal_scores_sa.mat'
+    if lut_variant != 'sa':
+        print(f"LUT variant: {lut_variant} ({expanded_lut_file}, {terminal_lut_file})")
+
     # Normalize random_turns for DB storage (canonical sorted comma-separated string)
     random_turns_str = None
     if args.random_turns:
@@ -2606,6 +2625,8 @@ def main():
             novel_branch=args.novel_branch,
             seat=args.seat,
             oracle_overrides=oracle_overrides,
+            expanded_lut_file=expanded_lut_file,
+            terminal_lut_file=terminal_lut_file,
         ) as player:
             player.login()
 

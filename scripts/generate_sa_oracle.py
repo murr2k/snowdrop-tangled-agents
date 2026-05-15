@@ -85,7 +85,10 @@ TERMINAL_SA_MAT = DATA_DIR / "terminal_scores_sa.mat"
 EXPANDED_LUT_SA_MAT = DATA_DIR / "expanded_lut_sa.mat"
 ORACLE_NPZ = DATA_DIR / "oracle_sa.npz"
 
+# These globals are overridden in main() when --terminal-lut is specified
 CHECKPOINT_PATTERN = str(DATA_DIR / "oracle_sa_level_{k}.npy")
+_ORACLE_OUTPUT_MAT: Path = EXPANDED_LUT_SA_MAT
+_ORACLE_OUTPUT_NPZ: Path = ORACLE_NPZ
 
 
 # ---------------------------------------------------------------------------
@@ -127,24 +130,27 @@ def combos_list(k: int) -> list[tuple]:
 # Terminal LUT loading
 # ---------------------------------------------------------------------------
 
-def load_terminal_lut() -> np.ndarray:
-    """Load SA terminal scores from terminal_scores_sa.mat.
+def load_terminal_lut(terminal_path: Path | None = None) -> np.ndarray:
+    """Load terminal scores from a .mat file.
 
     Returns float32 array of shape (32768,) indexed by base_idx.
+    Defaults to terminal_scores_sa.mat if no path is given.
     """
-    if not TERMINAL_SA_MAT.exists():
-        raise FileNotFoundError(f"Terminal LUT not found: {TERMINAL_SA_MAT}")
+    target = terminal_path or TERMINAL_SA_MAT
+    if not target.exists():
+        raise FileNotFoundError(f"Terminal LUT not found: {target}")
+
+    print(f"  Loading terminal LUT from: {target.name}")
 
     # Try scipy first (MATLAB v5 format)
     if HAS_SCIPY:
         try:
-            data = scipy.io.loadmat(str(TERMINAL_SA_MAT))
-            # Key is 'terminal_scores' based on generate_expanded_lut.m convention
+            data = scipy.io.loadmat(str(target))
             for key in ('terminal_scores', 'terminalLUT', 'terminal_lut'):
                 if key in data:
                     scores = data[key].flatten().astype(np.float32)
                     if len(scores) == NUM_TERMINAL:
-                        print(f"  Loaded terminal LUT via scipy ({key}): "
+                        print(f"  Loaded via scipy ({key}): "
                               f"{len(scores)} entries, "
                               f"range [{scores.min():.3f}, {scores.max():.3f}]")
                         return scores
@@ -154,12 +160,12 @@ def load_terminal_lut() -> np.ndarray:
     # Fall back to h5py (MATLAB v7.3 / HDF5)
     if HAS_H5PY:
         try:
-            with h5py.File(str(TERMINAL_SA_MAT), 'r') as f:
+            with h5py.File(str(target), 'r') as f:
                 for key in ('terminal_scores', 'terminalLUT', 'terminal_lut'):
                     if key in f:
                         scores = f[key][()].flatten().astype(np.float32)
                         if len(scores) == NUM_TERMINAL:
-                            print(f"  Loaded terminal LUT via h5py ({key}): "
+                            print(f"  Loaded via h5py ({key}): "
                                   f"{len(scores)} entries, "
                                   f"range [{scores.min():.3f}, {scores.max():.3f}]")
                             return scores
@@ -167,7 +173,7 @@ def load_terminal_lut() -> np.ndarray:
             print(f"  h5py failed: {e}")
 
     # Last resort: try to extract terminalLUT from expanded_lut_sa.mat
-    if EXPANDED_LUT_SA_MAT.exists() and HAS_H5PY:
+    if EXPANDED_LUT_SA_MAT.exists() and HAS_H5PY and terminal_path is None:
         print(f"  Falling back to terminalLUT from {EXPANDED_LUT_SA_MAT.name}")
         try:
             with h5py.File(str(EXPANDED_LUT_SA_MAT), 'r') as f:
@@ -181,8 +187,8 @@ def load_terminal_lut() -> np.ndarray:
             print(f"  h5py fallback failed: {e}")
 
     raise RuntimeError(
-        "Could not load terminal LUT. Need scipy or h5py, and either "
-        "terminal_scores_sa.mat or expanded_lut_sa.mat (with terminalLUT key)."
+        f"Could not load terminal LUT from {target}. "
+        "Need scipy or h5py and a valid .mat file with 32768 entries."
     )
 
 
@@ -306,8 +312,9 @@ def detect_start_level(end_level: int) -> int:
 # Output writers
 # ---------------------------------------------------------------------------
 
-def write_npz(levels: dict[int, np.ndarray]) -> None:
+def write_npz(levels: dict[int, np.ndarray], output_path: Path | None = None) -> None:
     """Write all levels to a single .npz file."""
+    dest = output_path or _ORACLE_OUTPUT_NPZ
     arrays = {}
     for k, data in levels.items():
         arrays[f'level_{k}'] = data
@@ -318,24 +325,24 @@ def write_npz(levels: dict[int, np.ndarray]) -> None:
     if 0 in levels:
         arrays['combos_0'] = np.zeros((1, 0), dtype=np.int8)
 
-    np.savez_compressed(str(ORACLE_NPZ), **arrays)
-    size_mb = ORACLE_NPZ.stat().st_size / 1024 / 1024
-    print(f"  Saved {ORACLE_NPZ.name} ({size_mb:.1f} MB)")
+    np.savez_compressed(str(dest), **arrays)
+    size_mb = dest.stat().st_size / 1024 / 1024
+    print(f"  Saved {dest.name} ({size_mb:.1f} MB)")
 
 
-def write_mat(levels: dict[int, np.ndarray]) -> None:
-    """Write extended expanded_lut_sa.mat with corrected levels 0-9.
+def write_mat(levels: dict[int, np.ndarray], output_path: Path | None = None) -> None:
+    """Write oracle levels to a MATLAB v7.3 HDF5 .mat file.
 
-    Overwrites the existing file. Uses h5py for MATLAB v7.3 HDF5 format
-    to handle files > 2 GB.
+    Uses h5py to handle files > 2 GB.
     """
     if not HAS_H5PY:
         print("  SKIP: h5py not available, cannot write .mat file")
         return
 
-    print(f"  Writing {EXPANDED_LUT_SA_MAT.name} ...")
+    dest = output_path or _ORACLE_OUTPUT_MAT
+    print(f"  Writing {dest.name} ...")
 
-    with h5py.File(str(EXPANDED_LUT_SA_MAT), 'w') as f:
+    with h5py.File(str(dest), 'w') as f:
         # MATLAB v7.3 marker
         f.attrs['MATLAB_class'] = np.bytes_('double')
 
@@ -524,9 +531,17 @@ def parse_args() -> argparse.Namespace:
     p.add_argument('--validate', action='store_true',
                    help='Run validation checks after generation')
     p.add_argument('--skip-mat', action='store_true',
-                   help='Skip writing expanded_lut_sa.mat (write only .npz)')
+                   help='Skip writing .mat file (write only .npz)')
     p.add_argument('--skip-npz', action='store_true',
-                   help='Skip writing oracle_sa.npz (write only .mat)')
+                   help='Skip writing .npz file (write only .mat)')
+    p.add_argument('--terminal-lut', type=str, default=None,
+                   help='Path to terminal score LUT .mat file. '
+                        'Default: terminal_scores_sa.mat. '
+                        'Use terminal_scores.mat for Schrödinger oracle.')
+    p.add_argument('--output-prefix', type=str, default=None,
+                   help='Prefix for output files and checkpoints. '
+                        'Default: "oracle_sa" (= expanded_lut_sa.mat, oracle_sa.npz). '
+                        'E.g. "oracle_schr" => expanded_lut_schr.mat, oracle_schr.npz.')
     return p.parse_args()
 
 
@@ -547,11 +562,39 @@ def print_size_table(end_level: int) -> None:
 
 
 def main() -> None:
+    global CHECKPOINT_PATTERN, _ORACLE_OUTPUT_MAT, _ORACLE_OUTPUT_NPZ
+
     args = parse_args()
     end_level = args.end_level
 
+    # Resolve output prefix and paths
+    terminal_path: Path | None = None
+    if args.terminal_lut:
+        terminal_path = Path(args.terminal_lut)
+        if not terminal_path.is_absolute():
+            terminal_path = PROJECT_ROOT / terminal_path
+
+    if args.output_prefix:
+        prefix = args.output_prefix
+    elif args.terminal_lut and 'schr' in Path(args.terminal_lut).stem.lower():
+        prefix = 'oracle_schr'
+    elif args.terminal_lut and 'sa' not in Path(args.terminal_lut).stem.lower():
+        # Non-default terminal LUT with unknown type — use stem-derived name
+        prefix = f"oracle_{Path(args.terminal_lut).stem.replace('terminal_scores_', '')}"
+    else:
+        prefix = 'oracle_sa'
+
+    lut_suffix = prefix.replace('oracle_', '')  # e.g. 'sa' or 'schr'
+    CHECKPOINT_PATTERN = str(DATA_DIR / f"{prefix}_level_{{k}}.npy")
+    _ORACLE_OUTPUT_MAT = DATA_DIR / f"expanded_lut_{lut_suffix}.mat"
+    _ORACLE_OUTPUT_NPZ = DATA_DIR / f"{prefix}.npz"
+
     print("=" * 60)
-    print("SA Oracle Generator for Tangled (levels 0-9)")
+    print(f"Oracle Generator for Tangled (levels 0-{end_level})")
+    print(f"  Terminal LUT : {terminal_path.name if terminal_path else TERMINAL_SA_MAT.name}")
+    print(f"  Output MAT  : {_ORACLE_OUTPUT_MAT.name}")
+    print(f"  Output NPZ  : {_ORACLE_OUTPUT_NPZ.name}")
+    print(f"  Checkpoints : {Path(CHECKPOINT_PATTERN.format(k='k')).name}")
     print("=" * 60)
     print_size_table(end_level)
     print()
@@ -592,8 +635,8 @@ def main() -> None:
 
     # If level 0 not in loaded_levels, load terminal LUT
     if 0 not in loaded_levels:
-        print("\n[Level 0] Loading terminal SA scores...")
-        terminal = load_terminal_lut()
+        print(f"\n[Level 0] Loading terminal scores...")
+        terminal = load_terminal_lut(terminal_path)
         loaded_levels[0] = terminal
         save_checkpoint(0, terminal)
 
@@ -655,21 +698,19 @@ def main() -> None:
     # Write outputs
     print("\n=== Writing output files ===")
     if not args.skip_npz:
-        print(f"Writing {ORACLE_NPZ.name}...")
-        write_npz(all_levels)
+        print(f"Writing {_ORACLE_OUTPUT_NPZ.name}...")
+        write_npz(all_levels, _ORACLE_OUTPUT_NPZ)
 
     if not args.skip_mat:
-        print(f"Writing {EXPANDED_LUT_SA_MAT.name} (overwrite with corrected + extended)...")
-        write_mat(all_levels)
+        print(f"Writing {_ORACLE_OUTPUT_MAT.name}...")
+        write_mat(all_levels, _ORACLE_OUTPUT_MAT)
 
     print("\nDone.")
-    print(f"Checkpoint files: {DATA_DIR}/oracle_sa_level_{{0..{end_level}}}.npy")
+    print(f"Checkpoint files: {Path(CHECKPOINT_PATTERN.format(k=f'0..{end_level}')).name}")
     if not args.skip_npz:
-        print(f"Oracle (numpy):   {ORACLE_NPZ}")
+        print(f"Oracle (numpy):   {_ORACLE_OUTPUT_NPZ}")
     if not args.skip_mat:
-        print(f"Oracle (MATLAB):  {EXPANDED_LUT_SA_MAT}")
-    print()
-    print("Next step: update ExpandedLUT.m to load levels 5-9 from the new .mat keys.")
+        print(f"Oracle (MATLAB):  {_ORACLE_OUTPUT_MAT}")
 
 
 if __name__ == '__main__':
