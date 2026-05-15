@@ -383,13 +383,15 @@ def write_mat(levels: dict[int, np.ndarray]) -> None:
             quads = np.array(list(itertools.combinations(range(1, NUM_EDGES + 1), 4)))
             write_combo_array('greyQuads', quads)
 
-        # Levels 5-9 — new extensions beyond ExpandedLUT.m's current coverage
+        # Levels 5-11 — extensions beyond base ExpandedLUT coverage
         level_names = {
-            5: ('fiveGreyScores', 'greyFives'),
-            6: ('sixGreyScores', 'greySixes'),
-            7: ('sevenGreyScores', 'greySevens'),
-            8: ('eightGreyScores', 'greyEights'),
-            9: ('nineGreyScores', 'greyNines'),
+            5:  ('fiveGreyScores',   'greyFives'),
+            6:  ('sixGreyScores',    'greySixes'),
+            7:  ('sevenGreyScores',  'greySevens'),
+            8:  ('eightGreyScores',  'greyEights'),
+            9:  ('nineGreyScores',   'greyNines'),
+            10: ('tenGreyScores',    'greyTens'),
+            11: ('elevenGreyScores', 'greyElevens'),
         }
         for k, (scores_key, combos_key) in level_names.items():
             if k in levels:

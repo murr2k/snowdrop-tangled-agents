@@ -1,7 +1,7 @@
 classdef ExpandedLUT < handle
 %EXPANDEDLUT Lookup table for Tangled game state evaluation
 %
-%   Provides O(1) lookup for terminal states and states with 1-9 grey edges
+%   Provides O(1) lookup for terminal states and states with 1-11 grey edges
 %   via retrograde minimax oracle (generate_sa_oracle.py).
 %
 %   Turn conventions (correct): k-odd -> P1 maximizes, k-even -> P2 minimizes.
@@ -22,6 +22,8 @@ classdef ExpandedLUT < handle
         SevenGreyScores     % 210862080x1 single
         EightGreyScores     % 210862080x1 single
         NineGreyScores      % 164003840x1 single
+        TenGreyScores       % 98402304x1 single
+        ElevenGreyScores    % 44748800x1 single
         GreyPairs           % 105x2
         GreyTriples         % 455x3
         GreyQuads           % 1365x4
@@ -30,6 +32,8 @@ classdef ExpandedLUT < handle
         GreySevens          % 6435x7
         GreyEights          % 6435x8
         GreyNines           % 5005x9
+        GreyTens            % 3003x10
+        GreyElevens         % 1365x11
         GreyPairIndex       % containers.Map: key -> 1-based combo index
         GreyTripleIndex
         GreyQuadIndex
@@ -38,6 +42,8 @@ classdef ExpandedLUT < handle
         GreySevenIndex
         GreyEightIndex
         GreyNineIndex
+        GreyTenIndex
+        GreyElevenIndex
 
         Loaded logical = false
         HasExpandedData logical = false
@@ -48,6 +54,8 @@ classdef ExpandedLUT < handle
         HasSevenGreyData logical = false
         HasEightGreyData logical = false
         HasNineGreyData logical = false
+        HasTenGreyData logical = false
+        HasElevenGreyData logical = false
 
         % LUT filename to load (override for SA vs Schrödinger)
         LUTFile char = 'expanded_lut.mat'
@@ -70,8 +78,10 @@ classdef ExpandedLUT < handle
         NUM_SEVEN_GREY = 210862080
         NUM_EIGHT_GREY = 210862080
         NUM_NINE_GREY = 164003840
+        NUM_TEN_GREY = 98402304
+        NUM_ELEVEN_GREY = 44748800
         % C(15,k) combo counts for linear index formula
-        N_COMBOS = [1, 15, 105, 455, 1365, 3003, 5005, 6435, 6435, 5005]
+        N_COMBOS = [1, 15, 105, 455, 1365, 3003, 5005, 6435, 6435, 5005, 3003, 1365]
     end
 
     methods
@@ -174,11 +184,13 @@ classdef ExpandedLUT < handle
 
                 % Load levels 5-9 (oracle extension)
                 levelDefs = {
-                    'fiveGreyScores',  'greyFives',  'GreyFiveIndex',  'HasFiveGreyData',  'FiveGreyScores',  'GreyFives';
-                    'sixGreyScores',   'greySixes',  'GreySixIndex',   'HasSixGreyData',   'SixGreyScores',   'GreySixes';
-                    'sevenGreyScores', 'greySevens', 'GreySevenIndex', 'HasSevenGreyData', 'SevenGreyScores', 'GreySevens';
-                    'eightGreyScores', 'greyEights', 'GreyEightIndex', 'HasEightGreyData', 'EightGreyScores', 'GreyEights';
-                    'nineGreyScores',  'greyNines',  'GreyNineIndex',  'HasNineGreyData',  'NineGreyScores',  'GreyNines';
+                    'fiveGreyScores',   'greyFives',    'GreyFiveIndex',   'HasFiveGreyData',   'FiveGreyScores',   'GreyFives';
+                    'sixGreyScores',    'greySixes',    'GreySixIndex',    'HasSixGreyData',    'SixGreyScores',    'GreySixes';
+                    'sevenGreyScores',  'greySevens',   'GreySevenIndex',  'HasSevenGreyData',  'SevenGreyScores',  'GreySevens';
+                    'eightGreyScores',  'greyEights',   'GreyEightIndex',  'HasEightGreyData',  'EightGreyScores',  'GreyEights';
+                    'nineGreyScores',   'greyNines',    'GreyNineIndex',   'HasNineGreyData',   'NineGreyScores',   'GreyNines';
+                    'tenGreyScores',    'greyTens',     'GreyTenIndex',    'HasTenGreyData',    'TenGreyScores',    'GreyTens';
+                    'elevenGreyScores', 'greyElevens',  'GreyElevenIndex', 'HasElevenGreyData', 'ElevenGreyScores', 'GreyElevens';
                 };
                 for row = 1:size(levelDefs, 1)
                     scoresField  = levelDefs{row, 1};
@@ -334,8 +346,24 @@ classdef ExpandedLUT < handle
                         score = this.evaluateHeuristic(state, greyPositions);
                     end
 
+                case 10
+                    if this.HasTenGreyData
+                        score = this.lookupKGrey(state, greyPositions, ...
+                            this.TenGreyScores, this.GreyTenIndex, 3003);
+                    else
+                        score = this.evaluateHeuristic(state, greyPositions);
+                    end
+
+                case 11
+                    if this.HasElevenGreyData
+                        score = this.lookupKGrey(state, greyPositions, ...
+                            this.ElevenGreyScores, this.GreyElevenIndex, 1365);
+                    else
+                        score = this.evaluateHeuristic(state, greyPositions);
+                    end
+
                 otherwise
-                    % 10+ grey edges — heuristic only (early game, not oracle-covered)
+                    % 12+ grey edges — heuristic only (early game, not oracle-covered)
                     score = this.evaluateHeuristic(state, greyPositions);
             end
         end
@@ -502,7 +530,9 @@ classdef ExpandedLUT < handle
                 if this.HasSixGreyData,   info.sixGreyCount   = length(this.SixGreyScores);   end
                 if this.HasSevenGreyData, info.sevenGreyCount = length(this.SevenGreyScores); end
                 if this.HasEightGreyData, info.eightGreyCount = length(this.EightGreyScores); end
-                if this.HasNineGreyData,  info.nineGreyCount  = length(this.NineGreyScores);  end
+                if this.HasNineGreyData,   info.nineGreyCount   = length(this.NineGreyScores);   end
+                if this.HasTenGreyData,    info.tenGreyCount    = length(this.TenGreyScores);    end
+                if this.HasElevenGreyData, info.elevenGreyCount = length(this.ElevenGreyScores); end
             end
         end
 
@@ -519,6 +549,8 @@ classdef ExpandedLUT < handle
                 case 7,  ok = this.HasSevenGreyData;
                 case 8,  ok = this.HasEightGreyData;
                 case 9,  ok = this.HasNineGreyData;
+                case 10, ok = this.HasTenGreyData;
+                case 11, ok = this.HasElevenGreyData;
                 otherwise, ok = false;
             end
         end
@@ -529,7 +561,8 @@ classdef ExpandedLUT < handle
                      this.HasThreeGreyData, this.HasFourGreyData, ...
                      this.HasFiveGreyData, this.HasSixGreyData, ...
                      this.HasSevenGreyData, this.HasEightGreyData, ...
-                     this.HasNineGreyData];
+                     this.HasNineGreyData, this.HasTenGreyData, ...
+                     this.HasElevenGreyData];
             levels = [0, find(flags)];  % 0 always covered (terminal LUT)
         end
     end

@@ -554,6 +554,57 @@ function testOracleE7GLinePositiveScore(testCase)
         'Oracle score must be positive (P1 winning) — old wrong LUT gave -3.15');
 end
 
+function testOracleFiresAtElevenGrey(testCase)
+    % At 11 grey (odd, P1's turn) oracle must fire when level 10 is loaded.
+    solver = HybridTangledSolver('TimeLimit', 5.0, ...
+        'ExpandedLUTFile', 'expanded_lut_sa.mat', ...
+        'Opponent', 'nonexistent_xyz', ...
+        'UseOracle', true);
+
+    if ~solver.LUT.hasLevel(10)
+        warning('Skipping grey=11 oracle test - level 10 not in expanded_lut_sa.mat');
+        return;
+    end
+
+    state = 'GGGG-----------';  % 4 colored + 11 grey
+    [edge, color, info] = solver.solve(state);
+
+    verifyEqual(testCase, info.strategy, 'oracle', ...
+        'Should use oracle at 11 grey when level 10 is loaded');
+    verifyGreaterThanOrEqual(testCase, edge, 0, 'Valid edge');
+    verifyLessThan(testCase, edge, 15, 'Valid edge');
+end
+
+function testOracleE8GLinePicksE11G(testCase)
+    % After E8G+E0P+E1G+E2P (grey=11, P1's turn), oracle must pick E11G.
+    % 2-ply minimax confirms E11G (+0.1844) beats E3G (-0.0031) — MCTS was
+    % picking E3G, which is suboptimal.
+    %
+    % State: E0=P, E1=G, E2=P, E8=G, all others grey.
+    %   pos:  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15
+    %         P  G  P  -  -  -  -  -  G  -  -  -  -  -  -
+    solver = HybridTangledSolver('TimeLimit', 5.0, ...
+        'ExpandedLUTFile', 'expanded_lut_sa.mat', ...
+        'Opponent', 'nonexistent_xyz', ...
+        'UseOracle', true);
+
+    if ~solver.LUT.hasLevel(10)
+        warning('Skipping E8G grey=11 oracle test - level 10 not loaded');
+        return;
+    end
+
+    state = 'PGP-----G------';  % E8G opening line, 11 grey
+    [edge, color, info] = solver.solve(state);
+
+    verifyEqual(testCase, info.strategy, 'oracle', ...
+        'Should use oracle at grey=11 in E8G line');
+    % E11G = edge index 11 (0-based), color G
+    verifyEqual(testCase, edge, 11, 'Oracle must pick E11G (edge 11)');
+    verifyEqual(testCase, color, 'G', 'Oracle must pick E11G (green)');
+    verifyGreaterThan(testCase, info.score, 0.0, ...
+        'Oracle score at grey=11 in E8G line should be positive (+0.1844)');
+end
+
 %% LUT Generation Tests (Quick checks)
 
 function testLUTGeneratorExists(testCase)
