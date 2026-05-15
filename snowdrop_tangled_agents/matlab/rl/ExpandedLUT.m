@@ -1,7 +1,7 @@
 classdef ExpandedLUT < handle
 %EXPANDEDLUT Lookup table for Tangled game state evaluation
 %
-%   Provides O(1) lookup for terminal states and states with 1-11 grey edges
+%   Provides O(1) lookup for terminal states and states with 1-13 grey edges
 %   via retrograde minimax oracle (generate_sa_oracle.py).
 %
 %   Turn conventions (correct): k-odd -> P1 maximizes, k-even -> P2 minimizes.
@@ -22,8 +22,10 @@ classdef ExpandedLUT < handle
         SevenGreyScores     % 210862080x1 single
         EightGreyScores     % 210862080x1 single
         NineGreyScores      % 164003840x1 single
-        TenGreyScores       % 98402304x1 single
-        ElevenGreyScores    % 44748800x1 single
+        TenGreyScores        % 98402304x1 single
+        ElevenGreyScores     % 44748800x1 single
+        TwelveGreyScores     % 14909440x1 single
+        ThirteenGreyScores   % 3440640x1 single
         GreyPairs           % 105x2
         GreyTriples         % 455x3
         GreyQuads           % 1365x4
@@ -32,8 +34,10 @@ classdef ExpandedLUT < handle
         GreySevens          % 6435x7
         GreyEights          % 6435x8
         GreyNines           % 5005x9
-        GreyTens            % 3003x10
-        GreyElevens         % 1365x11
+        GreyTens             % 3003x10
+        GreyElevens          % 1365x11
+        GreyTwelves          % 455x12
+        GreyThirteens        % 105x13
         GreyPairIndex       % containers.Map: key -> 1-based combo index
         GreyTripleIndex
         GreyQuadIndex
@@ -44,6 +48,8 @@ classdef ExpandedLUT < handle
         GreyNineIndex
         GreyTenIndex
         GreyElevenIndex
+        GreyTwelveIndex
+        GreyThirteenIndex
 
         Loaded logical = false
         HasExpandedData logical = false
@@ -56,6 +62,8 @@ classdef ExpandedLUT < handle
         HasNineGreyData logical = false
         HasTenGreyData logical = false
         HasElevenGreyData logical = false
+        HasTwelveGreyData logical = false
+        HasThirteenGreyData logical = false
 
         % LUT filename to load (override for SA vs Schrödinger)
         LUTFile char = 'expanded_lut.mat'
@@ -80,8 +88,10 @@ classdef ExpandedLUT < handle
         NUM_NINE_GREY = 164003840
         NUM_TEN_GREY = 98402304
         NUM_ELEVEN_GREY = 44748800
+        NUM_TWELVE_GREY = 14909440
+        NUM_THIRTEEN_GREY = 3440640
         % C(15,k) combo counts for linear index formula
-        N_COMBOS = [1, 15, 105, 455, 1365, 3003, 5005, 6435, 6435, 5005, 3003, 1365]
+        N_COMBOS = [1, 15, 105, 455, 1365, 3003, 5005, 6435, 6435, 5005, 3003, 1365, 455, 105]
     end
 
     methods
@@ -189,8 +199,10 @@ classdef ExpandedLUT < handle
                     'sevenGreyScores',  'greySevens',   'GreySevenIndex',  'HasSevenGreyData',  'SevenGreyScores',  'GreySevens';
                     'eightGreyScores',  'greyEights',   'GreyEightIndex',  'HasEightGreyData',  'EightGreyScores',  'GreyEights';
                     'nineGreyScores',   'greyNines',    'GreyNineIndex',   'HasNineGreyData',   'NineGreyScores',   'GreyNines';
-                    'tenGreyScores',    'greyTens',     'GreyTenIndex',    'HasTenGreyData',    'TenGreyScores',    'GreyTens';
-                    'elevenGreyScores', 'greyElevens',  'GreyElevenIndex', 'HasElevenGreyData', 'ElevenGreyScores', 'GreyElevens';
+                    'tenGreyScores',      'greyTens',      'GreyTenIndex',      'HasTenGreyData',      'TenGreyScores',      'GreyTens';
+                    'elevenGreyScores',  'greyElevens',   'GreyElevenIndex',   'HasElevenGreyData',   'ElevenGreyScores',   'GreyElevens';
+                    'twelveGreyScores',  'greyTwelves',   'GreyTwelveIndex',   'HasTwelveGreyData',   'TwelveGreyScores',   'GreyTwelves';
+                    'thirteenGreyScores','greyThirteens', 'GreyThirteenIndex', 'HasThirteenGreyData', 'ThirteenGreyScores', 'GreyThirteens';
                 };
                 for row = 1:size(levelDefs, 1)
                     scoresField  = levelDefs{row, 1};
@@ -362,8 +374,24 @@ classdef ExpandedLUT < handle
                         score = this.evaluateHeuristic(state, greyPositions);
                     end
 
+                case 12
+                    if this.HasTwelveGreyData
+                        score = this.lookupKGrey(state, greyPositions, ...
+                            this.TwelveGreyScores, this.GreyTwelveIndex, 455);
+                    else
+                        score = this.evaluateHeuristic(state, greyPositions);
+                    end
+
+                case 13
+                    if this.HasThirteenGreyData
+                        score = this.lookupKGrey(state, greyPositions, ...
+                            this.ThirteenGreyScores, this.GreyThirteenIndex, 105);
+                    else
+                        score = this.evaluateHeuristic(state, greyPositions);
+                    end
+
                 otherwise
-                    % 12+ grey edges — heuristic only (early game, not oracle-covered)
+                    % 14+ grey edges — heuristic only (opening moves, not oracle-covered)
                     score = this.evaluateHeuristic(state, greyPositions);
             end
         end
@@ -531,8 +559,10 @@ classdef ExpandedLUT < handle
                 if this.HasSevenGreyData, info.sevenGreyCount = length(this.SevenGreyScores); end
                 if this.HasEightGreyData, info.eightGreyCount = length(this.EightGreyScores); end
                 if this.HasNineGreyData,   info.nineGreyCount   = length(this.NineGreyScores);   end
-                if this.HasTenGreyData,    info.tenGreyCount    = length(this.TenGreyScores);    end
-                if this.HasElevenGreyData, info.elevenGreyCount = length(this.ElevenGreyScores); end
+                if this.HasTenGreyData,      info.tenGreyCount      = length(this.TenGreyScores);      end
+                if this.HasElevenGreyData,   info.elevenGreyCount   = length(this.ElevenGreyScores);   end
+                if this.HasTwelveGreyData,   info.twelveGreyCount   = length(this.TwelveGreyScores);   end
+                if this.HasThirteenGreyData, info.thirteenGreyCount = length(this.ThirteenGreyScores); end
             end
         end
 
@@ -551,6 +581,8 @@ classdef ExpandedLUT < handle
                 case 9,  ok = this.HasNineGreyData;
                 case 10, ok = this.HasTenGreyData;
                 case 11, ok = this.HasElevenGreyData;
+                case 12, ok = this.HasTwelveGreyData;
+                case 13, ok = this.HasThirteenGreyData;
                 otherwise, ok = false;
             end
         end
@@ -562,7 +594,8 @@ classdef ExpandedLUT < handle
                      this.HasFiveGreyData, this.HasSixGreyData, ...
                      this.HasSevenGreyData, this.HasEightGreyData, ...
                      this.HasNineGreyData, this.HasTenGreyData, ...
-                     this.HasElevenGreyData];
+                     this.HasElevenGreyData, this.HasTwelveGreyData, ...
+                     this.HasThirteenGreyData];
             levels = [0, find(flags)];  % 0 always covered (terminal LUT)
         end
     end

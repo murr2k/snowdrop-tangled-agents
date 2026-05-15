@@ -390,8 +390,10 @@ def write_mat(levels: dict[int, np.ndarray]) -> None:
             7:  ('sevenGreyScores',  'greySevens'),
             8:  ('eightGreyScores',  'greyEights'),
             9:  ('nineGreyScores',   'greyNines'),
-            10: ('tenGreyScores',    'greyTens'),
-            11: ('elevenGreyScores', 'greyElevens'),
+            10: ('tenGreyScores',      'greyTens'),
+            11: ('elevenGreyScores',   'greyElevens'),
+            12: ('twelveGreyScores',   'greyTwelves'),
+            13: ('thirteenGreyScores', 'greyThirteens'),
         }
         for k, (scores_key, combos_key) in level_names.items():
             if k in levels:

@@ -554,6 +554,55 @@ function testOracleE7GLinePositiveScore(testCase)
         'Oracle score must be positive (P1 winning) — old wrong LUT gave -3.15');
 end
 
+function testOracleFiresAtThirteenGrey(testCase)
+    % At 13 grey (odd, P1's turn) oracle must fire when level 12 is loaded.
+    solver = HybridTangledSolver('TimeLimit', 5.0, ...
+        'ExpandedLUTFile', 'expanded_lut_sa.mat', ...
+        'Opponent', 'nonexistent_xyz', ...
+        'UseOracle', true);
+
+    if ~solver.LUT.hasLevel(12)
+        warning('Skipping grey=13 oracle test - level 12 not in expanded_lut_sa.mat');
+        return;
+    end
+
+    state = 'GG-------------';  % 2 colored + 13 grey
+    [edge, color, info] = solver.solve(state);
+
+    verifyEqual(testCase, info.strategy, 'oracle', ...
+        'Should use oracle at 13 grey when level 12 is loaded');
+    verifyGreaterThanOrEqual(testCase, edge, 0, 'Valid edge');
+    verifyLessThan(testCase, edge, 15, 'Valid edge');
+end
+
+function testOracleE8GLinePicksE11GAtGrey13(testCase)
+    % After E8G+E0P (grey=13, P1's turn), oracle must pick E11G (+0.3247).
+    % MCTS converged to E1G (-0.0014). Gap = 0.33.
+    %
+    % State: E0=P, E8=G, others grey.
+    %   pos:  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15
+    %         P  -  -  -  -  -  -  -  G  -  -  -  -  -  -
+    solver = HybridTangledSolver('TimeLimit', 5.0, ...
+        'ExpandedLUTFile', 'expanded_lut_sa.mat', ...
+        'Opponent', 'nonexistent_xyz', ...
+        'UseOracle', true);
+
+    if ~solver.LUT.hasLevel(12)
+        warning('Skipping E8G grey=13 oracle test - level 12 not loaded');
+        return;
+    end
+
+    state = 'P-------G------';  % E8G opening line, 13 grey
+    [edge, color, info] = solver.solve(state);
+
+    verifyEqual(testCase, info.strategy, 'oracle', ...
+        'Should use oracle at grey=13 in E8G line');
+    verifyEqual(testCase, edge, 11, 'Oracle must pick E11G (edge 11)');
+    verifyEqual(testCase, color, 'G', 'Oracle must pick E11G (green)');
+    verifyGreaterThan(testCase, info.score, 0.1, ...
+        'Oracle score at grey=13 in E8G line should be > 0.1 (+0.3247 expected)');
+end
+
 function testOracleFiresAtElevenGrey(testCase)
     % At 11 grey (odd, P1's turn) oracle must fire when level 10 is loaded.
     solver = HybridTangledSolver('TimeLimit', 5.0, ...
