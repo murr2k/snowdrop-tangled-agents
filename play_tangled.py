@@ -623,6 +623,8 @@ class WebPlayer:
                     minimax_depth=4,
                     mcts_iterations=mcts_iterations,
                     player=1,
+                    lut_file='terminal_scores_sa.mat',
+                    expanded_lut_file='expanded_lut_sa.mat',
                 )
         elif strategy_type == "amara_explorer":
             if not MATLAB_AVAILABLE or AmaraExplorerStrategy is None:
