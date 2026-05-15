@@ -523,6 +523,7 @@ class WebPlayer:
         use_nn: bool = True,
         adapt_opponent: bool = True,
         opening_mode: Optional[str] = None,
+        force_opening: Optional[str] = None,
         route_mode: Optional[str] = None,
         routes_file: Optional[str] = None,
         random_turns: Optional[set] = None,
@@ -540,6 +541,7 @@ class WebPlayer:
         self._use_nn = use_nn
         self._adapt_opponent = adapt_opponent
         self._opening_mode = opening_mode
+        self._force_opening = force_opening
 
         # Oracle route options
         self._oracle_route_mode = route_mode or 'fixed'
@@ -664,8 +666,7 @@ class WebPlayer:
                 elif opening_mode == 'thompson':
                     force_opening = None
                 else:
-                    # Default: forced E7G (historical best)
-                    force_opening = 'E7G'
+                    force_opening = getattr(self, '_force_opening', None) or 'E7G'
                 self.strategy = AlphaQExplorerStrategy(
                     time_limit=mcts_time,
                     minimax_depth=4,
@@ -2319,8 +2320,11 @@ def main():
                         default=None,
                         help="Opening selection mode for alphaq_explorer: "
                              "thompson (default, Beta sampling), "
-                             "forced (always E7G), "
+                             "forced (use --force-opening, default E7G), "
                              "round_robin (cycle all 30 openings for systematic exploration)")
+    parser.add_argument("--force-opening", type=str, default=None,
+                        metavar="OPENING",
+                        help="Opening to force in 'forced' mode, e.g. E8G (default: E7G)")
     parser.add_argument("--use-nn", action="store_true",
                         help="Use neural network priors with matlab strategy")
     parser.add_argument("--adapt-opponent", action="store_true",
@@ -2580,6 +2584,7 @@ def main():
             use_nn=args.use_nn,
             adapt_opponent=args.adapt_opponent,
             opening_mode=getattr(args, 'opening_mode', None),
+            force_opening=getattr(args, 'force_opening', None),
             route_mode=getattr(args, 'route_mode', None),
             routes_file=getattr(args, 'routes_file', None),
             random_turns=random_turns,
