@@ -654,6 +654,28 @@ function testOracleE8GLinePicksE11G(testCase)
         'Oracle score at grey=11 in E8G line should be positive (+0.1844)');
 end
 
+function testOracleFiresAtFifteenGrey(testCase)
+    % At 15 grey (all edges grey, P1's turn) oracle must fire when level 14 is loaded.
+    solver = HybridTangledSolver('TimeLimit', 5.0, ...
+        'ExpandedLUTFile', 'expanded_lut_sa.mat', ...
+        'Opponent', 'nonexistent_xyz', ...
+        'UseOracle', true);
+
+    if ~solver.LUT.hasLevel(14)
+        warning('Skipping grey=15 oracle test - level 14 not in expanded_lut_sa.mat');
+        return;
+    end
+
+    state = '---------------';  % all grey, game start
+    [edge, color, info] = solver.solve(state);
+
+    verifyEqual(testCase, info.strategy, 'oracle', ...
+        'Should use oracle at grey=15 (game start)');
+    % Oracle picks E14P or E10G (both value ~0.0075) — just verify strategy fires
+    verifyGreaterThan(testCase, info.score, 0.0, ...
+        'Oracle game-start value should be positive (+0.0075 expected)');
+end
+
 %% LUT Generation Tests (Quick checks)
 
 function testLUTGeneratorExists(testCase)

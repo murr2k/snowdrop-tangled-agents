@@ -1,7 +1,7 @@
 classdef ExpandedLUT < handle
 %EXPANDEDLUT Lookup table for Tangled game state evaluation
 %
-%   Provides O(1) lookup for terminal states and states with 1-13 grey edges
+%   Provides O(1) lookup for terminal states and states with 1-15 grey edges
 %   via retrograde minimax oracle (generate_sa_oracle.py).
 %
 %   Turn conventions (correct): k-odd -> P1 maximizes, k-even -> P2 minimizes.
@@ -26,6 +26,8 @@ classdef ExpandedLUT < handle
         ElevenGreyScores     % 44748800x1 single
         TwelveGreyScores     % 14909440x1 single
         ThirteenGreyScores   % 3440640x1 single
+        FourteenGreyScores   % 491520x1 single
+        FifteenGreyScores    % 32768x1 single
         GreyPairs           % 105x2
         GreyTriples         % 455x3
         GreyQuads           % 1365x4
@@ -38,6 +40,8 @@ classdef ExpandedLUT < handle
         GreyElevens          % 1365x11
         GreyTwelves          % 455x12
         GreyThirteens        % 105x13
+        GreyFourteens        % 15x14
+        GreyFifteens         % 1x15
         GreyPairIndex       % containers.Map: key -> 1-based combo index
         GreyTripleIndex
         GreyQuadIndex
@@ -50,6 +54,8 @@ classdef ExpandedLUT < handle
         GreyElevenIndex
         GreyTwelveIndex
         GreyThirteenIndex
+        GreyFourteenIndex
+        GreyFifteenIndex
 
         Loaded logical = false
         HasExpandedData logical = false
@@ -64,6 +70,8 @@ classdef ExpandedLUT < handle
         HasElevenGreyData logical = false
         HasTwelveGreyData logical = false
         HasThirteenGreyData logical = false
+        HasFourteenGreyData logical = false
+        HasFifteenGreyData logical = false
 
         % LUT filename to load (override for SA vs Schrödinger)
         LUTFile char = 'expanded_lut.mat'
@@ -90,8 +98,10 @@ classdef ExpandedLUT < handle
         NUM_ELEVEN_GREY = 44748800
         NUM_TWELVE_GREY = 14909440
         NUM_THIRTEEN_GREY = 3440640
+        NUM_FOURTEEN_GREY = 491520
+        NUM_FIFTEEN_GREY = 32768
         % C(15,k) combo counts for linear index formula
-        N_COMBOS = [1, 15, 105, 455, 1365, 3003, 5005, 6435, 6435, 5005, 3003, 1365, 455, 105]
+        N_COMBOS = [1, 15, 105, 455, 1365, 3003, 5005, 6435, 6435, 5005, 3003, 1365, 455, 105, 15, 1]
     end
 
     methods
@@ -203,6 +213,8 @@ classdef ExpandedLUT < handle
                     'elevenGreyScores',  'greyElevens',   'GreyElevenIndex',   'HasElevenGreyData',   'ElevenGreyScores',   'GreyElevens';
                     'twelveGreyScores',  'greyTwelves',   'GreyTwelveIndex',   'HasTwelveGreyData',   'TwelveGreyScores',   'GreyTwelves';
                     'thirteenGreyScores','greyThirteens', 'GreyThirteenIndex', 'HasThirteenGreyData', 'ThirteenGreyScores', 'GreyThirteens';
+                    'fourteenGreyScores','greyFourteens', 'GreyFourteenIndex', 'HasFourteenGreyData', 'FourteenGreyScores', 'GreyFourteens';
+                    'fifteenGreyScores', 'greyFifteens',  'GreyFifteenIndex',  'HasFifteenGreyData',  'FifteenGreyScores',  'GreyFifteens';
                 };
                 for row = 1:size(levelDefs, 1)
                     scoresField  = levelDefs{row, 1};
@@ -390,8 +402,24 @@ classdef ExpandedLUT < handle
                         score = this.evaluateHeuristic(state, greyPositions);
                     end
 
+                case 14
+                    if this.HasFourteenGreyData
+                        score = this.lookupKGrey(state, greyPositions, ...
+                            this.FourteenGreyScores, this.GreyFourteenIndex, 15);
+                    else
+                        score = this.evaluateHeuristic(state, greyPositions);
+                    end
+
+                case 15
+                    if this.HasFifteenGreyData
+                        score = this.lookupKGrey(state, greyPositions, ...
+                            this.FifteenGreyScores, this.GreyFifteenIndex, 1);
+                    else
+                        score = this.evaluateHeuristic(state, greyPositions);
+                    end
+
                 otherwise
-                    % 14+ grey edges — heuristic only (opening moves, not oracle-covered)
+                    % 16+ grey edges not possible in a 15-edge game
                     score = this.evaluateHeuristic(state, greyPositions);
             end
         end
@@ -563,6 +591,8 @@ classdef ExpandedLUT < handle
                 if this.HasElevenGreyData,   info.elevenGreyCount   = length(this.ElevenGreyScores);   end
                 if this.HasTwelveGreyData,   info.twelveGreyCount   = length(this.TwelveGreyScores);   end
                 if this.HasThirteenGreyData, info.thirteenGreyCount = length(this.ThirteenGreyScores); end
+                if this.HasFourteenGreyData, info.fourteenGreyCount = length(this.FourteenGreyScores); end
+                if this.HasFifteenGreyData,  info.fifteenGreyCount  = length(this.FifteenGreyScores);  end
             end
         end
 
@@ -583,6 +613,8 @@ classdef ExpandedLUT < handle
                 case 11, ok = this.HasElevenGreyData;
                 case 12, ok = this.HasTwelveGreyData;
                 case 13, ok = this.HasThirteenGreyData;
+                case 14, ok = this.HasFourteenGreyData;
+                case 15, ok = this.HasFifteenGreyData;
                 otherwise, ok = false;
             end
         end
@@ -595,7 +627,8 @@ classdef ExpandedLUT < handle
                      this.HasSevenGreyData, this.HasEightGreyData, ...
                      this.HasNineGreyData, this.HasTenGreyData, ...
                      this.HasElevenGreyData, this.HasTwelveGreyData, ...
-                     this.HasThirteenGreyData];
+                     this.HasThirteenGreyData, this.HasFourteenGreyData, ...
+                     this.HasFifteenGreyData];
             levels = [0, find(flags)];  % 0 always covered (terminal LUT)
         end
     end
