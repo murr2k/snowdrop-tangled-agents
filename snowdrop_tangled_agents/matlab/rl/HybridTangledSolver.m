@@ -234,9 +234,8 @@ classdef HybridTangledSolver < handle
             end
 
             % Oracle: exact O(1) solution when the retrograde LUT covers grey-1.
-            % P1 moves at odd numGrey (1,3,5,7,9). Oracle covers levels 0-9, so
-            % child-state lookup is available for all P1 turns where numGrey <= 9.
-            % This supersedes early_minimax, greedy prior, and MCTS for those turns.
+            % Fires at all odd numGrey turns (1,3,5,...,15) where hasLevel(numGrey-1).
+            % With levels 0-15 loaded, covers every P1 turn including the opening.
             if this.UseOracle && this.LUTLoaded && ...
                mod(numGrey, 2) == 1 && this.LUT.hasLevel(numGrey - 1)
                 [edge, color, info] = this.solveOracle(state, startTime);
@@ -481,7 +480,7 @@ classdef HybridTangledSolver < handle
             %   (P1 maximizes at odd-grey positions).
             %
             %   Sub-millisecond. Replaces early_minimax / greedy prior / MCTS for
-            %   all P1 decision turns (grey = 9, 7, 5, 3, 1) when oracle is loaded.
+            %   all P1 decision turns (grey = 1, 3, 5, ..., 15) when oracle is loaded.
 
             greyEdges = find(state == '-');
             numGrey = length(greyEdges);
