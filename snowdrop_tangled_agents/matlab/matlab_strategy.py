@@ -462,6 +462,7 @@ class HybridSolverStrategy:
         late_game_boost_threshold: int = 0,
         late_game_boost_multiplier: float = 1.5,
         use_oracle: bool = True,
+        move_overrides: Optional[dict] = None,
     ):
         """
         Initialize HybridSolverStrategy.
@@ -474,6 +475,9 @@ class HybridSolverStrategy:
             learning_rate: Rate for edge adjustment learning (default 0.03)
             adjustments_path: Path to persist learned adjustments (default ~/.tangled/hybrid_solver_adjustments.json)
             lut_file: Terminal score LUT filename passed to TangledMCTS (default Schrödinger; use terminal_scores_sa.mat for SA alignment)
+            move_overrides: Dict mapping grey_count -> (edge, color) to force a specific move
+                            regardless of what the solver returns. e.g. {11: (10, 'G')} forces
+                            E10G at grey=11. Used for targeted experiments.
         """
         self.time_limit = time_limit
         self.minimax_depth = minimax_depth
@@ -487,6 +491,7 @@ class HybridSolverStrategy:
         self.late_game_boost_threshold = late_game_boost_threshold
         self.late_game_boost_multiplier = late_game_boost_multiplier
         self.use_oracle = use_oracle
+        self.move_overrides = move_overrides or {}
 
         self.bridge = get_bridge()
         self.engine = None
@@ -668,6 +673,15 @@ class HybridSolverStrategy:
             # Get results
             edge = int(self.engine.eval("solverEdge"))
             color = str(self.engine.eval("solverColor"))
+
+            # Apply move override for targeted experiments
+            if grey_count in self.move_overrides:
+                override_edge, override_color = self.move_overrides[grey_count]
+                logger.info(
+                    f"Override at grey={grey_count}: solver chose E{edge}{color}, "
+                    f"forcing E{override_edge}{override_color}"
+                )
+                edge, color = override_edge, override_color
 
             elapsed = time.time() - start
             self.total_time += elapsed

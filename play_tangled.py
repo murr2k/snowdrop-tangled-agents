@@ -529,6 +529,7 @@ class WebPlayer:
         random_turns: Optional[set] = None,
         novel_branch: bool = False,
         seat: int = 1,
+        oracle_overrides: Optional[dict] = None,
     ):
         self.username = os.getenv("TANGLED_USERNAME")
         self.password = os.getenv("TANGLED_PASSWORD")
@@ -625,6 +626,7 @@ class WebPlayer:
                     player=1,
                     lut_file='terminal_scores_sa.mat',
                     expanded_lut_file='expanded_lut_sa.mat',
+                    move_overrides=oracle_overrides,
                 )
         elif strategy_type == "amara_explorer":
             if not MATLAB_AVAILABLE or AmaraExplorerStrategy is None:
@@ -2345,6 +2347,10 @@ def main():
                         help="Enable novel branch forcing: avoid repeating historical moves")
     parser.add_argument("--seat", type=int, choices=[1, 2], default=1,
                         help="Player seat: 1=Red/first (default), 2=Blue/second")
+    parser.add_argument("--oracle-override", action="append", nargs=3,
+                        metavar=("GREY", "EDGE", "COLOR"),
+                        help="Override oracle move at a specific grey count: GREY EDGE COLOR. "
+                             "E.g. '--oracle-override 11 10 G' forces E10G at grey=11. Repeatable.")
 
     args = parser.parse_args()
 
@@ -2502,6 +2508,13 @@ def main():
     from snowdrop_tangled_agents.stats import get_collector
     stats_collector = get_collector()
 
+    # Parse oracle overrides: --oracle-override GREY EDGE COLOR -> {grey: (edge, color)}
+    oracle_overrides = {}
+    if getattr(args, 'oracle_override', None):
+        for grey_str, edge_str, color in args.oracle_override:
+            oracle_overrides[int(grey_str)] = (int(edge_str), color.upper())
+        print(f"Oracle overrides active: {oracle_overrides}")
+
     # Normalize random_turns for DB storage (canonical sorted comma-separated string)
     random_turns_str = None
     if args.random_turns:
@@ -2592,6 +2605,7 @@ def main():
             random_turns=random_turns,
             novel_branch=args.novel_branch,
             seat=args.seat,
+            oracle_overrides=oracle_overrides,
         ) as player:
             player.login()
 
