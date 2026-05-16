@@ -7,6 +7,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-05-16
+
+### Added
+
+- **SA Oracle — Full Game Coverage (Priorities 6–10)** (`scripts/generate_sa_oracle.py`, `ExpandedLUT.m`, `HybridTangledSolver.m`)
+  - Retrograde minimax DP over all 32,768 terminal boards and grey levels 0–15
+  - `expanded_lut_sa.mat` (371 MB, untracked): complete oracle lookup table
+  - Game-start oracle value (all grey, optimal play): **+0.0075** — P1 has a forced SA-optimal first move
+  - Oracle-optimal openings: E14P, E10G, E11G (near-identical; game is balanced near draw)
+  - Oracle fires at every P1 turn via `for e = greyEdges` loop in `HybridTangledSolver.m:solveOracle()`
+  - `ExpandedLUT.m`: `readMatOrH5()` helper supports both MATLAB v7 and h5py HDF5 formats
+  - Regression tests for all oracle grey levels (7, 9, 11, 13, 15)
+
+- **Win Investigation Closure (2026-05-16)**
+  - 1,563+ games against AlphaQ Up across all 30 openings and all strategies: **0 wins**
+  - SchrLUT calibration disproved: local Schrödinger adjudicator (epsilon=0.0005, anneal_time=40ns) predicts `winner=red` on ALL boards including confirmed losses; website uses different quantum parameters
+  - AlphaQ adaptively steers every game to near-zero Schrödinger energy boards (SchrLUT ≈ 0.006–0.012)
+  - SchrLUT outcome distribution: ∈ [7, 10) → 51 games, 0 wins, 42 draws; ∈ [3, 5) → 136 games, 0 wins, 77 draws
+  - Petersen graph vertex-transitivity + color-flip symmetry implies V(∅) = 0 under optimal play
+  - Best stable strategies: E7G MCTS (98% draw, SA 0.75–0.83) and SA oracle with `--oracle-override 11 11 G` (SA 0.67–0.81)
+
+- **Research Report** (`quantum_tangled_proof.html`)
+  - Standalone HTML report with KaTeX formulae and SVG diagrams documenting the full campaign
+  - Covers: Petersen graph setup, 10-priority optimization campaign, SA oracle construction, SchrLUT calibration disproof, AlphaQ game tree analysis, Thompson sampling, symmetry proof, and conclusions
+
+- **Opponent Model Rebuild from Oracle-Era Games (Priority 7)** (`scripts/rebuild_opponent_model.py`)
+  - Fixed `games.id` TEXT comparison bug: `id >= 1438` (TEXT > INTEGER returns all rows in SQLite); corrected to `rowid >= 3199`
+  - Oracle-era corpus: 32 games / 180 moves (19/30 response contexts populated)
+  - Dirichlet smoothing (alpha=0.1) fills unseen contexts with uniform prior
+
+- **Thompson Posterior Rebuild (Priority 7c)** (`scripts/rebuild_thompson_state.py`)
+  - Fixed MCTS convergence to suboptimal E3G (value −0.0031) at grey=11; oracle-optimal is E11G (+0.1844)
+  - Thompson posteriors corrected: E13P → mean=0.200, E5P → mean=0.143, E3P → mean=0.200
+
+### Fixed
+
+- **Cadence and Timeout** (`play_tangled.py`, `matlab_strategy.py`)
+  - `--mcts-time` default changed from `inf` → `30s`
+  - All strategy `time_limit` defaults raised `10s` → `30s` (Python + MATLAB)
+  - Python `timeout_seconds` formula corrected: was `max(3600, iters//2)` = 250,000 s; now `2×time_limit + 120` (cap 7200 for inf)
+  - Phase 1 move-acceptance timeout reduced 30s → 3s
+
+- **`solveOracle` greyEdges transposition** (`HybridTangledSolver.m`)
+  - `for e = greyEdges'` transposes row→column, iterating once with the entire column vector; fixed to `for e = greyEdges`
+
+- **`ExpandedLUT.loadExpandedLUT` HDF5 compatibility** (`ExpandedLUT.m`)
+  - MATLAB's `load()` cannot read h5py-written HDF5 files; `readMatOrH5()` helper tries `load()` then falls back to `h5read()`
+
+- **AlphaQExplorer LUT and thresholds** (Priorities 5, 6b)
+  - `AlphaBetaSearch.m` LUT corrected from Schrödinger to SA
+  - `EarlyGameThreshold` reset to 0 (oracle supersedes greedy prior at grey=13,11)
+  - `LateGameBoostThreshold` reset to 0 (oracle handles all P1 decisions)
+
 ### Added
 
 - **Concurrent Game Sessions** (`play_tangled.py`, `snowdrop_tangled_agents/stats/`)
@@ -674,9 +727,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support for multiple X-Prize graphs (2, 11, 12, 18, 19, 20)
 - Simulated annealing and Schrodinger equation adjudicators
 
-[Unreleased]: https://github.com/user/snowdrop-tangled-agents/compare/v0.0.5...HEAD
-[0.0.5]: https://github.com/user/snowdrop-tangled-agents/compare/v0.0.4...v0.0.5
-[0.0.4]: https://github.com/user/snowdrop-tangled-agents/compare/v0.0.3...v0.0.4
-[0.0.3]: https://github.com/user/snowdrop-tangled-agents/compare/v0.0.2...v0.0.3
-[0.0.2]: https://github.com/user/snowdrop-tangled-agents/compare/v0.0.1...v0.0.2
-[0.0.1]: https://github.com/user/snowdrop-tangled-agents/releases/tag/v0.0.1
+[Unreleased]: https://github.com/murr2k/snowdrop-tangled-agents/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/murr2k/snowdrop-tangled-agents/compare/v0.0.5...v0.1.0
+[0.0.5]: https://github.com/murr2k/snowdrop-tangled-agents/compare/v0.0.4...v0.0.5
+[0.0.4]: https://github.com/murr2k/snowdrop-tangled-agents/compare/v0.0.3...v0.0.4
+[0.0.3]: https://github.com/murr2k/snowdrop-tangled-agents/compare/v0.0.2...v0.0.3
+[0.0.2]: https://github.com/murr2k/snowdrop-tangled-agents/compare/v0.0.1...v0.0.2
+[0.0.1]: https://github.com/murr2k/snowdrop-tangled-agents/releases/tag/v0.0.1
