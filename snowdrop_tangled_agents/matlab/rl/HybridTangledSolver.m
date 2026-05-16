@@ -234,10 +234,11 @@ classdef HybridTangledSolver < handle
             end
 
             % Oracle: exact O(1) solution when the retrograde LUT covers grey-1.
-            % Fires at all odd numGrey turns (1,3,5,...,15) where hasLevel(numGrey-1).
-            % With levels 0-15 loaded, covers every P1 turn including the opening.
+            % Fires on OUR turns: odd grey for P1 (perspective=1), even grey for P2 (perspective=2).
+            % With levels 0-15 loaded, covers every turn for whichever player we are.
+            isOurTurn = mod(numGrey, 2) == mod(this.PlayerPerspective, 2);
             if this.UseOracle && this.LUTLoaded && ...
-               mod(numGrey, 2) == 1 && this.LUT.hasLevel(numGrey - 1)
+               isOurTurn && this.LUT.hasLevel(numGrey - 1)
                 [edge, color, info] = this.solveOracle(state, startTime);
                 this.LastSearchTime = info.time;
                 this.LastMethod = info.strategy;
@@ -476,16 +477,17 @@ classdef HybridTangledSolver < handle
             %SOLVEORACLE Exact move via retrograde oracle lookup (O(numGrey) LUT queries)
             %
             %   For each candidate move, apply it to get child state (grey-1), then
-            %   look up the oracle value. Return the move with the highest child value
-            %   (P1 maximizes at odd-grey positions).
+            %   look up the oracle value (stored from P1 perspective).
+            %   P1 (perspective=1) maximises; P2 (perspective=2) minimises.
             %
             %   Sub-millisecond. Replaces early_minimax / greedy prior / MCTS for
-            %   all P1 decision turns (grey = 1, 3, 5, ..., 15) when oracle is loaded.
+            %   all our decision turns when oracle is loaded.
 
             greyEdges = find(state == '-');
             numGrey = length(greyEdges);
 
-            bestScore = -Inf;
+            isP1 = (this.PlayerPerspective == 1);
+            bestScore = -Inf * (2*isP1 - 1);  % -Inf for P1 (maximise), +Inf for P2 (minimise)
             bestEdge = greyEdges(1);
             bestColor = 'G';
 
@@ -494,7 +496,7 @@ classdef HybridTangledSolver < handle
                     childState = state;
                     childState(e) = c;
                     childScore = this.LUT.evaluate(childState);
-                    if childScore > bestScore
+                    if (isP1 && childScore > bestScore) || (~isP1 && childScore < bestScore)
                         bestScore = childScore;
                         bestEdge = e;
                         bestColor = c;

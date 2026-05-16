@@ -627,7 +627,7 @@ class WebPlayer:
                     time_limit=mcts_time,
                     minimax_depth=4,
                     mcts_iterations=mcts_iterations,
-                    player=1,
+                    player=self.seat,
                     lut_file=self._terminal_lut_file,
                     expanded_lut_file=self._expanded_lut_file,
                     move_overrides=oracle_overrides,
