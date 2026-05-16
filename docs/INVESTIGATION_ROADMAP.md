@@ -1,0 +1,144 @@
+# Investigation Roadmap
+
+**Goal:** Find wins against AlphaQ at tangled-game.com, or definitively characterise why
+winning is impossible.  
+**Status as of 2026-05-16:** Win investigation reopened with 5 systematic avenues.  
+See `docs/INVESTIGATION_AVENUES.md` for full assessment of all candidates.
+
+---
+
+## Completed Investigations
+
+### Investigation 1 — Player 2 Seat Swap
+
+**Status:** ✅ Complete — 0W / 0D / 10L  
+**Hypothesis:** AlphaQ's policy is optimised for the second-mover role (Player 2 / Blue).
+Playing as P2 forces AlphaQ into the first-mover position, potentially exposing weaknesses
+in its opening policy.  
+**Method:** `poetry run python play_tangled.py --opponent alphaq --seat 2 --strategy hybrid_solver --lut-variant sa --games 10 --headless`  
+**Success signal:** Any wins, OR terminal boards with SchrLUT significantly above P1-game
+baseline (0.006–0.012).  
+
+**Results:** 0W / 0D / 10L. All 10 games identical (deterministic oracle + deterministic AlphaQ).
+
+Three bugs were found and fixed before running (P2 transposition was broken):
+1. `play_tangled.py` hardcoded `player=1` — MATLAB always got P1 perspective.
+2. Oracle trigger `mod(numGrey,2)==1` never fired on P2's even-grey turns.
+3. `solveOracle` always maximised LUT value — P2 should minimise (values are P1-perspective).
+
+After fixes, oracle fired correctly on every P2 move (`strategy=oracle` confirmed in DB).
+
+**Terminal board (every game):** `PPGGPPGGPPPGGPG`  
+**AlphaQ (P1) line:** E1P → E2P → E5P → E14P → E3G → E6P (heavily purple)  
+**Our (P2) oracle line:** E10P → E12G → E13G → E11P → E9P → E7G → E8G  
+
+**Score trajectory (SA LUT, P1-perspective):**
+
+| Round | AlphaQ | Us   | Score after |
+|-------|--------|------|-------------|
+| 1     | E1=P   | E10=P | −0.954 (P2 advantage) |
+| 2     | E2=P   | E12=G | +0.003 (drawn) |
+| 3     | E5=P   | E13=G | +0.022 |
+| 4     | E14=P  | E11=P | +0.400 |
+| 5     | E3=G   | E9=P  | +0.273 |
+| 6     | E6=P   | E7=G  | +1.377 |
+| 7     | —      | E8=G  | **+0.928 (loss)** |
+
+**Key observation — LUT internal inconsistency:** After round 1 the SA oracle valued the
+position at −0.954 (P2 strongly ahead). After round 2 — one AlphaQ move and one of our
+oracle-chosen responses — it read +0.003 (near draw). That is a ~0.957 swing in a single
+round. Under a correct minimax oracle this is impossible: the −0.954 at grey=13 is supposed
+to already account for AlphaQ's best response. If it did, our minimising reply at grey=12
+followed by AlphaQ's move can only change the value by the marginal difference between the
+chosen move and the second-best — not by nearly 1.0.
+
+The contradiction exposes a structural flaw in the expanded LUT: SA is run independently at
+each grey level, so the values at grey=13 and grey=11 come from separate stochastic runs
+with independent noise. The retrograde minimax DP then propagates and compounds these
+errors across levels. Nodes far from the terminal (high grey) accumulate the most error.
+The −0.954 at grey=13 was noise amplified by six DP steps, not signal.
+
+**Conclusion:** Playing as P2 does not help, but the deeper finding is that the oracle's
+in-game evaluations (at intermediate grey levels) are unreliable. The LUT at grey=0
+(terminal) is the most trustworthy level; values deteriorate with distance from the
+terminal. We cannot trust oracle-guided play at grey=13 or above. This invalidates the
+core assumption behind the hybrid-solver's oracle mode for early-game decisions, and
+motivates a revised oracle design (see Oracle Revision Project in docs/).
+
+---
+
+## Queued Investigations
+
+### Investigation 2 — Spectral / MI Analysis of AlphaQ Policy
+
+**Status:** ⏳ Queued  
+**Hypothesis:** AlphaQ may be at a locally optimal equilibrium rather than true Nash. Mutual
+information I(AlphaQ move; board state) and PSD of score progressions can distinguish these.  
+**Method:** New analysis script querying game DB; apply to AlphaQ games the same spectral
+analysis that correctly predicted Amara's exploitability.  
+**Prerequisite:** None  
+**Success signal:** Low MI (degenerate policy) → exploitable; specific board states with
+high response entropy → targets for Investigation 3/4.
+
+---
+
+### Investigation 3 — Adjudicator Parameter Recovery
+
+**Status:** ⏳ Queued  
+**Hypothesis:** The website Schrödinger adjudicator uses specific ε and anneal_time values.
+Fitting a parameterised model to observed (terminal_board → website_score) pairs from
+Melissa games (diverse terminals) can recover these.  
+**Method:** Play ~1,000 games vs Melissa (`--seat 1 --opponent melissa`) to collect diverse
+terminal boards + website scores; fit parameterised Schrödinger sim to recover ε, anneal_time.  
+**Prerequisite:** None (878 Melissa games already in DB)  
+**Success signal:** Recovered parameters produce local adjudicator scores that match website
+scores on held-out boards (R² > 0.9).  
+**Impact if successful:** Oracle becomes predictive; can identify genuinely winning boards.
+
+---
+
+### Investigation 4 — Exhaustive Terminal State Mapping
+
+**Status:** ⏳ Queued  
+**Hypothesis:** Some winning terminal boards may be reachable against AlphaQ that have not
+yet been observed in 1,563 games. Exhaustive mapping against Melissa/Amara builds a complete
+score table.  
+**Method:** Play ~50,000 games vs Melissa/Amara using `oracle-solver/` route enumeration;
+target 30% coverage of all 32,768 terminal boards.  
+**Prerequisite:** Investigation 3 (need calibrated adjudicator to identify winning boards)  
+**Estimated cost:** 9–17 days at 16-core parallelism  
+**Success signal:** Winning terminal boards exist and are reachable with correct play.
+
+---
+
+### Investigation 5 — Tensor Network Simulation
+
+**Status:** ⏳ Queued (long-term)  
+**Hypothesis:** A matrix product state (MPS/DMRG) simulation of the transverse-field Ising
+Hamiltonian at the recovered website parameters (from Investigation 3) can compute exact
+Schrödinger ground state energies for all 32,768 terminal boards, enabling a complete oracle.  
+**Method:** Implement MPS simulation (Python: quimb / TeNPy); benchmark on Petersen graph;
+generate full Schrödinger oracle at website parameters.  
+**Prerequisite:** Investigation 3 (need website quantum parameters)  
+**Estimated cost:** 3–6 months  
+**Success signal:** MPS oracle values match website scores; full minimax oracle computable.
+
+---
+
+## Results Log
+
+| Date | Investigation | Games | W | D | L | Key Finding |
+|------|--------------|-------|---|---|---|-------------|
+| 2026-05-16 | 1 — P2 seat swap | 10 | 0 | 0 | 10 | Oracle LUT internally inconsistent across grey levels; intermediate evaluations unreliable |
+
+---
+
+## Decision Rules
+
+- **If Investigation 1 finds wins:** Characterise which openings and terminal boards; expand
+  to 100 games; document in this roadmap.
+- **If Investigation 1 finds only draws/losses:** Mark complete, proceed to Investigation 2.
+- **If Investigation 3 fails** (R² < 0.5): Parameters may be unrecoverable from SA data;
+  skip Investigation 5; focus on Investigations 1–2 findings.
+- **If Investigation 4 finds no winning terminals:** Game is definitively drawn under any
+  classical strategy. Close programme.
