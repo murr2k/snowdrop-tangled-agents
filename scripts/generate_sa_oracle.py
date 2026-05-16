@@ -420,8 +420,8 @@ def write_mat(levels: dict[int, np.ndarray], output_path: Path | None = None) ->
                f"levels: {sorted(levels.keys())}"
         f.create_dataset('metadata', data=np.bytes_(meta))
 
-    size_mb = EXPANDED_LUT_SA_MAT.stat().st_size / 1024 / 1024
-    print(f"  Wrote {EXPANDED_LUT_SA_MAT.name} ({size_mb:.1f} MB)")
+    size_mb = dest.stat().st_size / 1024 / 1024
+    print(f"  Wrote {dest.name} ({size_mb:.1f} MB)")
 
 
 # ---------------------------------------------------------------------------
