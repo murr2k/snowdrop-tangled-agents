@@ -508,7 +508,7 @@ class WebPlayer:
     BASE_URL = "https://tangled-game.com"
     OPPONENTS = {
         "randy": "Random Randy",
-        "amara": "AlphaZero Amara",
+        "murray": "MCTS Murray",
         "melissa": "MCTS Melissa",
         "andy": "AlphaZero Andy",
         "alphaq": "AlphaQ Up",
@@ -924,10 +924,21 @@ class WebPlayer:
     #   Phase 1: _JS_WAIT_NOT_OUR_TURN — turn must leave us (move accepted)
     #   Phase 2: _JS_WAIT_OUR_TURN     — turn must return to us (opponent finished)
 
+    # Signals that the current game has ended (old format: "Game Over"/"Winner:";
+    # new Best-of-5 format: result modal "YOU WON"/"YOU LOST"/"YOU DREW", or
+    # edge counter reaching 15/15).
+    _JS_GAME_OVER_CHECK = (
+        "t.includes('Game Over') || t.includes('Winner:') || "
+        "t.includes('YOU WON') || t.includes('YOU LOST') || t.includes('YOU DREW') || "
+        "t.includes('15/15')"
+    )
+
     # Wait for our turn OR game over
     _JS_WAIT_OUR_TURN = """() => {
         const t = document.body.innerText;
-        if (t.includes('Game Over') || t.includes('Winner:')) return 'game_over';
+        if (t.includes('Game Over') || t.includes('Winner:') ||
+            t.includes('YOU WON') || t.includes('YOU LOST') || t.includes('YOU DREW') ||
+            t.includes('15/15')) return 'game_over';
         if (t.toLowerCase().includes('your turn')) return 'our_turn';
         return false;
     }"""
@@ -935,7 +946,9 @@ class WebPlayer:
     # Wait for NOT our turn OR game over (Phase 1: confirms move was accepted)
     _JS_WAIT_NOT_OUR_TURN = """() => {
         const t = document.body.innerText;
-        if (t.includes('Game Over') || t.includes('Winner:')) return 'game_over';
+        if (t.includes('Game Over') || t.includes('Winner:') ||
+            t.includes('YOU WON') || t.includes('YOU LOST') || t.includes('YOU DREW') ||
+            t.includes('15/15')) return 'game_over';
         if (!t.toLowerCase().includes('your turn')) return 'not_our_turn';
         return false;
     }"""
@@ -996,7 +1009,11 @@ class WebPlayer:
         try:
             raw_text = self.page.inner_text("body")
             text = raw_text.lower()
-            game_over = "Game Over" in raw_text or "Winner:" in raw_text
+            game_over = (
+                "Game Over" in raw_text or "Winner:" in raw_text or  # old format
+                "YOU WON" in raw_text or "YOU LOST" in raw_text or "YOU DREW" in raw_text or  # new modal
+                "15/15" in raw_text  # all edges colored
+            )
             our_turn = False
             if "your turn" in text:
                 our_turn = True
@@ -1031,6 +1048,14 @@ class WebPlayer:
         """Get game outcome."""
         try:
             text = self.page.inner_text("body")
+            # New Best-of-5 modal format (appears briefly at game end)
+            if "YOU WON" in text:
+                return "win"
+            if "YOU LOST" in text:
+                return "loss"
+            if "YOU DREW" in text:
+                return "draw"
+            # Old format
             our_player = f"Player {self.seat}"
             their_player = f"Player {3 - self.seat}"
             if f"Winner: {our_player}" in text:
@@ -1039,12 +1064,18 @@ class WebPlayer:
                 return "loss"
             if "Draw" in text:
                 return "draw"
-            # Fallback to score
+            # Score fallback: use the game's draw threshold (±0.0005)
             score = self.read_score()
-            if score > 0.5:
-                return "win"
-            if score < -0.5:
-                return "loss"
+            if self.seat == 1:
+                if score > 0.0005:
+                    return "win"
+                if score < -0.0005:
+                    return "loss"
+            else:
+                if score < -0.0005:
+                    return "win"
+                if score > 0.0005:
+                    return "loss"
         except:
             pass
         return "draw"
@@ -2015,6 +2046,12 @@ class WebPlayer:
                 board_list = list(state_check2)
                 board_list[edge] = color
                 last_known_board = ''.join(board_list)
+
+                # Detect if our move colored the last edge — game over.
+                # Do this immediately so we never bleed into the next Best-of-5 game.
+                if last_known_board.count('-') == 0:
+                    self.logger.info("Our move colored the last edge — game over")
+                    move_ended_game = True
 
                 # Add timing to solver stats
                 solver_stats['wall_clock_time'] = our_think_time
