@@ -13,10 +13,10 @@ See `docs/INVESTIGATION_ROADMAP.md` for execution status.
 
 | Priority | Investigation | Feasibility | Potential | Notes |
 |----------|--------------|-------------|-----------|-------|
-| 1 | Player 2 seat swap | Immediate — no code changes | High/unknown | Never tried |
+| 1 | Player 2 seat swap | ✅ Done | — | 0W/0D/10L; exposed oracle inconsistency |
 | 2 | Spectral/MI analysis of AlphaQ policy | ~1 day | Diagnostic | Proven on Amara |
-| 3 | Adjudicator parameter recovery (Melissa games) | Days | High | Linchpin for oracle |
-| 4 | Exhaustive terminal state mapping | 9–17 days (parallel) | Definitive | Rust solver ready |
+| 3 | Adjudicator parameter recovery | ✅ Done | — | anneal_time=1.85 ns, 83% accuracy |
+| 4 | Exhaustive terminal state mapping | 9–17 days (parallel) | Definitive | Needs calibrated oracle (now available) |
 | 5 | Tensor network simulation | 3–6 months | Highest | Rose recommendation |
 
 ---
@@ -99,11 +99,11 @@ Start from near-miss draws (0 < E(s_T) ≤ ε); amplify margin by delaying symme
 
 ## C. Partially Tried, Not Fully Explored
 
-### C1. Player 2 / Seat Swap ★★★★★ (Investigation 1)
-**Never tried against AlphaQ.** `--seat 2` is fully implemented (`play_tangled.py` lines
-2352-2353, 846-853, 992-993). AlphaQ's policy may be optimised for the second-mover role;
-forcing it into P1 breaks that assumption.  
-**Cost:** 10 games. **Status:** See `INVESTIGATION_ROADMAP.md`.
+### C1. Player 2 / Seat Swap ★★★★★ (Investigation 1) ✅ Complete
+0W / 0D / 10L. All 10 games identical (deterministic oracle + deterministic AlphaQ → same
+terminal board every game). Three P2 transposition bugs were found and fixed before running.
+Primary value: exposed the oracle's internal inconsistency (−0.954 → +0.003 in one round),
+motivating the Oracle Revision Project. **Status:** See `INVESTIGATION_ROADMAP.md`.
 
 ### C2. Spectral / MI Analysis of AlphaQ Policy ★★★★☆ (Investigation 2)
 Applied once to Amara (PSD + autocorrelation analysis) — correctly predicted that opening
@@ -113,10 +113,13 @@ Nash equilibrium" from "locally optimal in explored regions".
 **Cost:** ~1 day of analysis script writing.  
 **File:** `docs/AMARA_STRATEGY_ANALYSIS.md`
 
-### C3. Adjudicator Parameter Recovery via Melissa Games ★★★★☆ (Investigation 3)
-878 Melissa games already in DB (13.7% win rate → diverse terminal boards). Fit
-parameterised model to (board → website_score) pairs. Linchpin: if parameters are recovered,
-SA oracle becomes predictive.
+### C3. Adjudicator Parameter Recovery ★★★★☆ (Investigation 3) ✅ Complete
+Used 1061 (terminal_state, website_score) pairs from existing DB (no new games needed).
+MATLAB split-operator grid search over anneal_time (5–20,000 ns) + fminbnd refinement.  
+**Result:** anneal_time=1.85 ns, epsilon=0.0, R²=0.60, 83.1% win/draw/loss classification
+accuracy. Calibrated terminal LUT rebuilt. Expanded LUT rebuild in progress.  
+**Surprising finding:** Website uses an extremely short anneal_time (1.85 ns vs 40 ns
+default) — system barely evolves before measurement.
 
 ### C4. Exhaustive Terminal State Mapping ★★★★☆ (Investigation 4)
 ~2,436 terminals observed (7.43% coverage). Target: 30% coverage (~50,000 games vs

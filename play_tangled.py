@@ -2355,10 +2355,11 @@ def main():
                         metavar=("GREY", "EDGE", "COLOR"),
                         help="Override oracle move at a specific grey count: GREY EDGE COLOR. "
                              "E.g. '--oracle-override 11 10 G' forces E10G at grey=11. Repeatable.")
-    parser.add_argument("--lut-variant", choices=["sa", "schr"], default="sa",
-                        help="Which oracle LUT to use: 'sa' (simulated annealing, default) "
-                             "or 'schr' (Schrodinger adjudicator). "
-                             "Selects expanded_lut_sa.mat vs expanded_lut_schr.mat.")
+    parser.add_argument("--lut-variant", choices=["sa", "schr", "calib"], default="sa",
+                        help="Which oracle LUT to use: 'sa' (simulated annealing, default), "
+                             "'schr' (Schrodinger, local params), or 'calib' (Schrodinger, "
+                             "website-calibrated anneal_time=1.85ns). "
+                             "Selects expanded_lut_{variant}.mat.")
 
     args = parser.parse_args()
 
@@ -2527,6 +2528,9 @@ def main():
     lut_variant = getattr(args, 'lut_variant', 'sa')
     if lut_variant == 'schr':
         expanded_lut_file = 'expanded_lut_schr.mat'
+        terminal_lut_file = 'terminal_scores.mat'
+    elif lut_variant == 'calib':
+        expanded_lut_file = 'expanded_lut_calib.mat'
         terminal_lut_file = 'terminal_scores.mat'
     else:
         expanded_lut_file = 'expanded_lut_sa.mat'
