@@ -24,11 +24,12 @@ load_dotenv()
 BASE_URL = "https://tangled-game.com"
 LEADERBOARD_URL = f"{BASE_URL}/leaderboard"
 
-# Match any leaderboard name containing these substrings (case-insensitive).
-# murr1-10 are the display names the user chose during account enrollment.
-OUR_TAGS = ["murr1", "murr2", "murr3", "murr4", "murr5",
-            "murr6", "murr7", "murr8", "murr9", "murr10",
-            "tangled"]
+# Investigation 4 account display names (set during enrollment).
+# Exact matches only to avoid catching murr2k, murr2k@gmail.com, etc.
+OUR_NAMES = {
+    "murr1", "murr2", "murr3", "murr4", "murr5",
+    "murr6", "murr7", "murr8", "murr9", "murr10",
+}
 
 MEDAL_RANK = {"🥇": 1, "🥈": 2, "🥉": 3}
 
@@ -143,8 +144,7 @@ def parse_leaderboard(html: str) -> list[dict]:
 
 
 def is_ours(player: dict) -> bool:
-    name = player.get("name", "").lower()
-    return any(tag.lower() in name for tag in OUR_TAGS)
+    return player.get("name", "").lower() in {n.lower() for n in OUR_NAMES}
 
 
 def fmt_int(v) -> str:
@@ -213,24 +213,9 @@ def print_report(players: list[dict]) -> None:
         print(f"  Rank range   : #{best_rank} – #{worst_rank} of {total}")
         print()
     else:
-        print("[!] No accounts matching our tags found.")
-        print(f"    Tags searched: {OUR_TAGS}")
+        print("[!] No Investigation 4 accounts found on the leaderboard.")
+        print(f"    Expected names: {sorted(OUR_NAMES)}")
         print()
-
-    print("FULL LEADERBOARD")
-    print(hdr)
-    print(sep)
-    for p in players:
-        marker = " <--" if is_ours(p) else ""
-        print(f"{p['rank']:>5}  {p['name']:<26}  "
-              f"{fmt_elo(p['elo']):>5}  "
-              f"{fmt_int(p['wins']):>5}  "
-              f"{fmt_int(p['losses']):>5}  "
-              f"{fmt_int(p['draws']):>5}  "
-              f"{fmt_pct(p['win_pct']):>6}  "
-              f"{fmt_int(p['games']):>6}"
-              f"{marker}")
-    print()
 
 
 if __name__ == "__main__":
