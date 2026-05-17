@@ -532,6 +532,7 @@ class WebPlayer:
         oracle_overrides: Optional[dict] = None,
         expanded_lut_file: str = 'expanded_lut_sa.mat',
         terminal_lut_file: str = 'terminal_scores_sa.mat',
+        explorer_opening_index: int = 0,
     ):
         self.username = os.getenv("TANGLED_USERNAME")
         self.password = os.getenv("TANGLED_PASSWORD")
@@ -555,6 +556,7 @@ class WebPlayer:
         # Terminal explorer options
         self._random_turns = random_turns
         self._novel_branch = novel_branch
+        self._explorer_opening_index = explorer_opening_index
 
         self.playwright = None
         self.browser = None
@@ -696,12 +698,13 @@ class WebPlayer:
                 route_mode=route_mode,
             )
         elif strategy_type == "terminal_explorer":
-            fallback = MCTSStrategy(time_limit=float('inf'), max_iterations=mcts_iterations)
+            fallback = MCTSStrategy(time_limit=mcts_time, max_iterations=mcts_iterations)
             self.strategy = TerminalExplorerStrategy(
                 fallback_strategy=fallback,
                 randomize_midgame=True,
                 random_move_turns=self._random_turns,
                 novel_branch=self._novel_branch,
+                opening_index_start=self._explorer_opening_index,
             )
         else:  # "heuristic" (default)
             self.strategy = PetersenStrategy(params_path=self.params_path)
@@ -2554,6 +2557,7 @@ def main():
             seat=args.seat,
             random_turns=random_turns_str,
             novel_branch=args.novel_branch,
+            lut_variant=lut_variant,
         )
         run_info = stats_collector.get_run(run_id)
         total_planned = run_info['planned_games']
@@ -2567,6 +2571,7 @@ def main():
             seat=args.seat,
             random_turns=random_turns_str,
             novel_branch=args.novel_branch,
+            lut_variant=lut_variant,
         )
         start_game_number = 1
         total_planned = planned_games
@@ -2607,106 +2612,104 @@ def main():
             if games_remaining <= 0:
                 break
 
-        # Create player and play games
         # Parse random-turns into a set of ints
         random_turns = None
         if random_turns_str:
             random_turns = {int(x) for x in random_turns_str.split(',')}
 
-        with WebPlayer(
-            headless=args.headless,
-            slow_mo=args.slow_mo,
-            strategy_type=args.strategy,
-            mcts_time=args.mcts_time,
-            mcts_iterations=args.mcts_iterations,
-            use_nn=args.use_nn,
-            adapt_opponent=args.adapt_opponent,
-            opening_mode=getattr(args, 'opening_mode', None),
-            force_opening=getattr(args, 'force_opening', None),
-            route_mode=getattr(args, 'route_mode', None),
-            routes_file=getattr(args, 'routes_file', None),
-            random_turns=random_turns,
-            novel_branch=args.novel_branch,
-            seat=args.seat,
-            oracle_overrides=oracle_overrides,
-            expanded_lut_file=expanded_lut_file,
-            terminal_lut_file=terminal_lut_file,
-        ) as player:
-            player.login()
+        # Derive opening index for terminal_explorer from DB so restarts resume mid-cycle
+        explorer_opening_index = 0
+        if args.strategy == 'terminal_explorer' and run_id:
+            run_info = stats_collector.get_run(run_id)
+            explorer_opening_index = run_info['completed_games'] % 30
 
-            # Store run info on player for use in play_game
-            player._run_id = run_id
-            player._current_game_number = current_game_number
+        restart_needed = False
+        try:
+            with WebPlayer(
+                headless=args.headless,
+                slow_mo=args.slow_mo,
+                strategy_type=args.strategy,
+                mcts_time=args.mcts_time,
+                mcts_iterations=args.mcts_iterations,
+                use_nn=args.use_nn,
+                adapt_opponent=args.adapt_opponent,
+                opening_mode=getattr(args, 'opening_mode', None),
+                force_opening=getattr(args, 'force_opening', None),
+                route_mode=getattr(args, 'route_mode', None),
+                routes_file=getattr(args, 'routes_file', None),
+                random_turns=random_turns,
+                novel_branch=args.novel_branch,
+                seat=args.seat,
+                oracle_overrides=oracle_overrides,
+                expanded_lut_file=expanded_lut_file,
+                terminal_lut_file=terminal_lut_file,
+                explorer_opening_index=explorer_opening_index,
+            ) as player:
+                player.login()
 
-            restart_needed = False
+                # Store run info on player for use in play_game
+                player._run_id = run_id
+                player._current_game_number = current_game_number
 
-            while games_remaining > 0:
-                # Update run info for display
-                if run_id:
-                    run_info = stats_collector.get_run(run_id)
-                    games_remaining = run_info['planned_games'] - run_info['completed_games']
-                    display_num = run_info['completed_games'] + 1
-                    display_total = run_info['planned_games']
-                else:
-                    display_num = len(results) + 1
-                    display_total = total_planned
-
-                if games_remaining <= 0:
-                    break
-
-                print(f"\n=== Game {display_num}/{display_total} ===")
-
-                # Update ETA: record game start timestamp for avg calculation
-                games_completed_so_far = display_num - 1
-                publisher = get_publisher()
-                if publisher.is_configured():
-                    publisher.game_started(
-                        game_number=display_num,
-                        games_completed=games_completed_so_far,
-                    )
-
-                result = player.play_game(args.opponent)
-                results.append(result)
-
-                # Note: Dashboard publish happens immediately at game end in play_game()
-                # No need for duplicate publish here
-
-                # Check for stuck opponent
-                if result.get("error") == "stuck_opponent":
-                    print("\n*** OPPONENT STUCK - Restarting browser... ***\n")
-                    restart_needed = True
-
-                    # Check if this was the final game
+                while games_remaining > 0:
+                    # Re-read run info from DB for accurate display and loop control
                     if run_id:
                         run_info = stats_collector.get_run(run_id)
-                        if run_info['completed_games'] >= run_info['planned_games']:
-                            print(f"Run {run_id} was on final game - starting new run")
-                            # Start a new run with same parameters
-                            run_id = stats_collector.start_run(
-                                planned_games=args.run,
-                                strategy=args.strategy,
-                                opponent=args.opponent
-                            )
-                            current_game_number = 1
-                            print(f"Started new run {run_id}")
-                    break  # Exit inner loop to restart browser
+                        games_remaining = run_info['planned_games'] - run_info['completed_games']
+                        display_num = run_info['completed_games'] + 1
+                        display_total = run_info['planned_games']
+                    else:
+                        display_num = len(results) + 1
+                        display_total = total_planned
 
-                if run_id:
-                    player._current_game_number += 1
-                    current_game_number = player._current_game_number
+                    if games_remaining <= 0:
+                        break
 
-                games_remaining -= 1
+                    print(f"\n=== Game {display_num}/{display_total} ===")
 
-                if games_remaining > 0:
-                    time.sleep(2)
+                    # Update ETA: record game start timestamp for avg calculation
+                    games_completed_so_far = display_num - 1
+                    publisher = get_publisher()
+                    if publisher.is_configured():
+                        publisher.game_started(
+                            game_number=display_num,
+                            games_completed=games_completed_so_far,
+                        )
 
-        # If no restart needed, we're done
-        if not restart_needed:
+                    result = player.play_game(args.opponent)
+                    results.append(result)
+
+                    # Note: Dashboard publish happens immediately at game end in play_game()
+                    # No need for duplicate publish here
+
+                    # Check for stuck opponent — restart browser
+                    if result.get("error") == "stuck_opponent":
+                        print("\n*** OPPONENT STUCK - Restarting browser... ***\n")
+                        restart_needed = True
+                        break  # Exit inner loop to restart browser
+
+                    if run_id:
+                        player._current_game_number += 1
+                        current_game_number = player._current_game_number
+
+                    games_remaining -= 1
+
+                    if games_remaining > 0:
+                        time.sleep(2)
+
+        except Exception as e:
+            # Network drop, browser crash, or other transient failure
+            logging.getLogger(__name__).error(f"Session error (will retry): {e}")
+            restart_needed = True
+
+        # In run mode (--run N), always loop back so the DB decides when we're done.
+        # In simple --games N mode, exit when the session ends cleanly.
+        if not restart_needed and args.run is None:
             break
 
-        # Brief pause before restart
-        print("Restarting in 5 seconds...")
-        time.sleep(5)
+        if restart_needed:
+            print("Restarting in 15 seconds...")
+            time.sleep(15)
 
     # Detailed Summary
     print("\n" + "=" * 50)

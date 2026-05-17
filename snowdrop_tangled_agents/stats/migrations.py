@@ -206,6 +206,11 @@ MIGRATIONS: List[Tuple[int, str, str]] = [
         CREATE INDEX IF NOT EXISTS idx_runs_config
             ON runs(strategy, opponent, seat, novel_branch);
     """),
+
+    # v12: Add lut_variant to runs so resume matches the correct oracle
+    (12, "Add lut_variant to runs for oracle variant tracking", """
+        ALTER TABLE runs ADD COLUMN lut_variant TEXT;
+    """),
 ]
 
 

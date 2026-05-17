@@ -29,14 +29,15 @@ class TerminalExplorerStrategy:
         randomize_midgame: bool = False,
         random_move_turns: Optional[set] = None,
         novel_branch: bool = False,
+        opening_index_start: int = 0,
     ):
         self.fallback_strategy = fallback_strategy
         self.randomize_midgame = randomize_midgame
         self.random_move_turns = random_move_turns if random_move_turns is not None else {0}
         self.novel_branch = novel_branch
         self.novel_cache = None
-        self.opening_index = 0
-        self.games_played = 0
+        self.opening_index = opening_index_start % len(ALL_OPENINGS)
+        self.games_played = opening_index_start
         self.current_opening = None
         self.current_game_opening = None  # (edge, color) - read by play_tangled.py
         self.opening_mode = 'round_robin'  # read by play_tangled.py

@@ -795,6 +795,7 @@ class StatsCollector:
         seat: int = 1,
         random_turns: Optional[str] = None,
         novel_branch: bool = False,
+        lut_variant: Optional[str] = None,
     ) -> int:
         """
         Start a new run (batch of planned games).
@@ -807,6 +808,7 @@ class StatsCollector:
             seat: Player seat (1 or 2)
             random_turns: Comma-separated random turn indices (e.g. "0,2,4")
             novel_branch: Whether novel branch forcing is enabled
+            lut_variant: Oracle LUT variant ('sa', 'schr', or 'calib')
 
         Returns:
             Run ID
@@ -814,14 +816,15 @@ class StatsCollector:
         with connect_db(self.db_path) as conn:
             cursor = conn.execute("""
                 INSERT INTO runs (planned_games, description, strategy, opponent, pid,
-                                  seat, random_turns, novel_branch)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                                  seat, random_turns, novel_branch, lut_variant)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (planned_games, description, strategy, opponent, os.getpid(),
-                  seat, random_turns, 1 if novel_branch else 0))
+                  seat, random_turns, 1 if novel_branch else 0, lut_variant))
             conn.commit()
             run_id = cursor.lastrowid
             logger.info(f"Started run {run_id}: {planned_games} games planned "
-                        f"(seat={seat}, random_turns={random_turns}, novel_branch={novel_branch})")
+                        f"(seat={seat}, random_turns={random_turns}, "
+                        f"novel_branch={novel_branch}, lut_variant={lut_variant})")
             return run_id
 
     def get_active_run(self, pid: Optional[int] = None) -> Optional[Dict[str, Any]]:
@@ -898,10 +901,12 @@ class StatsCollector:
             run_id: Run ID
         """
         with connect_db(self.db_path) as conn:
+            # Only count actual game outcomes — abandoned games do not count
+            # so a 50k run with occasional abandoned games still reaches 50k real results
             conn.execute("""
                 UPDATE runs SET completed_games = (
                     SELECT COUNT(*) FROM games
-                    WHERE run_id = ? AND result IS NOT NULL
+                    WHERE run_id = ? AND result IN ('win', 'loss', 'draw')
                 )
                 WHERE id = ?
             """, (run_id, run_id))
@@ -915,13 +920,14 @@ class StatsCollector:
         seat: int = 1,
         random_turns: Optional[str] = None,
         novel_branch: bool = False,
+        lut_variant: Optional[str] = None,
     ) -> tuple[int, int]:
         """
         Get active run matching config or create a new one.
 
         Multiple instances with the same config share the same run.
         Each unique (strategy, opponent, planned_games, seat, random_turns,
-        novel_branch) configuration gets its own run.
+        novel_branch, lut_variant) configuration gets its own run.
 
         Args:
             planned_games: Total games planned
@@ -930,11 +936,13 @@ class StatsCollector:
             seat: Player seat (1 or 2)
             random_turns: Comma-separated random turn indices
             novel_branch: Whether novel branch forcing is enabled
+            lut_variant: Oracle LUT variant ('sa', 'schr', or 'calib')
 
         Returns:
             Tuple of (run_id, next_game_number)
         """
         novel_int = 1 if novel_branch else 0
+        lut = lut_variant or 'sa'
 
         # Find an incomplete run with exactly matching config
         with connect_db(self.db_path) as conn:
@@ -948,10 +956,11 @@ class StatsCollector:
                     AND COALESCE(seat, 1) = ?
                     AND COALESCE(random_turns, '') = ?
                     AND COALESCE(novel_branch, 0) = ?
+                    AND COALESCE(lut_variant, 'sa') = ?
                 ORDER BY started DESC
                 LIMIT 1
             """, (strategy, opponent, planned_games, seat,
-                  random_turns or '', novel_int))
+                  random_turns or '', novel_int, lut))
             active = cursor.fetchone()
             if active:
                 active = dict(active)
@@ -960,7 +969,8 @@ class StatsCollector:
             run_id = active['id']
             game_number = self.get_next_game_number(run_id)
             logger.info(f"Joining run {run_id}: game {game_number}/{active['planned_games']} "
-                        f"(seat={seat}, random_turns={random_turns}, novel_branch={novel_branch})")
+                        f"(seat={seat}, random_turns={random_turns}, "
+                        f"novel_branch={novel_branch}, lut_variant={lut_variant})")
             return run_id, game_number
 
         run_id = self.start_run(
@@ -970,6 +980,7 @@ class StatsCollector:
             seat=seat,
             random_turns=random_turns,
             novel_branch=novel_branch,
+            lut_variant=lut_variant,
         )
         return run_id, 1
 
