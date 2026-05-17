@@ -43,6 +43,7 @@ DATA_DIR = PROJECT_ROOT / "snowdrop_tangled_agents" / "matlab" / "rl" / "data"
 
 SA_MAT = DATA_DIR / "expanded_lut_sa.mat"
 SCHR_MAT = DATA_DIR / "expanded_lut_schr.mat"
+CALIB_MAT = DATA_DIR / "expanded_lut_calib.mat"
 DEFAULT_DB = Path.home() / ".tangled" / "game_stats.db"
 
 NUM_EDGES = 15
@@ -190,17 +191,11 @@ def get_calibration_pairs(conn: sqlite3.Connection) -> list[tuple[str, float]]:
 # Main analysis
 # ---------------------------------------------------------------------------
 
-def analyse(game_sequences: list, sa_mat: Path, schr_mat: Path) -> dict:
+def analyse(game_sequences: list, sa_mat: Path, schr_mat: Path,
+            calib_mat: Path | None = None) -> dict:
     """Compute per-grey-level LUT values and round-to-round swings.
 
-    Returns dict: {
-      'sa':   {grey_level: [value, ...]},
-      'schr': {grey_level: [value, ...]},
-      'db':   {grey_level: [db_score, ...]},
-      'sa_swings':   {grey_level: [|delta_v|, ...]},
-      'schr_swings': {grey_level: [|delta_v|, ...]},
-      'db_swings':   {grey_level: [|delta_v|, ...]},
-    }
+    Returns dict with keys sa/schr/calib/db and sa_swings/schr_swings/calib_swings/db_swings.
     """
     # Collect all (game_idx, round_idx, grey, state_str, db_score) per game
     all_states: dict[int, list[tuple[int, str, float | None]]] = {}
@@ -218,12 +213,12 @@ def analyse(game_sequences: list, sa_mat: Path, schr_mat: Path) -> dict:
     for grey in sorted(level_states.keys(), reverse=True):
         print(f"    grey={grey}: {len(level_states[grey])} states")
 
-    # Batch lookup from both MAT files
-    sa_lookup: dict[tuple[int, int], float] = {}   # (gi, ri) -> sa_value
+    # Batch lookup from MAT files
+    sa_lookup: dict[tuple[int, int], float] = {}   # (gi, ri) -> value
     schr_lookup: dict[tuple[int, int], float] = {}
+    calib_lookup: dict[tuple[int, int], float] = {}
 
     for grey, entries in level_states.items():
-        # Compute flat indices
         flat_indices = []
         key_pairs = []
         for gi, ri, state in entries:
@@ -241,99 +236,112 @@ def analyse(game_sequences: list, sa_mat: Path, schr_mat: Path) -> dict:
 
         sa_vals = batch_lookup(sa_mat, grey, flat_arr)
         schr_vals = batch_lookup(schr_mat, grey, flat_arr)
+        calib_vals = batch_lookup(calib_mat, grey, flat_arr) if calib_mat else None
 
         for i, (gi, ri) in enumerate(key_pairs):
             if sa_vals is not None:
                 sa_lookup[(gi, ri)] = float(sa_vals[i])
             if schr_vals is not None:
                 schr_lookup[(gi, ri)] = float(schr_vals[i])
+            if calib_vals is not None:
+                calib_lookup[(gi, ri)] = float(calib_vals[i])
 
     # Compute per-game value sequences and round-to-round swings
     sa_by_grey: dict[int, list[float]] = defaultdict(list)
     schr_by_grey: dict[int, list[float]] = defaultdict(list)
+    calib_by_grey: dict[int, list[float]] = defaultdict(list)
     db_by_grey: dict[int, list[float]] = defaultdict(list)
     sa_swings: dict[int, list[float]] = defaultdict(list)
     schr_swings: dict[int, list[float]] = defaultdict(list)
+    calib_swings: dict[int, list[float]] = defaultdict(list)
     db_swings: dict[int, list[float]] = defaultdict(list)
 
     for gi, seq in all_states.items():
-        prev_sa = prev_schr = prev_db = None
-        prev_grey = None
+        prev_sa = prev_schr = prev_calib = prev_db = None
 
         for ri, (grey, state, db_score) in enumerate(seq):
             sa_v = sa_lookup.get((gi, ri))
             schr_v = schr_lookup.get((gi, ri))
+            calib_v = calib_lookup.get((gi, ri))
             db_v = db_score
 
             if sa_v is not None:
                 sa_by_grey[grey].append(sa_v)
             if schr_v is not None:
                 schr_by_grey[grey].append(schr_v)
+            if calib_v is not None:
+                calib_by_grey[grey].append(calib_v)
             if db_v is not None:
                 db_by_grey[grey].append(db_v)
 
-            # Swing from previous round
             if prev_sa is not None and sa_v is not None:
                 sa_swings[grey].append(abs(sa_v - prev_sa))
             if prev_schr is not None and schr_v is not None:
                 schr_swings[grey].append(abs(schr_v - prev_schr))
+            if prev_calib is not None and calib_v is not None:
+                calib_swings[grey].append(abs(calib_v - prev_calib))
             if prev_db is not None and db_v is not None:
                 db_swings[grey].append(abs(db_v - prev_db))
 
             prev_sa = sa_v
             prev_schr = schr_v
+            prev_calib = calib_v
             prev_db = db_v
-            prev_grey = grey
 
     return {
         'sa': sa_by_grey,
         'schr': schr_by_grey,
+        'calib': calib_by_grey,
         'db': db_by_grey,
         'sa_swings': sa_swings,
         'schr_swings': schr_swings,
+        'calib_swings': calib_swings,
         'db_swings': db_swings,
     }
 
 
 def print_report(results: dict, calibration_pairs: list):
     print()
-    print("=" * 76)
+    print("=" * 88)
     print("  Oracle Consistency Report -- Mean |delta-value| between consecutive rounds")
     print("  (P1 game: grey 14->12->10->8->6->4->2->0, each step = 1 round)")
-    print("=" * 76)
-    print(f"  {'Grey':>6}  {'SA |dv|':>10}  {'Schr |dv|':>10}  {'DB |dv|':>10}  {'N':>6}")
-    print("  " + "-" * 56)
+    print("=" * 88)
+    print(f"  {'Grey':>6}  {'SA |dv|':>10}  {'Schr |dv|':>10}  {'Calib |dv|':>11}  {'DB |dv|':>10}  {'N':>6}")
+    print("  " + "-" * 68)
 
     all_grey = sorted(
-        set(results['sa_swings']) | set(results['schr_swings']) | set(results['db_swings']),
+        set(results['sa_swings']) | set(results['schr_swings']) |
+        set(results.get('calib_swings', {})) | set(results['db_swings']),
         reverse=True
     )
     for g in all_grey:
         sa = results['sa_swings'].get(g, [])
         sc = results['schr_swings'].get(g, [])
+        ca = results.get('calib_swings', {}).get(g, [])
         db = results['db_swings'].get(g, [])
-        sa_s = f"{np.mean(sa):.4f}" if sa else "     -"
-        sc_s = f"{np.mean(sc):.4f}" if sc else "     -"
-        db_s = f"{np.mean(db):.4f}" if db else "     -"
-        n = max(len(sa), len(sc), len(db))
-        print(f"  {g:>6}  {sa_s:>10}  {sc_s:>10}  {db_s:>10}  {n:>6}")
+        sa_s  = f"{np.mean(sa):.4f}" if sa else "     -"
+        sc_s  = f"{np.mean(sc):.4f}" if sc else "     -"
+        ca_s  = f"{np.mean(ca):.4f}" if ca else "      -"
+        db_s  = f"{np.mean(db):.4f}" if db else "     -"
+        n = max(len(sa), len(sc), len(ca), len(db))
+        print(f"  {g:>6}  {sa_s:>10}  {sc_s:>10}  {ca_s:>11}  {db_s:>10}  {n:>6}")
 
     print()
     print("  Overall mean |dv| (all grey levels combined):")
     all_sa = [v for vs in results['sa_swings'].values() for v in vs]
     all_sc = [v for vs in results['schr_swings'].values() for v in vs]
+    all_ca = [v for vs in results.get('calib_swings', {}).values() for v in vs]
     all_db = [v for vs in results['db_swings'].values() for v in vs]
     if all_sa:
-        print(f"    SA   oracle: {np.mean(all_sa):.4f}  (median {np.median(all_sa):.4f})")
+        print(f"    SA    oracle: {np.mean(all_sa):.4f}  (median {np.median(all_sa):.4f})")
     if all_sc:
-        print(f"    Schr oracle: {np.mean(all_sc):.4f}  (median {np.median(all_sc):.4f})")
+        print(f"    Schr  oracle: {np.mean(all_sc):.4f}  (median {np.median(all_sc):.4f})")
+    if all_ca:
+        print(f"    Calib oracle: {np.mean(all_ca):.4f}  (median {np.median(all_ca):.4f})")
     if all_db:
-        print(f"    DB   scores: {np.mean(all_db):.4f}  (median {np.median(all_db):.4f})")
+        print(f"    DB    scores: {np.mean(all_db):.4f}  (median {np.median(all_db):.4f})")
 
     if calibration_pairs:
-        from pathlib import Path
-        sa_mat = SA_MAT
-        schr_mat = SCHR_MAT
         print()
         print("  Terminal accuracy vs website scores (sample of calibration pairs):")
         sample = calibration_pairs[:500]
@@ -344,17 +352,15 @@ def print_report(results: dict, calibration_pairs: list):
         flat_arr = np.array(flat_indices, dtype=np.int64)
         website = np.array([ws for _, ws in sample], dtype=np.float32)
 
-        sa_term = batch_lookup(sa_mat, 0, flat_arr)
-        sc_term = batch_lookup(schr_mat, 0, flat_arr)
+        sa_term    = batch_lookup(SA_MAT, 0, flat_arr)
+        sc_term    = batch_lookup(SCHR_MAT, 0, flat_arr)
+        calib_term = batch_lookup(CALIB_MAT, 0, flat_arr)
 
-        if sa_term is not None:
-            mae = np.mean(np.abs(sa_term - website))
-            r2 = 1 - np.var(sa_term - website) / np.var(website)
-            print(f"    SA   terminal: MAE={mae:.4f}  R2={r2:.4f}  (n={len(sample)})")
-        if sc_term is not None:
-            mae = np.mean(np.abs(sc_term - website))
-            r2 = 1 - np.var(sc_term - website) / np.var(website)
-            print(f"    Schr terminal: MAE={mae:.4f}  R2={r2:.4f}  (n={len(sample)})")
+        for label, vals in [("SA   ", sa_term), ("Schr ", sc_term), ("Calib", calib_term)]:
+            if vals is not None:
+                mae = np.mean(np.abs(vals - website))
+                r2 = 1 - np.var(vals - website) / np.var(website)
+                print(f"    {label} terminal: MAE={mae:.4f}  R2={r2:.4f}  (n={len(sample)})")
 
     print("=" * 76)
 
@@ -365,15 +371,18 @@ def plot_report(results: dict, output_path: Path):
         return
 
     all_grey = sorted(
-        set(results['sa_swings']) | set(results['schr_swings']),
+        set(results['sa_swings']) | set(results['schr_swings']) |
+        set(results.get('calib_swings', {})),
         reverse=True
     )
-    sa_means = [np.mean(results['sa_swings'].get(g, [np.nan])) for g in all_grey]
-    sc_means = [np.mean(results['schr_swings'].get(g, [np.nan])) for g in all_grey]
+    sa_means    = [np.mean(results['sa_swings'].get(g, [np.nan])) for g in all_grey]
+    sc_means    = [np.mean(results['schr_swings'].get(g, [np.nan])) for g in all_grey]
+    calib_means = [np.mean(results.get('calib_swings', {}).get(g, [np.nan])) for g in all_grey]
 
     fig, ax = plt.subplots(figsize=(10, 5))
-    ax.plot(all_grey, sa_means, 'o-', label='SA oracle', color='tab:orange', linewidth=2)
-    ax.plot(all_grey, sc_means, 's-', label='Schrodinger oracle', color='tab:blue', linewidth=2)
+    ax.plot(all_grey, sa_means,    'o-', label='SA oracle',             color='tab:orange', linewidth=2)
+    ax.plot(all_grey, sc_means,    's-', label='Schrodinger (40ns)',    color='tab:blue',   linewidth=2)
+    ax.plot(all_grey, calib_means, '^-', label='Calib Schrodinger (1.85ns)', color='tab:green', linewidth=2)
     ax.set_xlabel("Grey level after our move (high = early game, low = late game)")
     ax.set_ylabel("Mean |delta-value| between rounds")
     ax.set_title(
@@ -425,8 +434,11 @@ def main():
 
     conn.close()
 
-    print("\nBatch-looking up SA and Schrodinger oracle values...")
-    results = analyse(sequences, SA_MAT, SCHR_MAT)
+    calib_mat = CALIB_MAT if CALIB_MAT.exists() else None
+    print("\nBatch-looking up SA, Schrodinger, and Calib oracle values...")
+    if calib_mat is None:
+        print("  (expanded_lut_calib.mat not found -- skipping calib column)")
+    results = analyse(sequences, SA_MAT, SCHR_MAT, calib_mat)
 
     print_report(results, calibration_pairs)
 
