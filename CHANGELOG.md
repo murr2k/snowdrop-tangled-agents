@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-05-17
+
+### Changed (retraction)
+
+- **Phase 4 PIVOT verdict RETRACTED.** Initial analysis (v0.4.1) concluded
+  that the expected-value solver eliminated the minimax draw plateau and
+  recommended pivoting to tensor networks. That conclusion was **wrong**.
+- Root cause: Phase 4 picked `E0G` as its opening on all 50 games (MCTS at
+  grey=15 without an opening book). E0G is a known-bad opening (17
+  hybrid_solver games on E0G = 0 draws, 100% losses).
+- The relevant baseline for the Phase 4 question is **E7G as P1 opening**,
+  which produces **252 draws in 262 games against AlphaQ (96.2%)** across
+  all strategies (mean score +0.55). Phase 4 never tested itself against
+  this baseline because it never opened with E7G.
+- Updated `docs/PHASE_4_RESULTS.md` with the opening-conditioned breakdown
+  and the re-test plan: `--solver-adversary expected --oracle-override 15 7 G`
+  vs the 96.2% draw baseline.
+
+### Added
+
+- `scripts/_phase4_opening_breakdown.py` — opening-vs-outcome breakdown by
+  strategy. Reveals E7G as the dominant draw-producing opening.
+- `scripts/_phase4_actual_openings.py` — moves-table query for actual first
+  moves (since the games.opening_edge column isn't populated for
+  hybrid_solver direct runs).
+
+### Blocked
+
+- **tangled-game.com play field modified (2026-05-17).** Our Playwright
+  automation needs updates before any further live games can be played.
+  The Phase 4 E7G re-test is queued behind this work.
+
 ## [0.4.1] - 2026-05-17
 
 ### Added

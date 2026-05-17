@@ -6,9 +6,34 @@
 
 ---
 
-## Verdict
+## Verdict — REVISED 2026-05-17
 
-**PHASE 5 PIVOT to tensor networks.**
+**PIVOT VERDICT RETRACTED.** **Phase 4 test was confounded by opening
+selection.** The expected-value solver was never tested in the relevant
+configuration.
+
+The Phase 4 run picked `E0G` as its opening in all 50 games (this is what
+MCTS converges to at grey=15 when the opening book is gated off and there's
+no explicit forced opening). E0G is a *known-bad* opening: in the broader
+hybrid_solver history, 17 games on E0G produced **0 draws and 16 losses**.
+
+The historical record shows that **E7G as P1 opening produces a 96.2% draw
+rate across 262 games against AlphaQ** (252 D / 0 W / 5 L, mean score +0.55).
+When hybrid_solver direct happens to pick E7G, its draw rate is 5/5 = 100%.
+This is a strong, reproducible classical baseline that the Phase 4 test
+never exercised.
+
+**Correct next step:** re-run Phase 4 expected-value mode with a forced E7G
+opening, comparing 50 games to the E7G+other-solvers baseline (96.2% draws).
+Decision rule:
+  - Any wins → exploit found, scale.
+  - Draws ~ 96.2% → expected-value mode is neutral on top of E7G; no harm done.
+  - Significantly fewer draws → expected-value mode actively breaks the E7G
+    advantage; THEN pivot.
+
+**Blocker:** tangled-game.com modified its play field (2026-05-17). Our
+Playwright automation in `play_tangled.py` will need updates before any
+further live games can be played. The re-run is queued behind that work.
 
 The expected-value reformulation **eliminated every draw**: 49.4% of historical
 `hybrid_solver` P1 games against AlphaQ ended in draws; Phase 4's 50 games
@@ -28,6 +53,23 @@ Melissa-fit Schr).
 | **expected** (Phase 4, run 141) | hybrid_solver | 50 | **0 / 0 / 50** | **0%** | **−0.669** | 0.048 | [−0.79, −0.51] |
 | minimax (all-time hybrid_solver P1 history excl. run 141) | hybrid_solver | 83 | 0 / 41 / 42 | 49.4% | +0.202 | 0.515 | [−0.95, +0.81] |
 | minimax (run 130 only, most recent prior baseline) | hybrid_solver | 10 | 0 / 0 / 10 | 0% | +0.687 | 0.022 | [+0.66, +0.73] |
+
+### Opening-conditioned breakdown (the real story)
+
+Phase 4 picked E0G on all 50 games. The historical opening-vs-outcome
+table (all P1 games vs AlphaQ, all strategies, query in
+`scripts/_phase4_actual_openings.py`):
+
+| Opening | n | W / D / L | Draw rate | Mean score |
+|---------|--:|-----------|-----------|-----------:|
+| **E7G** | **262** | **0 / 252 / 5** | **96.2%** | **+0.55** |
+| E0G (what Phase 4 used) | 67 | 0 / 0 / 66 | 0% | varies |
+| E9G | 49 | 0 / 28 / 21 | 57.1% | +0.30 |
+| E5P | 8 | 0 / 8 / 0 | 100% | +0.02 |
+
+The "correct" minimax baseline for the Phase 4 question is the E7G row.
+Phase 4 needed to be tested against E7G's 96.2% draw rate, not against
+the unconditional baseline that mixes E7G with much worse openings.
 
 **The 49.4% draw rate is the critical baseline.** Run 130 was an outlier
 "vertex-tiebreak loss" cluster in the +0.7 score basin; the broader historical
@@ -127,26 +169,35 @@ function — which is the Phase 5 / Investigation 5 tensor-network agenda.
 
 ---
 
-## Decision (per project plan §Phase 4)
+## Decision — REVISED
 
-| Plan rule | This run | Action |
-|-----------|----------|--------|
-| Any wins | No (0 wins) | — |
-| Zero wins, but draw rate ≥ minimax baseline | No (0% vs baseline 49.4%) | — |
-| Zero wins, mean score significantly higher than minimax baseline | No (−0.67 vs +0.20) | — |
-| _(extended)_ Zero wins, draw rate collapsed and score basin worse | **Yes** | **PHASE 5 PIVOT** |
+The initial verdict was PIVOT. **That verdict is retracted.** The Phase 4
+test did not exercise the relevant configuration (forced E7G opening), so
+it does not bear on the question of whether the expected-value mode helps
+or hurts vs. the established E7G classical baseline.
 
-The core empirical fact: the minimax `hybrid_solver` baseline produces draws
-in 49.4% of P1 games against AlphaQ. Phase 4 produced zero. The expected-
-value reformulation eliminated the entire draw plateau the minimax solver
-was reliably hitting, replacing it with losses in a worse score basin.
+Re-test queued, blocked on site automation updates:
 
-Pivot to Investigation 5 (tensor-network simulation, MPS/DMRG) per the
-existing plan. The negative result here is informative: it confirms that
-classical exploit of AlphaQ requires either a better value function (which
-tensor networks would provide) or a better predictive policy at the exploit
-candidate states (which is bounded by AlphaQ's intrinsic 38.9% indeterminism
-and cannot improve beyond that).
+```bash
+# Once play_tangled.py is updated for the new tangled-game.com play field:
+poetry run python play_tangled.py \
+    --opponent alphaq --strategy hybrid_solver --lut-variant calib \
+    --solver-adversary expected --oracle-override 15 7 G \
+    --games 50 --headless
+```
+
+Decision rule for the re-test (vs n=262, 96.2% draw E7G baseline):
+
+| Re-test outcome | Action |
+|-----------------|--------|
+| Any wins | Exploit found — scale to 500 games, characterise winning lines |
+| ~96% draws (no significant change) | Expected-value mode is neutral on top of E7G; keep it but no breakthrough |
+| Significantly fewer draws than 96% | Expected-value mode breaks E7G; revert to minimax+E7G, then pivot |
+
+If pivot is eventually warranted, Investigation 5 (tensor-network value
+function) remains the right path — but the case for pivoting is much
+weaker now that we have empirical evidence of a 96% draw classical
+baseline that the existing oracle + E7G opening achieves.
 
 ---
 

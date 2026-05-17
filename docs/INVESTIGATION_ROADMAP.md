@@ -209,7 +209,7 @@ generate full Schrödinger oracle at website parameters.
 | 2026-05-17 | Phase 2 — Predictive opponent policy model | 1894 test moves | — | — | — | MLP top-1=0.866, LogReg top-1=0.851; 38.9% on exploit candidates confirms entropy is intrinsic; strong-predictor verdict |
 | 2026-05-17 | Phase 3 — AlphaQ-conditional calibration | 102 boards | — | — | — | Melissa-fit Schr R² on AlphaQ basin = −0.56 (vs +0.74 on Melissa); SA raw R² on AlphaQ = −0.94; verdict NONE; existing oracle stays as soft prior for Phase 4 |
 | 2026-05-17 | Phase 4 — Expected-value solver (built) | 0 | — | — | — | `HybridTangledSolver` AdversaryMode='expected' uses MLP policy (`alphaq_policy_mlp.mat`) to compute `E_pi[LUT(grandchild)]` at our turns. Wired through `--solver-adversary expected`. Unit test + parity check pass. 50-game decision-gate run vs AlphaQ launched. |
-| 2026-05-17 | Phase 4 — Expected-value solver vs AlphaQ (run 141) | 50 | 0 | 0 | 50 | **PHASE 5 PIVOT.** Eliminated the **49.4% draw rate** baseline minimax hybrid_solver hits (n=83 prior P1 games: 0W / 41D / 42L). Phase 4 mean −0.669, collapsed bimodal baseline (draw plateau + vertex-tiebreak loss cluster) into single loss basin. Confirms Phase 3 oracle-unreliability finding amplifies through Phase 2 policy errors. See `docs/PHASE_4_RESULTS.md`. |
+| 2026-05-17 | Phase 4 — Expected-value solver vs AlphaQ (run 141) | 50 | 0 | 0 | 50 | **PIVOT VERDICT RETRACTED.** Phase 4 picked E0G as opening (a known-bad opening) on all 50 games and was never tested vs the relevant baseline (E7G opening = 252 draws in 262 games = 96.2% draw rate). Re-test queued: `--solver-adversary expected --oracle-override 15 7 G`. **Blocked on tangled-game.com play-field changes — Playwright automation needs updates.** See `docs/PHASE_4_RESULTS.md`. |
 
 ---
 
@@ -236,14 +236,13 @@ states reached by the new solver (see model card known-failure-modes).
 | Zero wins, mean score significantly higher than minimax baseline | Continue tuning (exploration noise, opening variation) |
 | Zero wins, mean score unchanged | Trigger Phase 5 pivot to tensor networks (Investigation 5) |
 
-**Result (run 141, 2026-05-17):** 0 W / 0 D / 50 L. Mean score −0.669 ± 0.048.
-The proper minimax-mode baseline is the full hybrid_solver P1 vs AlphaQ
-history (n=83 games excluding this run): 0 W / 41 D / 42 L (**49.4% draw
-rate**), mean +0.202, bimodal distribution (draw plateau near zero +
-vertex-tiebreak loss cluster near +0.7). Phase 4 eliminated the entire 49%
-draw plateau and collapsed both modes into a single loss basin at −0.67.
-**Phase 5 pivot triggered.** See `docs/PHASE_4_RESULTS.md` for the full
-analysis.
+**Result (run 141, 2026-05-17) — PIVOT VERDICT RETRACTED.**
+0 W / 0 D / 50 L raw, but the run picked **E0G as opening on all 50 games**
+(a known-bad opening). The relevant baseline is **E7G as P1 opening: 252
+draws in 262 games against AlphaQ (96.2%) across all strategies**. Phase 4
+never tested against this baseline. Re-test required with forced E7G opening
+(`--oracle-override 15 7 G`) before any pivot decision. **Blocked on
+tangled-game.com play-field automation updates.** See `docs/PHASE_4_RESULTS.md`.
 
 ---
 
