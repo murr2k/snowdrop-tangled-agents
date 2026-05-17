@@ -2,8 +2,11 @@
 
 **Goal:** Find wins against AlphaQ at tangled-game.com, or definitively characterise why
 winning is impossible.  
-**Status as of 2026-05-17:** Oracle Revision complete. Investigation 4 ready to run.  
-See `docs/INVESTIGATION_AVENUES.md` for full assessment of all candidates.
+**Status as of 2026-05-17:** Oracle Revision complete; Investigation 4 running; methodological
+review completed, recommending program redirection to AlphaQ-targeted analysis (Phases 1–5
+in `docs/PROJECT_PLAN_ALPHAQ_TARGETED_INVESTIGATION.md`). Investigation 4 disposition pending.  
+See `docs/INVESTIGATION_AVENUES.md` for the original candidate assessment and
+`docs/METHODOLOGICAL_REVIEW_AND_REDIRECTION_TOWARD_ALPHAQ.md` for the current critique.
 
 ---
 

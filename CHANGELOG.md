@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-05-17
+
+### Added
+
+- **Methodological review** (`docs/METHODOLOGICAL_REVIEW_AND_REDIRECTION_TOWARD_ALPHAQ.md`)
+  - Critical review of the current investigation program at the Investigation 4 inflection point
+  - Identifies the goal-misalignment problem (Investigation 4 collects Melissa data; goal is AlphaQ defeat)
+  - Documents structural concerns with the calibrated oracle (R²=0.60, anneal_time as possible model-class artefact, opponent-conditional calibration not done with AlphaQ data)
+  - Surfaces the minimax-vs-actual-policy mismatch in the hybrid solver
+  - Recommends prioritising Investigation 2 (MI/entropy analysis of AlphaQ policy) before further data collection
+
+- **Two-week project plan** (`docs/PROJECT_PLAN_ALPHAQ_TARGETED_INVESTIGATION.md`)
+  - Five-phase plan implementing the review's recommendations: MI analysis, predictive opponent model, AlphaQ-conditional calibration, expected-value solver, decision gate
+  - Timeline: 10–13 days from kick-off to decision gate (vs 9–17 days for Investigation 4 alone)
+  - Includes Investigation 4 disposition recommendation (redirect to AlphaQ or pause)
+  - Risk register and per-phase decision gates
+
 ## [0.2.2] - 2026-05-17
 
 ### Added
