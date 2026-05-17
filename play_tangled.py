@@ -534,8 +534,9 @@ class WebPlayer:
         expanded_lut_file: str = 'expanded_lut_sa.mat',
         terminal_lut_file: str = 'terminal_scores_sa.mat',
         explorer_opening_index: int = 0,
+        username: Optional[str] = None,
     ):
-        self.username = os.getenv("TANGLED_USERNAME")
+        self.username = username or os.getenv("TANGLED_USERNAME")
         self.password = os.getenv("TANGLED_PASSWORD")
         self.headless = headless
         self.slow_mo = slow_mo
@@ -2374,6 +2375,8 @@ def main():
                         metavar=("GREY", "EDGE", "COLOR"),
                         help="Override oracle move at a specific grey count: GREY EDGE COLOR. "
                              "E.g. '--oracle-override 11 10 G' forces E10G at grey=11. Repeatable.")
+    parser.add_argument("--username", type=str, default=None,
+                        help="Override TANGLED_USERNAME env var for this session")
     parser.add_argument("--lut-variant", choices=["sa", "schr", "calib"], default="sa",
                         help="Which oracle LUT to use: 'sa' (simulated annealing, default), "
                              "'schr' (Schrodinger, local params), or 'calib' (Schrodinger, "
@@ -2660,6 +2663,7 @@ def main():
                 expanded_lut_file=expanded_lut_file,
                 terminal_lut_file=terminal_lut_file,
                 explorer_opening_index=explorer_opening_index,
+                username=args.username,
             ) as player:
                 player.login()
 

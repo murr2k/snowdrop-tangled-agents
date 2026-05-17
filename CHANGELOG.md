@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-05-17
+
+### Added
+
+- **`--username` CLI flag** (`play_tangled.py`)
+  - Overrides `TANGLED_USERNAME` env var so multiple parallel sessions can each log in with a different account
+  - Password always sourced from `TANGLED_PASSWORD` env var only — never a CLI arg
+
+- **Investigation 4 parallel launcher** (`scripts/launch_investigation4.ps1`)
+  - PowerShell script that pre-creates one shared 50,000-game run in the DB, then starts 10 background sessions
+  - Each session logs in with `tangled{N}@linknode.com`; password read exclusively from `TANGLED_PASSWORD` env var
+  - Each session writes to `logs/inv4_session_{N}.log`
+
 ## [0.2.0] - 2026-05-17
 
 ### Added
