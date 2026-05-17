@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-05-17
+
+### Added
+
+- **Phase 2 — AlphaQ predictive policy model** (`scripts/train_alphaq_policy.py`)
+  - Trains both multinomial LogReg and a small MLP (64,64) on the 9,341-decision AlphaQ corpus
+  - 92-dim feature set: 45 per-edge one-hot + 30 per-vertex degree + 12 5-cycle frustration parities + 5 aggregate / parity scalars
+  - 80/20 train/test split by `game_id` (no within-game leakage)
+  - Predictions are masked to legal actions (only grey edges) and renormalised
+  - Persists each model to both `.pkl` (sklearn) and `.mat` (weights for Phase 4 MATLAB consumption)
+  - Auto-writes `docs/ALPHAQ_PREDICTIVE_MODEL.md` model card
+
+- **Model card** (`docs/ALPHAQ_PREDICTIVE_MODEL.md`)
+  - **Strong predictor.** MLP top-1 = 0.866, LogReg top-1 = 0.851 on 1,894 held-out test moves
+  - Even-grey states (P2 AlphaQ): ~95% accuracy. Odd-grey states (rare P1 AlphaQ from Inv. 1): 0% — model never trained on enough of these
+  - **38.9% top-1 on the 6 Phase 1 exploit candidates** vs 86.6% overall — empirically confirms the entropy is real and not a feature-set limitation; these are genuine binary choice points the model cannot collapse
+  - Decision-gate verdict: strong predictor, suitable for direct policy use in Phase 4
+
+### Dependencies
+
+- Added `scikit-learn ^1.8.0` for `LogisticRegression`, `MLPClassifier`, `StandardScaler`
+
 ## [0.3.1] - 2026-05-17
 
 ### Added
