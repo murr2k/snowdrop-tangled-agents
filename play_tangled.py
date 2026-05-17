@@ -835,7 +835,7 @@ class WebPlayer:
 
         time.sleep(3)
         self.page.wait_for_load_state("networkidle", timeout=180000)
-        self.logger.info(f"Logged in, URL: {self.page.url}")
+        self.logger.info(f"Logged in as {self.username}, URL: {self.page.url}")
         return True
 
     def start_game(self, opponent: str = "melissa"):
