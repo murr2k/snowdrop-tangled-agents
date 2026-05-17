@@ -208,6 +208,32 @@ generate full Schrödinger oracle at website parameters.
 | 2026-05-17 | 2 — AlphaQ policy MI/entropy analysis | 9341 decisions | — | — | — | 97.5% deterministic states; 6 exploit candidates; MI=4.31 bits; OPTIMISTIC verdict — exploit candidates exist as targets for Phases 2-4 |
 | 2026-05-17 | Phase 2 — Predictive opponent policy model | 1894 test moves | — | — | — | MLP top-1=0.866, LogReg top-1=0.851; 38.9% on exploit candidates confirms entropy is intrinsic; strong-predictor verdict |
 | 2026-05-17 | Phase 3 — AlphaQ-conditional calibration | 102 boards | — | — | — | Melissa-fit Schr R² on AlphaQ basin = −0.56 (vs +0.74 on Melissa); SA raw R² on AlphaQ = −0.94; verdict NONE; existing oracle stays as soft prior for Phase 4 |
+| 2026-05-17 | Phase 4 — Expected-value solver (built) | 0 | — | — | — | `HybridTangledSolver` AdversaryMode='expected' uses MLP policy (`alphaq_policy_mlp.mat`) to compute `E_pi[LUT(grandchild)]` at our turns. Wired through `--solver-adversary expected`. Unit test + parity check pass. **50-game decision-gate run vs AlphaQ pending.** |
+
+---
+
+## Investigation 6 — Expected-Value Solver vs AlphaQ (Phase 4)
+
+**Hypothesis:** AlphaQ's policy has intrinsic uncertainty at ≥ 6 known choice points
+(38.9% top-1 prediction accuracy). A solver that maximises expected value under the
+predicted AlphaQ policy — rather than minimaxing the worst-case response — will
+exploit the unbalanced (60/40 etc.) response distributions at those states.
+
+**Mechanism:** at each of our candidate moves at our turn (oracle path, sub-50 ms),
+compute `E_pi[LUT(grandchild after AlphaQ's response)]` instead of `LUT(child after our
+move)`. The LUT past the one-step expectation still encodes minimax; deeper expectimax
+recursion is deliberately rejected because the policy degrades on out-of-distribution
+states reached by the new solver (see model card known-failure-modes).
+
+**Run command:** `poetry run python play_tangled.py --opponent alphaq --strategy hybrid_solver --lut-variant calib --solver-adversary expected --games 50`
+
+**Decision gate (per project plan §Phase 4):**
+
+| 50-game result | Action |
+|----------------|--------|
+| Any wins | Scale to 500-game campaign; characterise winning openings |
+| Zero wins, mean score significantly higher than minimax baseline | Continue tuning (exploration noise, opening variation) |
+| Zero wins, mean score unchanged | Trigger Phase 5 pivot to tensor networks (Investigation 5) |
 
 ---
 

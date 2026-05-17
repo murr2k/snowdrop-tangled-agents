@@ -463,6 +463,8 @@ class HybridSolverStrategy:
         late_game_boost_multiplier: float = 1.5,
         use_oracle: bool = True,
         move_overrides: Optional[dict] = None,
+        adversary_mode: str = 'minimax',
+        opponent_policy_file: str = '',
     ):
         """
         Initialize HybridSolverStrategy.
@@ -492,6 +494,8 @@ class HybridSolverStrategy:
         self.late_game_boost_multiplier = late_game_boost_multiplier
         self.use_oracle = use_oracle
         self.move_overrides = move_overrides or {}
+        self.adversary_mode = adversary_mode
+        self.opponent_policy_file = opponent_policy_file
 
         self.bridge = get_bridge()
         self.engine = None
@@ -566,6 +570,8 @@ class HybridSolverStrategy:
             lut_file = self.lut_file.replace("'", "''")
             expanded_lut_file = self.expanded_lut_file.replace("'", "''")
             opponent_model_file = self.opponent_model_file.replace("'", "''")
+            adversary_mode = (self.adversary_mode or 'minimax').replace("'", "''")
+            opponent_policy_file = (self.opponent_policy_file or '').replace("'", "''")
             self.engine.eval(
                 f"hybridSolver = HybridTangledSolver("
                 f"'TimeLimit', {self.time_limit}, "
@@ -580,7 +586,9 @@ class HybridSolverStrategy:
                 f"'EarlyGameMinimaxDepth', {self.early_game_minimax_depth}, "
                 f"'LateGameBoostThreshold', {self.late_game_boost_threshold}, "
                 f"'LateGameBoostMultiplier', {self.late_game_boost_multiplier}, "
-                f"'UseOracle', {str(self.use_oracle).lower()});",
+                f"'UseOracle', {str(self.use_oracle).lower()}, "
+                f"'AdversaryMode', '{adversary_mode}', "
+                f"'OpponentPolicyFile', '{opponent_policy_file}');",
                 nargout=0
             )
 

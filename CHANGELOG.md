@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-05-17
+
+### Added
+
+- **Phase 4 — Expected-value adversary solver** (AlphaQ-targeted plan)
+  - New `AlphaQPolicy.m` class loads `alphaq_policy_mlp.mat` or `_logreg.mat`, exposes `predict(state) -> 30x1` distribution with legal-action masking. MATLAB-side featuriser bit-for-bit matches `scripts/train_alphaq_policy.py:featurise` (verified with `scripts/_phase4_verify_mat_forward.py` — max abs error vs sklearn `predict_proba` < 2e-7 across 3 sample states).
+  - `HybridTangledSolver.m` gains `'AdversaryMode' ('minimax' | 'expected')` and `'OpponentPolicyFile'` constructor args. In `expected` mode, at our turns the oracle dispatch computes `max_{e,c} E_pi[LUT(grandchild_after_alphaq_response)]` instead of `max_{e,c} LUT(child)`. Falls back to minimax when the policy isn't loaded or the LUT doesn't cover grey-2.
+  - One-step expectation by design: deeper recursion into the policy is rejected because the model card (`docs/ALPHAQ_PREDICTIVE_MODEL.md`) documents calibration degradation on out-of-distribution states reached via the expected-value solver itself.
+  - `--solver-adversary {minimax,expected}` and `--opponent-policy-file FILE` CLI flags on `play_tangled.py`. Default is `minimax` (preserves current behaviour). When `expected`, `alphaq_policy_mlp.mat` is loaded automatically.
+  - Unit test `snowdrop_tangled_agents/matlab/rl/test_expected_value_solver.m` covers MATLAB-vs-Python featuriser parity on 3 reference states, action <-> (edge, color) round-trip, predict() shape and legal-mask correctness, and integration with `HybridTangledSolver` in expected mode.
+
+### Notes
+
+- Recommended invocation for the 50-game decision-gate run vs AlphaQ:
+  `poetry run python play_tangled.py --opponent alphaq --strategy hybrid_solver --lut-variant calib --solver-adversary expected --games 50`
+- The decision gate (per `docs/PROJECT_PLAN_ALPHAQ_TARGETED_INVESTIGATION.md`): any wins → scale to 500-game campaign; zero wins but mean score significantly higher than minimax baseline → continue tuning; zero wins and mean score unchanged → trigger Phase 5 pivot to tensor networks.
+
 ## [0.3.3] - 2026-05-17
 
 ### Added

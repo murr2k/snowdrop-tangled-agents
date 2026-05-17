@@ -99,6 +99,19 @@ classdef HybridTangledSolver < handle
         % At P1's turns (grey=9,7,5,3,1) with the oracle loaded, solveOracle()
         % replaces early_minimax + greedy prior + MCTS with an O(1) exact answer.
         UseOracle logical = true
+
+        % Adversary model for our decision nodes:
+        %   'minimax'  — assume opponent plays optimally (LUT minimax value)
+        %   'expected' — at each of our candidate moves, evaluate by expected
+        %                value under the predicted opponent policy. Used by
+        %                Phase 4 (AlphaQ-targeted plan) to exploit the binary
+        %                choice points where AlphaQ's response is 60/40 etc.
+        AdversaryMode char = 'minimax'
+
+        % Predicted opponent policy (loaded when AdversaryMode='expected').
+        OpponentPolicy AlphaQPolicy
+        OpponentPolicyLoaded logical = false
+        OpponentPolicyFile char = ''
     end
 
     methods
@@ -122,6 +135,8 @@ classdef HybridTangledSolver < handle
                 options.LateGameBoostThreshold int32 = 0
                 options.LateGameBoostMultiplier double = 1.5
                 options.UseOracle logical = true
+                options.AdversaryMode char = 'minimax'
+                options.OpponentPolicyFile char = ''
             end
 
             this.TimeLimit = options.TimeLimit;
@@ -137,12 +152,48 @@ classdef HybridTangledSolver < handle
             this.LateGameBoostThreshold = options.LateGameBoostThreshold;
             this.LateGameBoostMultiplier = options.LateGameBoostMultiplier;
             this.UseOracle = options.UseOracle;
+            this.AdversaryMode = lower(options.AdversaryMode);
+            this.OpponentPolicyFile = options.OpponentPolicyFile;
 
             % Initialize component solvers
             this.initializeSolvers();
 
             % Load LUT
             this.loadLUT();
+
+            % Load opponent policy when expected-value mode is requested.
+            if strcmp(this.AdversaryMode, 'expected') && ~isempty(this.OpponentPolicyFile)
+                this.loadOpponentPolicy();
+            end
+        end
+
+        function loadOpponentPolicy(this)
+            %LOADOPPONENTPOLICY Load the AlphaQ predictive policy from disk.
+            try
+                this.OpponentPolicy = AlphaQPolicy('PolicyFile', this.OpponentPolicyFile);
+                this.OpponentPolicyLoaded = this.OpponentPolicy.Loaded;
+                if this.OpponentPolicyLoaded
+                    fprintf('HybridTangledSolver: loaded opponent policy %s (%s)\n', ...
+                        this.OpponentPolicyFile, this.OpponentPolicy.ModelType);
+                else
+                    warning('HybridTangledSolver:PolicyNotLoaded', ...
+                        'Opponent policy file %s did not load; falling back to minimax.', ...
+                        this.OpponentPolicyFile);
+                end
+            catch ME
+                warning('HybridTangledSolver:PolicyLoadError', ...
+                    'Failed to load opponent policy %s: %s', ...
+                    this.OpponentPolicyFile, ME.message);
+                this.OpponentPolicyLoaded = false;
+            end
+        end
+
+        function setOpponentPolicy(this, policy)
+            %SETOPPONENTPOLICY Attach an existing AlphaQPolicy instance.
+            %   Useful for unit tests and for switching policies without
+            %   reconstructing the solver.
+            this.OpponentPolicy = policy;
+            this.OpponentPolicyLoaded = ~isempty(policy) && policy.Loaded;
         end
 
         function initializeSolvers(this)
@@ -239,7 +290,19 @@ classdef HybridTangledSolver < handle
             isOurTurn = mod(numGrey, 2) == mod(this.PlayerPerspective, 2);
             if this.UseOracle && this.LUTLoaded && ...
                isOurTurn && this.LUT.hasLevel(numGrey - 1)
-                [edge, color, info] = this.solveOracle(state, startTime);
+                % Expected-value oracle path (Phase 4): replace the implicit
+                % minimax in the LUT lookup at the opponent's response node
+                % with E_pi over the predicted AlphaQ policy. Requires the
+                % LUT to also cover grey-2 (so AlphaQ-response children
+                % evaluate via the minimax LUT past the one expectation step).
+                useExpected = strcmp(this.AdversaryMode, 'expected') && ...
+                              this.OpponentPolicyLoaded && ...
+                              numGrey >= 2 && this.LUT.hasLevel(numGrey - 2);
+                if useExpected
+                    [edge, color, info] = this.solveExpectedOracle(state, startTime);
+                else
+                    [edge, color, info] = this.solveOracle(state, startTime);
+                end
                 this.LastSearchTime = info.time;
                 this.LastMethod = info.strategy;
                 this.LastScore = info.score;
@@ -512,6 +575,117 @@ classdef HybridTangledSolver < handle
             info.score = bestScore;
             info.numGrey = numGrey;
             info.time = toc(startTime);
+        end
+
+        function [edge, color, info] = solveExpectedOracle(this, state, startTime)
+            %SOLVEEXPECTEDORACLE Expected-value lookahead under predicted opponent policy.
+            %
+            %   For each of our candidate moves (edge e, color c), produce the
+            %   child state at grey-1 (opponent's turn). Then for each legal
+            %   response (e', c') compute the grandchild state at grey-2 and
+            %   look up its LUT value (which assumes minimax from that point).
+            %   The expected value of (e, c) is the predicted-policy weighted
+            %   sum of those grandchild LUT values. P1 maximises, P2 minimises.
+            %
+            %   This is a one-step expectation (max over our moves of E over
+            %   their response of LUT(grandchild)). Beyond the one expectation
+            %   step we revert to LUT minimax, which is the right design given
+            %   the opponent model's accuracy degrades on states it didn't see
+            %   during training (per the ALPHAQ_PREDICTIVE_MODEL.md model card).
+            %
+            %   Cost: ~ (2 * numGrey) outer iterations * (2 * (numGrey - 1))
+            %   inner iterations of O(1) LUT lookups, plus one policy
+            %   evaluation per outer iteration. Sub-50 ms at grey = 9.
+            %
+            %   Falls back to solveOracle (minimax) when the policy is
+            %   unavailable or the LUT doesn't cover grey-2 (caller checks).
+
+            greyEdges = find(state == '-');
+            numGrey = length(greyEdges);
+
+            isP1 = (this.PlayerPerspective == 1);
+            bestScore = -Inf * (2*isP1 - 1);  % P1 maximises, P2 minimises
+            bestEdge = greyEdges(1);
+            bestColor = 'G';
+            anyEvaluated = false;
+
+            for e = greyEdges
+                for c = 'GP'
+                    childState = state;
+                    childState(e) = c;
+                    childScore = this.expectedChildValue(childState);
+                    if (isP1 && childScore > bestScore) || ...
+                       (~isP1 && childScore < bestScore) || ~anyEvaluated
+                        bestScore = childScore;
+                        bestEdge = e;
+                        bestColor = c;
+                        anyEvaluated = true;
+                    end
+                end
+            end
+
+            edge = bestEdge - 1;  % 0-indexed
+            color = bestColor;
+
+            info = struct();
+            info.strategy = 'oracle_expected';
+            info.score = bestScore;
+            info.numGrey = numGrey;
+            info.time = toc(startTime);
+        end
+
+        function ev = expectedChildValue(this, childState)
+            %EXPECTEDCHILDVALUE Expected LUT value at the grandchild after one
+            %   opponent move sampled from the predicted policy.
+            %   `childState` is the state immediately after our move (so it's
+            %   the opponent's turn). If childState is terminal (grey=0), the
+            %   expectation is trivial; if grey=1 (only one opponent move
+            %   left), the policy still gives a distribution over the two
+            %   colors at that single edge.
+
+            greyChild = find(childState == '-');
+            if isempty(greyChild)
+                ev = this.LUT.evaluate(childState);
+                return;
+            end
+
+            p = this.OpponentPolicy.predict(childState);   % 30x1
+
+            ev = 0.0;
+            totalWeight = 0.0;
+            for e2 = greyChild
+                for c2 = 'GP'
+                    aIdx = AlphaQPolicy.edgeColorToAction(e2, c2);
+                    w = p(aIdx);
+                    if w <= 0
+                        continue;
+                    end
+                    grandchild = childState;
+                    grandchild(e2) = c2;
+                    v = this.LUT.evaluate(grandchild);
+                    ev = ev + w * v;
+                    totalWeight = totalWeight + w;
+                end
+            end
+
+            % Defensive renormalisation if the predicted distribution didn't
+            % perfectly sum to 1 over legal actions (numerical drift).
+            if totalWeight > 0 && abs(totalWeight - 1.0) > 1e-9
+                ev = ev / totalWeight;
+            elseif totalWeight == 0
+                % Pathological: policy assigned zero to every legal action.
+                % Fall back to uniform expectation (same as solveOracle's
+                % min/max behaviour averaged equally).
+                vals = [];
+                for e2 = greyChild
+                    for c2 = 'GP'
+                        gc = childState;
+                        gc(e2) = c2;
+                        vals(end+1) = this.LUT.evaluate(gc); %#ok<AGROW>
+                    end
+                end
+                ev = mean(vals);
+            end
         end
 
         function [edge, color, score] = greedyPrior(this, state, greyEdges)

@@ -535,6 +535,8 @@ class WebPlayer:
         terminal_lut_file: str = 'terminal_scores_sa.mat',
         explorer_opening_index: int = 0,
         username: Optional[str] = None,
+        solver_adversary: str = 'minimax',
+        opponent_policy_file: str = '',
     ):
         self.username = username or os.getenv("TANGLED_USERNAME")
         self.password = os.getenv("TANGLED_PASSWORD")
@@ -550,6 +552,8 @@ class WebPlayer:
         self._force_opening = force_opening
         self._expanded_lut_file = expanded_lut_file
         self._terminal_lut_file = terminal_lut_file
+        self._solver_adversary = solver_adversary
+        self._opponent_policy_file = opponent_policy_file
 
         # Oracle route options
         self._oracle_route_mode = route_mode or 'fixed'
@@ -635,6 +639,8 @@ class WebPlayer:
                     lut_file=self._terminal_lut_file,
                     expanded_lut_file=self._expanded_lut_file,
                     move_overrides=oracle_overrides,
+                    adversary_mode=getattr(self, '_solver_adversary', 'minimax'),
+                    opponent_policy_file=getattr(self, '_opponent_policy_file', ''),
                 )
         elif strategy_type == "amara_explorer":
             if not MATLAB_AVAILABLE or AmaraExplorerStrategy is None:
@@ -2384,6 +2390,17 @@ def main():
                              "'schr' (Schrodinger, local params), or 'calib' (Schrodinger, "
                              "website-calibrated anneal_time=1.85ns). "
                              "Selects expanded_lut_{variant}.mat.")
+    parser.add_argument("--solver-adversary", choices=["minimax", "expected"], default="minimax",
+                        help="Adversary model used inside hybrid_solver. 'minimax' (default) is the "
+                             "existing behaviour: opponent assumed to play LUT-optimal. 'expected' "
+                             "is the Phase 4 mode: at each of our candidate moves, evaluate by "
+                             "expected value under the predicted AlphaQ policy (see "
+                             "scripts/train_alphaq_policy.py). Requires --opponent-policy-file "
+                             "or the default alphaq_policy_mlp.mat.")
+    parser.add_argument("--opponent-policy-file", type=str, default="",
+                        help="Filename (under snowdrop_tangled_agents/matlab/rl/data/) of the .mat "
+                             "policy model loaded when --solver-adversary expected. Defaults to "
+                             "alphaq_policy_mlp.mat. Ignored unless --solver-adversary expected.")
 
     args = parser.parse_args()
 
@@ -2670,6 +2687,9 @@ def main():
                 terminal_lut_file=terminal_lut_file,
                 explorer_opening_index=explorer_opening_index,
                 username=args.username,
+                solver_adversary=args.solver_adversary,
+                opponent_policy_file=(args.opponent_policy_file or
+                                     ('alphaq_policy_mlp.mat' if args.solver_adversary == 'expected' else '')),
             ) as player:
                 player.login()
 
