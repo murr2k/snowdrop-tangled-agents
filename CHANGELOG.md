@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-05-17
+
+### Added
+
+- **Investigation 2 implementation** (`scripts/analyse_alphaq_policy.py`)
+  - Extracts (state_before, AlphaQ_move) decision pairs from the 1,574-game AlphaQ corpus
+  - Computes per-state Shannon response entropy, with Miller-Madow bias correction for global MI
+  - Stratifies MI by grey count (game phase)
+  - Identifies exploit candidates (n >= 10 obs, H >= 0.5 bits) and decision-boundary candidates (n <= 6, varying moves)
+  - Generates three plots: entropy histogram, entropy-vs-grey-count, per-edge color preference
+  - Auto-writes `docs/INVESTIGATION_2_RESULTS.md` with full findings table and decision-gate verdict
+
+- **Investigation 2 results doc** (`docs/INVESTIGATION_2_RESULTS.md`)
+  - **OPTIMISTIC verdict.** 97.5% of well-observed states are deterministic, but 6 exploit candidates exist with 10+ observations and >= 0.5 bits of response entropy
+  - 5 of 6 candidates are at grey=8 — suggests AlphaQ has a mid-game decision-boundary phase
+  - All candidates are binary choice points (2 distinct responses, dominant chosen 60-79%)
+  - These are concrete search targets for Phases 2-4 of the AlphaQ-targeted plan
+
+### Changed
+
+- Investigation 4 hard-stopped (40 processes terminated) to free compute for AlphaQ-targeted work
+
 ## [0.3.0] - 2026-05-17
 
 ### Added

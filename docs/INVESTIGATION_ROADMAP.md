@@ -122,18 +122,44 @@ exploits). As P2 we draw perfectly. Next: Investigation 4 to find winning termin
 
 ---
 
-## Queued Investigations
+## Completed Investigations (continued)
 
 ### Investigation 2 — Spectral / MI Analysis of AlphaQ Policy
 
-**Status:** ⏳ Queued  
+**Status:** ✅ Complete (2026-05-17) — **OPTIMISTIC** verdict; 6 exploit candidates found  
 **Hypothesis:** AlphaQ may be at a locally optimal equilibrium rather than true Nash. Mutual
-information I(AlphaQ move; board state) and PSD of score progressions can distinguish these.  
-**Method:** New analysis script querying game DB; apply to AlphaQ games the same spectral
-analysis that correctly predicted Amara's exploitability.  
-**Prerequisite:** None  
-**Success signal:** Low MI (degenerate policy) → exploitable; specific board states with
-high response entropy → targets for Investigation 4.
+information I(AlphaQ move; board state) and per-state response entropy can distinguish these.  
+**Method:** `scripts/analyse_alphaq_policy.py` — extracts 9,341 AlphaQ decisions from 1,574
+games in the local DB, reconstructs (state_before, AlphaQ_move) pairs, computes per-state
+Shannon entropy and global MI with Miller-Madow bias correction, stratified by grey count.  
+
+**Results:**
+
+| Metric | Value |
+|--------|-------|
+| AlphaQ decisions observed | 9,341 |
+| Distinct states observed | 588 |
+| States with n >= 3 observations | 439 |
+| Deterministic states (H = 0) | 428 of 439 (97.5%) |
+| High-entropy states (H >= 0.5 bits) | 9 of 439 (2.1%) |
+| Global MI (Miller-Madow corrected) | 4.31 bits |
+| Exploit candidates (n >= 10, H >= 0.5) | 6 |
+| Decision-boundary candidates (n <= 6, varying moves) | 2 |
+
+**Key finding:** AlphaQ is near-deterministic on 97.5% of well-observed states but has 6
+identifiable positions where its response is genuinely variable across 10+ observations.
+Five of the six are at grey=8 (mid-game), suggesting AlphaQ's policy has a decision-boundary
+phase in mid-game. All 6 have exactly 2 distinct responses with the dominant response chosen
+60-79% of the time — concrete binary choice points.
+
+**Conclusion:** Classical exploit is plausible but narrow. The 6 candidate states are the
+primary search frontier for Phases 2-4 of the AlphaQ-targeted plan. See
+`docs/INVESTIGATION_2_RESULTS.md` for the full report and `plots/investigation2_*.png` for
+the entropy histogram, per-grey-count entropy curve, and per-edge preference plots.
+
+---
+
+## Queued Investigations
 
 ---
 
@@ -179,6 +205,7 @@ generate full Schrödinger oracle at website parameters.
 | 2026-05-16 | 3 — Adjudicator parameter recovery | 0 | — | — | — | anneal_time=1.85 ns recovered; R²=0.60, 83% classification accuracy; calibrated terminal LUT rebuilt |
 | 2026-05-17 | Oracle Revision — P1 validation (calib) | 10 | 0 | 0 | 10 | Same E9=G AlphaQ exploit; oracle consistent but no level-14 coverage for P1 opening |
 | 2026-05-17 | Oracle Revision — P2 validation (calib) | 10 | 0 | 10 | 0 | Perfect draw record; calib oracle guides to −0.028..−0.050 terminal; no mid-game swings |
+| 2026-05-17 | 2 — AlphaQ policy MI/entropy analysis | 9341 decisions | — | — | — | 97.5% deterministic states; 6 exploit candidates; MI=4.31 bits; OPTIMISTIC verdict — exploit candidates exist as targets for Phases 2-4 |
 
 ---
 
