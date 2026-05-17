@@ -208,7 +208,8 @@ generate full Schrödinger oracle at website parameters.
 | 2026-05-17 | 2 — AlphaQ policy MI/entropy analysis | 9341 decisions | — | — | — | 97.5% deterministic states; 6 exploit candidates; MI=4.31 bits; OPTIMISTIC verdict — exploit candidates exist as targets for Phases 2-4 |
 | 2026-05-17 | Phase 2 — Predictive opponent policy model | 1894 test moves | — | — | — | MLP top-1=0.866, LogReg top-1=0.851; 38.9% on exploit candidates confirms entropy is intrinsic; strong-predictor verdict |
 | 2026-05-17 | Phase 3 — AlphaQ-conditional calibration | 102 boards | — | — | — | Melissa-fit Schr R² on AlphaQ basin = −0.56 (vs +0.74 on Melissa); SA raw R² on AlphaQ = −0.94; verdict NONE; existing oracle stays as soft prior for Phase 4 |
-| 2026-05-17 | Phase 4 — Expected-value solver (built) | 0 | — | — | — | `HybridTangledSolver` AdversaryMode='expected' uses MLP policy (`alphaq_policy_mlp.mat`) to compute `E_pi[LUT(grandchild)]` at our turns. Wired through `--solver-adversary expected`. Unit test + parity check pass. **50-game decision-gate run vs AlphaQ pending.** |
+| 2026-05-17 | Phase 4 — Expected-value solver (built) | 0 | — | — | — | `HybridTangledSolver` AdversaryMode='expected' uses MLP policy (`alphaq_policy_mlp.mat`) to compute `E_pi[LUT(grandchild)]` at our turns. Wired through `--solver-adversary expected`. Unit test + parity check pass. 50-game decision-gate run vs AlphaQ launched. |
+| 2026-05-17 | Phase 4 — Expected-value solver vs AlphaQ (run 141) | 50 | 0 | 0 | 50 | **PHASE 5 PIVOT.** Mean score −0.669 ± 0.048 vs minimax baseline +0.687 ± 0.022 (Welch t = −141, p ≈ 0). Score distributions disjoint. Expected-value reformulation pulled the game out of the draw basin into AlphaQ's negative-score basin — confirms the Phase 3 oracle-unreliability finding amplifies through Phase 2 policy errors. See `docs/PHASE_4_RESULTS.md`. |
 
 ---
 
@@ -234,6 +235,10 @@ states reached by the new solver (see model card known-failure-modes).
 | Any wins | Scale to 500-game campaign; characterise winning openings |
 | Zero wins, mean score significantly higher than minimax baseline | Continue tuning (exploration noise, opening variation) |
 | Zero wins, mean score unchanged | Trigger Phase 5 pivot to tensor networks (Investigation 5) |
+
+**Result (run 141, 2026-05-17):** 0 W / 0 D / 50 L. Mean score −0.669 ± 0.048 vs minimax
+baseline +0.687 ± 0.022. Welch t = −141, p ≈ 0. **Phase 5 pivot triggered.**
+See `docs/PHASE_4_RESULTS.md` for the full analysis.
 
 ---
 
