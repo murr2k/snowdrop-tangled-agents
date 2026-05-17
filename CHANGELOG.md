@@ -13,14 +13,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Phase 4 decision-gate results** (`docs/PHASE_4_RESULTS.md`)
   - 50-game run (run 141) vs AlphaQ Up, P1, calib LUT, `--solver-adversary expected`
-  - **Verdict: PHASE 5 PIVOT.** Zero wins. Mean score **−0.669** ± 0.048 (range [−0.79, −0.51])
-  - Baseline (run 130, minimax, 9 hours prior): mean **+0.687** ± 0.022. Welch t = −141, p ≈ 0. Score distributions completely disjoint.
-  - Expected-value reformulation pulled the game out of the (0, 2) draw basin minimax was operating in and into AlphaQ's negative-score basin. Consistent with Phase 2 model-card warning (OOD calibration degradation) compounded with Phase 3 finding (LUT R² = −0.94 on AlphaQ basin).
+  - **Verdict: PHASE 5 PIVOT.** Zero wins, **zero draws**, 50 losses. Mean score −0.669 ± 0.048.
+  - Correct minimax baseline (all 83 prior P1 hybrid_solver games vs AlphaQ): **0W / 41D / 42L (49.4% draw rate)**, mean +0.202, bimodal score distribution (draw plateau near zero + vertex-tiebreak loss cluster near +0.7).
+  - Phase 4 collapsed both modes of the baseline into a single loss basin at −0.67 — eliminated the 49% draw rate the minimax solver reliably hits.
+  - Failure mode: the Phase 2 MLP's 38.9% accuracy at exploit candidates produces enough policy error that the expected-value calculation routes us into OOD grandchild states where the LUT is unreliable (Phase 3 finding: R² = −0.94 on AlphaQ basin). Not tunable within the current architecture.
   - Phase 4 artefacts (AlphaQPolicy.m, AdversaryMode=expected) stay in the codebase, correct but inappropriate for live play.
 
-- **Phase 4 decision-gate analysis tool** (`scripts/_phase4_analyse_results.py`)
-  - Per-run score histograms, Welch t-test, Mann-Whitney U against the most-recent comparable minimax baseline
-  - Auto-classifies the gate verdict (scale / tune / pivot) on rerun
+- **Phase 4 decision-gate analysis tools**
+  - `scripts/_phase4_analyse_results.py` — per-run score histograms, Welch t-test, gate verdict classifier
+  - `scripts/_phase4_history_breakdown.py` — full hybrid_solver vs alphaq_explorer historical breakdown (added after initial analysis used an outlier baseline; this gives the full 83-game minimax picture)
 
 ### Decision
 
