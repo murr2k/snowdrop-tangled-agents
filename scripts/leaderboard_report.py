@@ -122,15 +122,19 @@ if __name__ == "__main__":
                         help="Re-fetch every N seconds (like Unix watch)")
     args = parser.parse_args()
 
+    first = True
     while True:
         if args.watch:
-            os.system("cls" if os.name == "nt" else "clear")
-        print("Fetching leaderboard...", flush=True)
+            if first:
+                os.system("cls" if os.name == "nt" else "clear")
+            else:
+                print("\033[H", end="", flush=True)  # move cursor to top without clearing
         try:
             data = fetch_leaderboard()
             print_report(data)
         except Exception as e:
             print(f"[error] {e}")
+        first = False
         if not args.watch:
             break
         print(f"  Refreshing in {args.watch}s — Ctrl+C to stop", flush=True)
