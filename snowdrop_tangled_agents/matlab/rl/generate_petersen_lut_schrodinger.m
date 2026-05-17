@@ -16,10 +16,13 @@ function generate_petersen_lut_schrodinger(varargin)
 %   Usage:
 %       generate_petersen_lut_schrodinger()
 %       generate_petersen_lut_schrodinger('NumWorkers', 4)
+%       generate_petersen_lut_schrodinger('AnnealTime', 1.85)
+%       generate_petersen_lut_schrodinger('AnnealTime', 1.85, 'NumWorkers', 8)
 
 % ─── Parse arguments ──────────────────────────────────────────────
 ip = inputParser;
 addParameter(ip, 'NumWorkers', 0);     % 0 = use all available cores
+addParameter(ip, 'AnnealTime', 40.0);  % annealing time in ns
 parse(ip, varargin{:});
 
 fprintf('╔════════════════════════════════════════════════════════════╗\n');
@@ -41,8 +44,8 @@ edges = [0,2; 0,3; 0,6; 1,3; 1,4; 1,7; 2,4; 2,8; 3,9; 4,5; ...
 p1_node = 5;   % 0-indexed
 p2_node = 7;
 
-% ─── Schrödinger parameters (match Python adjudicator) ───────────
-tf       = 40.0;
+% ─── Schrödinger parameters ───────────────────────────────────────
+tf       = ip.Results.AnnealTime;
 s_min    = 0.001;
 s_max    = 0.999;
 max_step = 0.0005;
@@ -127,7 +130,8 @@ fprintf('\n╔══════════════════════
 fprintf('║              LUT GENERATION COMPLETE                       ║\n');
 fprintf('╠════════════════════════════════════════════════════════════╣\n');
 fprintf('║  Graph:           Petersen  (graph_id = 5)                 ║\n');
-fprintf('║  Scorer:          Schrödinger (split-operator)             ║\n');
+fprintf('║  Scorer:          Schrodinger (split-operator)             ║\n');
+fprintf('║  AnnealTime:      %8.2f ns                                ║\n', tf);
 fprintf('║  States scored:   %8d                                     ║\n', n_states);
 fprintf('║  Score range:     [%+7.3f, %+7.3f]                        ║\n', ...
     min(terminal_scores), max(terminal_scores));
