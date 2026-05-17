@@ -71,9 +71,9 @@ Write-Host "[launcher] Password loaded from environment (not logged)."
 # ------------------------------------------------------------------
 Write-Host "[launcher] Pre-creating shared run ($Games games, opponent=$Opponent, lut=calib)..."
 
-$preCreateScript = @"
-import sys
-sys.path.insert(0, r'$ProjectRoot')
+# Write to a temp file — multiline Python via -c loses stdout in PowerShell
+$preCreatePy = Join-Path $ProjectRoot "scripts\_precreate_run.py"
+@"
 from snowdrop_tangled_agents.stats.collector import StatsCollector
 c = StatsCollector()
 run_id, game_num = c.get_or_create_run(
@@ -83,17 +83,19 @@ run_id, game_num = c.get_or_create_run(
     seat=1,
     lut_variant='calib',
 )
-print(f'run_id={run_id}')
-print(f'start_game={game_num}')
-"@
+print('run_id=' + str(run_id), flush=True)
+print('start_game=' + str(game_num), flush=True)
+"@ | Out-File -FilePath $preCreatePy -Encoding utf8
 
-$preCreateResult = & poetry -C $ProjectRoot run python -c $preCreateScript
+$preCreateResult = & poetry -C $ProjectRoot run python $preCreatePy
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Failed to pre-create run. Output:`n$preCreateResult"
     exit 1
 }
+Remove-Item $preCreatePy -ErrorAction SilentlyContinue
 
-$runId = ($preCreateResult | Select-String "run_id=(.+)").Matches.Groups[1].Value.Trim()
+$runId = ($preCreateResult | Where-Object { $_ -match "^run_id=" }) -replace "^run_id=", ""
+$runId = $runId.Trim()
 Write-Host "[launcher] Shared run: $runId"
 Write-Host "[launcher] Starting $Sessions parallel sessions..."
 
@@ -116,12 +118,13 @@ for ($i = 1; $i -le $Sessions; $i++) {
 
     Write-Host "[launcher] Session $i → $user  (log: logs\inv4_session_${i}.log)"
 
-    # Start as a separate process; inherit TANGLED_PASSWORD from current env
+    # WindowStyle Hidden gives each child its own console so SIGINT from the
+    # launcher terminal does not propagate and kill the background sessions.
     $proc = Start-Process -FilePath "powershell" `
         -ArgumentList "-NonInteractive", "-Command", $cmd `
         -RedirectStandardOutput $logFile `
         -RedirectStandardError  "$logFile.err" `
-        -NoNewWindow `
+        -WindowStyle Hidden `
         -PassThru `
         -WorkingDirectory $ProjectRoot
 

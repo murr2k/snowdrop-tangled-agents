@@ -136,20 +136,20 @@ high response entropy → targets for Investigation 4.
 
 ### Investigation 4 — Exhaustive Terminal State Mapping
 
-**Status:** 🟡 Ready — resume mechanism tested 2026-05-17  
+**Status:** 🟢 Running — 10 parallel sessions launched 2026-05-17  
 **Hypothesis:** Some winning terminal boards may be reachable against Melissa/Amara that have
 not been observed in 1,574 games. Exhaustive mapping builds a complete reachable score table.  
 **Method:** `terminal_explorer` strategy cycles all 30 openings (15 edges × {G, P}) in
-round-robin, uses MCTS for remaining moves. Runs as a resumable long session:
+round-robin, uses MCTS for remaining moves. 10 parallel sessions (tangled1–10@linknode.com)
+each join shared run 140 (50,000 games planned):
 ```
-poetry run python play_tangled.py --opponent melissa --run 50000 \
-    --strategy terminal_explorer --lut-variant calib --mcts-time 5 --headless
+.\scripts\launch_investigation4.ps1   # re-launch all 10 sessions
 ```
 Target: 30% coverage of all 32,768 terminal boards (~9,830 distinct boards).  
 **Prerequisite:** ✅ Oracle Revision Project complete (2026-05-17)  
-**Resume:** Interrupt-safe — DB tracks `completed_games` and `lut_variant`; restart with the
-same command resumes mid-run, restoring opening_index from `completed_games % 30`.  
-**Estimated cost:** ~4–7 days continuous (browser round-trip dominates per-game time)  
+**Resume:** Interrupt-safe — DB tracks `completed_games` and `lut_variant`; restart launcher
+to rejoin run 140, restoring opening_index from `completed_games % 30`.  
+**Estimated cost:** ~4–7 days (parallelism cuts wall-clock ~10×; browser round-trip dominates)  
 **Success signal:** Winning terminal boards exist and are reachable under calibrated oracle.
 
 ---
