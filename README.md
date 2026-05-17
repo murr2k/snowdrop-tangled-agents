@@ -29,7 +29,8 @@ A comprehensive framework for building intelligent agents that play [Tangled](ht
 - **Thompson Sampling Opening Selection** — Bayesian exploration-exploitation for opening selection in `AlphaQExplorerStrategy`
 - **MCTS Strategy Engine** — Monte Carlo Tree Search with parallel `parfor` rollouts (6 workers × 100 rollouts per iteration)
 - **MATLAB Integration** — High-compute hybrid solver: minimax + MCTS + oracle lookup
-- **Live Web Play** — Automated gameplay on [tangled-game.com](https://tangled-game.com) via Playwright
+- **Live Web Play** — Automated gameplay on [tangled-game.com](https://tangled-game.com) via Playwright; supports parallel sessions across multiple accounts with isolated browser instances
+- **Leaderboard Monitor** — One-command report showing ELO, W/L/D, win %, and rank for all Investigation 4 accounts
 - **Statistical Analysis** — SQLite-backed game history; 1,563+ AlphaQ games recorded and analyzed
 - **Research Report** — [`quantum_tangled_proof.html`](quantum_tangled_proof.html) — full mathematical narrative with SVG diagrams and KaTeX formulae
 
@@ -181,6 +182,50 @@ poetry run python play_tangled.py --stats
 # Direct SQL queries
 sqlite3 ~/.tangled/game_stats.db "SELECT opening_edge, opening_color, result, final_score FROM games WHERE opening_mode='round_robin' ORDER BY opening_edge, opening_color"
 ```
+
+### Leaderboard Report
+
+Pull a live snapshot of your accounts' standing on [tangled-game.com/leaderboard](https://tangled-game.com/leaderboard):
+
+```bash
+poetry run python scripts/leaderboard_report.py
+```
+
+Sample output:
+
+```
+====================================================================
+  TANGLED-GAME.COM LEADERBOARD REPORT
+====================================================================
+  Total players on board : 44
+  Our accounts found     : 10
+
+OUR ACCOUNTS
+ Rank  Player                        ELO      W      L      D    Win%   Games
+-----------------------------------------------------------------------------
+    4  murr1                        1080      1      5      6    8.3%      12
+    6  murr3                        1061      0      4      7    0.0%      11
+   ...
+
+AGGREGATE (all our accounts combined)
+----------------------------------------
+  Total games  : 99
+  Wins         : 4   ← first wins of Investigation 4
+  Losses       : 58
+  Draws        : 37
+  Win %        : 4.0%
+  ELO range    : 977 – 1080
+  Rank range   : #4 – #38 of 44
+```
+
+Options:
+
+| Flag | Effect |
+|------|--------|
+| `--no-headless` | Show the browser window while fetching |
+| `--dump-html` | Write raw page HTML to `leaderboard_dump.html` for debugging |
+
+Configure which accounts are "ours" by editing the `OUR_NAMES` set at the top of the script.
 
 ### Live Dashboard (Optional)
 

@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-05-17
+
+### Added
+
+- **Leaderboard report** (`scripts/leaderboard_report.py`)
+  - Playwright-based script that logs in, scrapes the tangled-game.com leaderboard, and reports stats for Investigation 4 accounts (murr1–murr10)
+  - Columns: Rank, Player, ELO, W, L, D, Win%, Games
+  - Aggregate view: total games, wins, losses, draws, win %, ELO range, rank range
+  - Exact-name matching excludes unrelated accounts (murr2k, murr2k@gmail.com)
+  - Usage: `poetry run python scripts/leaderboard_report.py [--no-headless] [--dump-html]`
+
+- **Username logged on login** (`play_tangled.py`)
+  - "Logged in as {username}" line confirms per-session account identity in logs
+
 ## [0.2.1] - 2026-05-17
 
 ### Added
