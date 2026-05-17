@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-05-17
+
+### Added
+
+- **Investigation 4 Resume Mechanism** (`play_tangled.py`, `collector.py`, `migrations.py`, `terminal_explorer_strategy.py`, `scripts/test_resume.py`)
+  - DB migration v12: `lut_variant` column added to `runs` table so oracle variants never accidentally share runs
+  - `start_run` / `get_or_create_run` accept `lut_variant`; resume matches on all config fields including oracle variant
+  - `update_run_completed` now excludes `abandoned` results — NULL-result games (connection drops) don't inflate completed count
+  - `TerminalExplorerStrategy`: `opening_index_start` parameter restores round-robin position from `completed_games` on restart
+  - `play_tangled.py`: outer retry loop survives network drops and browser crashes; `explorer_opening_index` recomputed from DB before each session
+  - 17-assertion unit test suite (`scripts/test_resume.py`) covering all resume scenarios
+  - Live-tested: kill after 2 games, resume joins correct run at game 5/6 with Explorer opening 3/30: E1G
+
+- **`--lut-variant calib` support** (`play_tangled.py`)
+  - Selects the website-calibrated oracle (`expanded_lut_calib.mat`, anneal_time=1.85 ns)
+  - Intended default for Investigation 4
+
+### Fixed
+
+- **Game loop hang — background publish** (`play_tangled.py`)
+  - `_get_dashboard_stats()` + `publisher.publish_state()` moved to a daemon thread so SQLite busy-wait or WebSocket send-buffer stall can never block the game loop
+
+- **Game loop hang — Phase 2 board-state detection** (`play_tangled.py`)
+  - `wait_for_opponent_to_play()` previously relied solely on `'your turn'` page text, which can lag or be absent when the opponent plays quickly
+  - Now polls both text signal and board-state (grey edge count drop) in parallel; whichever fires first unblocks the loop
+  - `our_grey_count` passed as `initial_grey_count` reference point
+
+- **`terminal_explorer` fallback ignored `--mcts-time`** (`play_tangled.py`)
+  - Fallback `MCTSStrategy` was hardcoded with `time_limit=float('inf')`; changed to respect `mcts_time` parameter
+
 ## [0.1.0] - 2026-05-16
 
 ### Added

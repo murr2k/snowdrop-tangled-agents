@@ -2,7 +2,7 @@
 
 **Goal:** Find wins against AlphaQ at tangled-game.com, or definitively characterise why
 winning is impossible.  
-**Status as of 2026-05-17:** Win investigation reopened with 5 systematic avenues. Oracle Revision Project complete.  
+**Status as of 2026-05-17:** Oracle Revision complete. Investigation 4 ready to run.  
 See `docs/INVESTIGATION_AVENUES.md` for full assessment of all candidates.
 
 ---
@@ -136,15 +136,21 @@ high response entropy → targets for Investigation 4.
 
 ### Investigation 4 — Exhaustive Terminal State Mapping
 
-**Status:** ⏳ Queued  
-**Hypothesis:** Some winning terminal boards may be reachable against AlphaQ that have not
-yet been observed in 1,563 games. Exhaustive mapping against Melissa/Amara builds a complete
-score table.  
-**Method:** Play ~50,000 games vs Melissa/Amara using `oracle-solver/` route enumeration;
-target 30% coverage of all 32,768 terminal boards.  
+**Status:** 🟡 Ready — resume mechanism tested 2026-05-17  
+**Hypothesis:** Some winning terminal boards may be reachable against Melissa/Amara that have
+not been observed in 1,574 games. Exhaustive mapping builds a complete reachable score table.  
+**Method:** `terminal_explorer` strategy cycles all 30 openings (15 edges × {G, P}) in
+round-robin, uses MCTS for remaining moves. Runs as a resumable long session:
+```
+poetry run python play_tangled.py --opponent melissa --run 50000 \
+    --strategy terminal_explorer --lut-variant calib --mcts-time 5 --headless
+```
+Target: 30% coverage of all 32,768 terminal boards (~9,830 distinct boards).  
 **Prerequisite:** ✅ Oracle Revision Project complete (2026-05-17)  
-**Estimated cost:** 9–17 days at 16-core parallelism  
-**Success signal:** Winning terminal boards exist and are reachable with correct play.
+**Resume:** Interrupt-safe — DB tracks `completed_games` and `lut_variant`; restart with the
+same command resumes mid-run, restoring opening_index from `completed_games % 30`.  
+**Estimated cost:** ~4–7 days continuous (browser round-trip dominates per-game time)  
+**Success signal:** Winning terminal boards exist and are reachable under calibrated oracle.
 
 ---
 
