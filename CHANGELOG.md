@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-05-17
+
+### Added
+
+- **Phase 3 — AlphaQ-conditional calibration analysis** (`scripts/investigation_3_alphaq_calibration.py`)
+  - SA-proxy R² and MATLAB-Schr R² broken down by opponent basin (Melissa vs AlphaQ)
+  - Reuses existing Investigation 3 MATLAB fit (`matlab_calib_results.mat`) and subsets predictions to AlphaQ-observed boards
+  - Exports `calibration_boards_alphaq.mat` (102 boards) for an optional AlphaQ-fitted MATLAB rerun
+
+- **`--opponent` filter** for `scripts/calibrate_adjudicator.py`
+  - Allows per-opponent SA-proxy comparison without MATLAB recompute
+
+- **Investigation 3 results doc** (`docs/INVESTIGATION_3_ALPHAQ_CALIBRATION.md`)
+  - **Verdict: NONE** — neither SA nor the Melissa-fitted Schr oracle has meaningful predictive power on AlphaQ basin
+  - SA raw R² on AlphaQ = −0.94 (vs +0.63 on Melissa); SA linear refit on AlphaQ = 0.002 (slope ≈ 0)
+  - Melissa-fitted Schr (anneal=1.85ns) R² on AlphaQ subset = −0.56 (vs +0.74 on Melissa subset)
+  - Classification accuracy holds up better (Schr 68% on AlphaQ) because ~81% of AlphaQ boards land in the (0, 2) draw zone — predicting "draw" wins easily
+  - Recommendation: Phase 4 proceeds with the existing `expanded_lut_calib.mat`. Do not block on a MATLAB rerun. Expected gains in Phase 4 must come from the expected-value reformulation (Phase 2 model), not from better value-function accuracy.
+
 ## [0.3.2] - 2026-05-17
 
 ### Added

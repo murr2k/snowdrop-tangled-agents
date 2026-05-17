@@ -67,13 +67,28 @@ GRAPH_ID = 5  # Petersen graph
 # ---------------------------------------------------------------------------
 # DB access
 # ---------------------------------------------------------------------------
-def load_calibration_data(db_path: Path) -> tuple[list[str], np.ndarray]:
-    """Return deduplicated (states, mean_website_scores) from calibration table."""
+def load_calibration_data(db_path: Path, opponent: str = None
+                          ) -> tuple[list[str], np.ndarray]:
+    """Return deduplicated (states, mean_website_scores) from calibration table.
+
+    If opponent is given, filters to calibration rows whose source game has
+    that opponent (joined via game_id).
+    """
     conn = sqlite3.connect(str(db_path))
-    cur = conn.execute(
-        "SELECT terminal_state, website_score FROM calibration "
-        "WHERE terminal_state IS NOT NULL AND website_score IS NOT NULL"
-    )
+    if opponent:
+        cur = conn.execute(
+            "SELECT c.terminal_state, c.website_score "
+            "FROM calibration c JOIN games g ON g.id = c.game_id "
+            "WHERE c.terminal_state IS NOT NULL "
+            "  AND c.website_score IS NOT NULL "
+            "  AND g.opponent = ?",
+            (opponent,),
+        )
+    else:
+        cur = conn.execute(
+            "SELECT terminal_state, website_score FROM calibration "
+            "WHERE terminal_state IS NOT NULL AND website_score IS NOT NULL"
+        )
     rows = cur.fetchall()
     conn.close()
 
@@ -349,8 +364,13 @@ def main():
     track.add_argument("--load-matlab-results", metavar="PATH",
                        help="Track D: load MATLAB-computed results and fit epsilon")
 
-    parser.add_argument("--output", default=str(DATA_DIR / "calibration_boards.mat"),
-                        help="Output path for --export-mat (default: data/calibration_boards.mat)")
+    parser.add_argument("--output", default=None,
+                        help="Output path for --export-mat (default: "
+                             "data/calibration_boards.mat or "
+                             "data/calibration_boards_<opponent>.mat)")
+    parser.add_argument("--opponent", default=None,
+                        choices=["melissa", "alphaq", "amara", "randy", "andy"],
+                        help="Filter calibration data to a specific opponent")
     parser.add_argument("--workers", type=int, default=4,
                         help="Workers for --python-eval (default: 4)")
     parser.add_argument("--sample", type=int, default=10,
@@ -362,10 +382,21 @@ def main():
         print(f"ERROR: DB not found: {db_path}", file=sys.stderr)
         sys.exit(1)
 
-    print(f"Loading calibration data from {db_path.name}...")
-    states, website_scores = load_calibration_data(db_path)
+    opp_label = f" (opponent={args.opponent})" if args.opponent else ""
+    print(f"Loading calibration data from {db_path.name}{opp_label}...")
+    states, website_scores = load_calibration_data(db_path, opponent=args.opponent)
     print(f"  {len(states)} distinct terminal boards")
+    if not states:
+        print(f"ERROR: no calibration data for opponent={args.opponent}", file=sys.stderr)
+        sys.exit(1)
     print(f"  Website scores: [{website_scores.min():.3f}, {website_scores.max():.3f}]")
+
+    # Default export filename: includes opponent suffix when filtered
+    if args.output is None:
+        if args.opponent:
+            args.output = str(DATA_DIR / f"calibration_boards_{args.opponent}.mat")
+        else:
+            args.output = str(DATA_DIR / "calibration_boards.mat")
 
     if args.export_mat:
         export_for_matlab(states, website_scores, Path(args.output))

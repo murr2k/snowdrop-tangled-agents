@@ -206,6 +206,8 @@ generate full Schrödinger oracle at website parameters.
 | 2026-05-17 | Oracle Revision — P1 validation (calib) | 10 | 0 | 0 | 10 | Same E9=G AlphaQ exploit; oracle consistent but no level-14 coverage for P1 opening |
 | 2026-05-17 | Oracle Revision — P2 validation (calib) | 10 | 0 | 10 | 0 | Perfect draw record; calib oracle guides to −0.028..−0.050 terminal; no mid-game swings |
 | 2026-05-17 | 2 — AlphaQ policy MI/entropy analysis | 9341 decisions | — | — | — | 97.5% deterministic states; 6 exploit candidates; MI=4.31 bits; OPTIMISTIC verdict — exploit candidates exist as targets for Phases 2-4 |
+| 2026-05-17 | Phase 2 — Predictive opponent policy model | 1894 test moves | — | — | — | MLP top-1=0.866, LogReg top-1=0.851; 38.9% on exploit candidates confirms entropy is intrinsic; strong-predictor verdict |
+| 2026-05-17 | Phase 3 — AlphaQ-conditional calibration | 102 boards | — | — | — | Melissa-fit Schr R² on AlphaQ basin = −0.56 (vs +0.74 on Melissa); SA raw R² on AlphaQ = −0.94; verdict NONE; existing oracle stays as soft prior for Phase 4 |
 
 ---
 
