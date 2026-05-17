@@ -34,6 +34,7 @@ import logging
 import os
 import signal
 import sys
+import threading
 import time
 from datetime import datetime
 from pathlib import Path
@@ -1657,27 +1658,40 @@ class WebPlayer:
     def wait_for_opponent_to_play(self, timeout: float = 30.0, stuck_timeout: float = 180.0, initial_grey_count: int = None) -> bool:
         """Wait for opponent to finish their turn (Phase 2 of turn state machine).
 
-        Caller must have already completed Phase 1 (wait for NOT our turn) via
-        move acceptance. This method is Phase 2: wait for our turn to return.
+        Uses two parallel signals so neither alone can cause a hang:
+          1. Text: 'your turn' appears in page text
+          2. Board: grey edge count drops below initial_grey_count (opponent colored an edge)
 
         Returns False if game is over, True when opponent has played.
         Raises StuckOpponentError if stuck_timeout exceeded.
         """
-        result = self._wait_for_condition(
-            self._JS_WAIT_OUR_TURN,
-            timeout_ms=int(stuck_timeout * 1000),
-            description=f"opponent to finish (Phase 2, {stuck_timeout:.0f}s)"
-        )
-        if result == 'game_over':
-            return False
-        if result == 'our_turn':
-            self.logger.debug(f"Opponent done: turn returned to us")
-            return True
-        if result == 'timeout':
-            self.logger.error(f"Opponent stuck! No response after {stuck_timeout:.0f}s")
-            raise StuckOpponentError(f"Opponent did not play within {stuck_timeout}s")
-        self.logger.warning(f"Unexpected wait result: {result}, proceeding")
-        return True
+        start = time.time()
+        poll_count = 0
+        while time.time() - start < stuck_timeout:
+            js_result = self._eval_safe(self._JS_WAIT_OUR_TURN)
+            if js_result == 'game_over':
+                return False
+            if js_result == 'our_turn':
+                return True
+
+            # Board-state fallback: opponent may have played even if page text lagged
+            if initial_grey_count is not None:
+                try:
+                    board = self.read_board()
+                    if board.count('-') < initial_grey_count:
+                        self.logger.debug(
+                            f"Opponent played (grey {initial_grey_count}->{board.count('-')}, "
+                            f"text indicator lagged, poll {poll_count})"
+                        )
+                        return True
+                except Exception:
+                    pass
+
+            poll_count += 1
+            time.sleep(2.0)
+
+        self.logger.error(f"Opponent stuck! No response after {stuck_timeout:.0f}s ({poll_count} polls)")
+        raise StuckOpponentError(f"Opponent did not play within {stuck_timeout}s")
 
     def _get_dashboard_stats(self) -> dict:
         """Get all stats needed for dashboard display.
@@ -2018,26 +2032,27 @@ class WebPlayer:
                 publisher = get_publisher()
                 if publisher.is_configured():
                     try:
-                        # Debug: log raw circle fills
-                        fills = self.debug_vertex_fills()
-                        self.logger.info(f"DEBUG vertex fills: {[(f.get('cx','?'), f.get('cy','?'), f.get('fill','?')) for f in fills[:12]]}")
-
+                        # Read Playwright state on main thread (Playwright is not thread-safe)
                         vertex_colors = self.read_vertex_colors()
-                        edges_colored = sum(1 for c in current_board if c in 'GP')
-                        self.logger.info(f"DEBUG publishing: edges={edges_colored}, board={current_board}, vertices={vertex_colors}")
 
-                        # Get all dashboard stats
-                        ds = self._get_dashboard_stats()
-                        publisher.publish_state(
-                            move_edge=edge,
-                            move_color=color,
-                            move_score=new_score,
-                            move_thinking_time=our_think_time,
-                            move_player="us",
-                            board_state=current_board,
-                            vertex_state=vertex_colors,
-                            **ds,
-                        )
+                        # Stats fetch + WebSocket send in a daemon thread so they can
+                        # never block the game loop (SQLite busy-wait or socket stall)
+                        def _bg_publish(board=current_board, vc=vertex_colors,
+                                        e=edge, c=color, score=new_score,
+                                        think=our_think_time):
+                            try:
+                                ds = self._get_dashboard_stats()
+                                publisher.publish_state(
+                                    move_edge=e, move_color=c,
+                                    move_score=score,
+                                    move_thinking_time=think,
+                                    move_player="us",
+                                    board_state=board, vertex_state=vc,
+                                    **ds,
+                                )
+                            except Exception:
+                                pass
+                        threading.Thread(target=_bg_publish, daemon=True).start()
                     except Exception as e:
                         self.logger.debug(f"Move publish failed: {e}")
 
@@ -2068,7 +2083,8 @@ class WebPlayer:
             # (Phase 1 already confirmed turn left us during move acceptance)
             opponent_start_time = time.time()
             try:
-                if not self.wait_for_opponent_to_play(timeout=30.0, stuck_timeout=240.0):
+                if not self.wait_for_opponent_to_play(timeout=30.0, stuck_timeout=240.0,
+                                                      initial_grey_count=our_grey_count):
                     break
             except StuckOpponentError:
                 # Opponent is stuck - abandon this game and signal restart needed
