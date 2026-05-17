@@ -116,6 +116,22 @@ def print_report(data: list[dict]) -> None:
 
 
 if __name__ == "__main__":
-    print("Fetching leaderboard...", flush=True)
-    data = fetch_leaderboard()
-    print_report(data)
+    import argparse, time, os
+    parser = argparse.ArgumentParser(description="Fetch tangled-game.com leaderboard")
+    parser.add_argument("--watch", "-w", type=int, default=0, metavar="SECONDS",
+                        help="Re-fetch every N seconds (like Unix watch)")
+    args = parser.parse_args()
+
+    while True:
+        if args.watch:
+            os.system("cls" if os.name == "nt" else "clear")
+        print("Fetching leaderboard...", flush=True)
+        try:
+            data = fetch_leaderboard()
+            print_report(data)
+        except Exception as e:
+            print(f"[error] {e}")
+        if not args.watch:
+            break
+        print(f"  Refreshing in {args.watch}s — Ctrl+C to stop", flush=True)
+        time.sleep(args.watch)
