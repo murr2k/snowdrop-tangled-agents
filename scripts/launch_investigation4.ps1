@@ -114,6 +114,7 @@ for ($i = 1; $i -le $Sessions; $i++) {
            "--lut-variant calib " +
            "--mcts-time $MctTime " +
            "--headless " +
+           "--no-dashboard " +
            "--username `"$user`""
 
     Write-Host "[launcher] Session $i → $user  (log: logs\inv4_session_${i}.log)"

@@ -2377,6 +2377,8 @@ def main():
                              "E.g. '--oracle-override 11 10 G' forces E10G at grey=11. Repeatable.")
     parser.add_argument("--username", type=str, default=None,
                         help="Override TANGLED_USERNAME env var for this session")
+    parser.add_argument("--no-dashboard", action="store_true",
+                        help="Disable live stats dashboard publishing for this session")
     parser.add_argument("--lut-variant", choices=["sa", "schr", "calib"], default="sa",
                         help="Which oracle LUT to use: 'sa' (simulated annealing, default), "
                              "'schr' (Schrodinger, local params), or 'calib' (Schrodinger, "
@@ -2384,6 +2386,10 @@ def main():
                              "Selects expanded_lut_{variant}.mat.")
 
     args = parser.parse_args()
+
+    if args.no_dashboard:
+        os.environ.pop("TANGLED_DASHBOARD_URL", None)
+        os.environ.pop("TANGLED_DASHBOARD_API_KEY", None)
 
     # If --stats flag, just show stats and exit
     if args.stats:
