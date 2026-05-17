@@ -2,7 +2,7 @@
 
 **Goal:** Find wins against AlphaQ at tangled-game.com, or definitively characterise why
 winning is impossible.  
-**Status as of 2026-05-16:** Win investigation reopened with 5 systematic avenues.  
+**Status as of 2026-05-17:** Win investigation reopened with 5 systematic avenues. Oracle Revision Project complete.  
 See `docs/INVESTIGATION_AVENUES.md` for full assessment of all candidates.
 
 ---
@@ -99,11 +99,23 @@ terminal boards. This places it in the "PARTIAL" band (R² 0.5–0.9) per decisi
 At this timescale the quantum system barely evolves; scores are dominated by graph structure
 near the initial state rather than long-time annealing dynamics.
 
-**Follow-on (Oracle Revision Project):**
+**Follow-on (Oracle Revision Project — ✅ Complete 2026-05-17):**
 1. ✅ Calibrated terminal LUT regenerated (`terminal_scores.mat`, 32,768 states, 1.69 hrs)
-2. 🔄 Expanded LUT rebuild in progress (`expanded_lut_calib.mat`, retrograde DP levels 0–9)
-3. ⏳ Add `--lut-variant calib` to `play_tangled.py`
-4. ⏳ Validate with oracle consistency analysis and 10 P1 AlphaQ games
+2. ✅ Expanded LUT rebuilt (`expanded_lut_calib.mat`, retrograde DP levels 0–13, 361 MB)
+3. ✅ `--lut-variant calib` added to `play_tangled.py`
+4. ✅ Consistency analysis: calib oracle R²=0.7092 at terminal (best of all three oracles)
+5. ✅ P1 validation: 10 games vs AlphaQ → 0W / 0D / 10L (same E9=G exploit, oracle cannot recover)
+6. ✅ P2 validation: 10 games vs AlphaQ → 0W / 10D / 0L (oracle reliably guides to ~−0.04 terminal, all draws)
+
+**P2 game pattern (all 10 identical):** AlphaQ opens E0=P → we respond E12=G (score −1.04,
+P2 strongly ahead) → oracle navigates to near-zero draw by terminal. Final scores range −0.028
+to −0.050. The calib oracle successfully avoids the mid-game value collapse that plagued the SA
+LUT (0.957 swing → now <0.05 throughout).
+
+**Conclusion:** Calibrated oracle is internally consistent and operationally superior to SA. As
+P1 we still lose to AlphaQ's E9=G counter-opening — this is not an oracle problem, it is the
+first-move-advantage problem (oracle lacks level-14 coverage, MCTS chooses E0=G which AlphaQ
+exploits). As P2 we draw perfectly. Next: Investigation 4 to find winning terminal boards.
 
 ---
 
@@ -130,8 +142,7 @@ yet been observed in 1,563 games. Exhaustive mapping against Melissa/Amara build
 score table.  
 **Method:** Play ~50,000 games vs Melissa/Amara using `oracle-solver/` route enumeration;
 target 30% coverage of all 32,768 terminal boards.  
-**Prerequisite:** Oracle Revision Project complete (calibrated oracle needed to identify
-winning boards reliably)  
+**Prerequisite:** ✅ Oracle Revision Project complete (2026-05-17)  
 **Estimated cost:** 9–17 days at 16-core parallelism  
 **Success signal:** Winning terminal boards exist and are reachable with correct play.
 
@@ -157,6 +168,8 @@ generate full Schrödinger oracle at website parameters.
 |------|--------------|-------|---|---|---|-------------|
 | 2026-05-16 | 1 — P2 seat swap | 10 | 0 | 0 | 10 | Oracle LUT internally inconsistent across grey levels; intermediate evaluations unreliable |
 | 2026-05-16 | 3 — Adjudicator parameter recovery | 0 | — | — | — | anneal_time=1.85 ns recovered; R²=0.60, 83% classification accuracy; calibrated terminal LUT rebuilt |
+| 2026-05-17 | Oracle Revision — P1 validation (calib) | 10 | 0 | 0 | 10 | Same E9=G AlphaQ exploit; oracle consistent but no level-14 coverage for P1 opening |
+| 2026-05-17 | Oracle Revision — P2 validation (calib) | 10 | 0 | 10 | 0 | Perfect draw record; calib oracle guides to −0.028..−0.050 terminal; no mid-game swings |
 
 ---
 
