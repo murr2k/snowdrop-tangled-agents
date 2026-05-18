@@ -6,7 +6,46 @@
 
 ---
 
-## Verdict — REVISED 2026-05-17
+## Final Verdict — 2026-05-18 (re-test complete)
+
+**PHASE 5 PIVOT CONFIRMED.** The E7G re-test produced two independent
+findings that together support the pivot:
+
+| Run | Mode | Opening | n | W/D/L | Draw rate | Mean score |
+|-----|------|---------|---|-------|-----------|-----------:|
+| 142 | expected-value | E7G forced | 16 | 0 / 1 / 15 | 6.3% | −0.778 |
+| 143 | minimax | E7G forced | 20 | 0 / 14 / 6 | 70% | −0.507 |
+| 107 (ref) | alphaq_explorer (baseline) | E7G forced | 10 | 0 / 7 / 3 | 70% | — |
+| 104 (ref) | alphaq_explorer (baseline) | E7G forced | 21 | 0 / 10 / 11 | 48% | — |
+
+**Three conclusions:**
+
+1. **Expected-value mode is decisively worse than minimax.** Even with the
+   correct opening (E7G), the expected-value solver produced only 1 draw in
+   16 games (6.3%) — barely better than its E0G-confounded run (0% draws).
+   Probability of ≤ 1 draw in 16 games under the 70% minimax baseline:
+   ~3×10⁻⁷. Definitively ruled out.
+
+2. **Minimax + E7G matches the current alphaq_explorer baseline (≈ 70%
+   draws), with zero wins.** The MLP policy adversary model adds no value
+   over straight minimax on this game; if anything it actively harms.
+
+3. **The historical 96.2% E7G baseline no longer holds.** Recent
+   alphaq_explorer runs against AlphaQ Up show 48–70% draws (run 104:
+   48%, run 107: 70%), not the historical 96.2%. AlphaQ has improved
+   since the aggregate baseline was established. The cumulative 252/262
+   figure is now a historical artefact, not a reachable target. The most
+   recent realistic baseline is ~50–70% draws with high variance.
+
+**Phase 4 decision gate (per project plan):** Zero wins, mean score
+unchanged from minimax baseline → **Trigger Phase 5 pivot to tensor
+networks (Investigation 5).**
+
+See `docs/INVESTIGATION_5_TENSOR_NETWORKS.md` for the Phase 5 plan.
+
+---
+
+## Verdict — REVISED 2026-05-17 (now superseded by re-test)
 
 **PIVOT VERDICT RETRACTED.** **Phase 4 test was confounded by opening
 selection.** The expected-value solver was never tested in the relevant

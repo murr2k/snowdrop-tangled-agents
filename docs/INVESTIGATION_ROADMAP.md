@@ -185,15 +185,22 @@ to rejoin run 140, restoring opening_index from `completed_games % 30`.
 
 ### Investigation 5 — Tensor Network Simulation
 
-**Status:** ⏳ Queued (long-term)  
+**Status:** 🎯 **Active (Phase 5 pivot triggered 2026-05-18)**
+See `docs/INVESTIGATION_5_TENSOR_NETWORKS.md` for the detailed plan.
 **Hypothesis:** A matrix product state (MPS/DMRG) simulation of the transverse-field Ising
-Hamiltonian at the recovered website parameters (from Investigation 3) can compute exact
-Schrödinger ground state energies for all 32,768 terminal boards, enabling a complete oracle.  
-**Method:** Implement MPS simulation (Python: quimb / TeNPy); benchmark on Petersen graph;
-generate full Schrödinger oracle at website parameters.  
-**Prerequisite:** Investigation 3 (need website quantum parameters)  
-**Estimated cost:** 3–6 months  
-**Success signal:** MPS oracle values match website scores; full minimax oracle computable.
+Hamiltonian at the recovered website parameters (Investigation 3: ε=0, anneal_time=1.85 ns) can
+compute high-fidelity Schrödinger ground state energies for all 32,768 terminal boards, enabling
+a complete and internally-consistent oracle. Combined with retrograde DP, this gives a full
+minimax oracle covering all reachable states.
+**Why now:** Phase 4 ruled out the expected-value adversary approach. The fundamental
+blocker is the LUT value-function unreliability on AlphaQ's basin (Phase 3: R²=−0.56 calib).
+A tensor-network oracle addresses this root cause: deterministic, ground-truth Schrödinger
+evaluation replaces both SA noise and the short-anneal-time MATLAB solver approximation.
+**Prerequisite:** Investigation 3 (✅ done — anneal_time=1.85 ns recovered)
+**Estimated cost:** 3–6 months
+**Success signal:** MPS oracle values match website scores within ε; full minimax oracle
+computable; live games vs AlphaQ produce wins or significantly increased draw rate above
+the current 50–70% baseline.
 
 ---
 
@@ -210,6 +217,10 @@ generate full Schrödinger oracle at website parameters.
 | 2026-05-17 | Phase 3 — AlphaQ-conditional calibration | 102 boards | — | — | — | Melissa-fit Schr R² on AlphaQ basin = −0.56 (vs +0.74 on Melissa); SA raw R² on AlphaQ = −0.94; verdict NONE; existing oracle stays as soft prior for Phase 4 |
 | 2026-05-17 | Phase 4 — Expected-value solver (built) | 0 | — | — | — | `HybridTangledSolver` AdversaryMode='expected' uses MLP policy (`alphaq_policy_mlp.mat`) to compute `E_pi[LUT(grandchild)]` at our turns. Wired through `--solver-adversary expected`. Unit test + parity check pass. 50-game decision-gate run vs AlphaQ launched. |
 | 2026-05-17 | Phase 4 — Expected-value solver vs AlphaQ (run 141) | 50 | 0 | 0 | 50 | **PIVOT VERDICT RETRACTED.** Phase 4 picked E0G as opening (a known-bad opening) on all 50 games and was never tested vs the relevant baseline (E7G opening = 252 draws in 262 games = 96.2% draw rate). Re-test queued: `--solver-adversary expected --oracle-override 15 7 G`. **Blocked on tangled-game.com play-field changes — Playwright automation needs updates.** See `docs/PHASE_4_RESULTS.md`. |
+| 2026-05-17 | Site automation fix — Best-of-5 layout | — | — | — | — | Playwright automation updated for new tangled-game.com Best-of-5 challenge format (game-over modal, score fallback threshold, end-of-board guard, opponent list). Commit b1c6fee. Phase 4 E7G re-test unblocked. |
+| 2026-05-18 | Phase 4 re-test — expected-value + E7G (run 142) | 16 | 0 | 1 | 15 | **Expected-value solver definitively ruled out.** 6.3% draws vs the 70% minimax baseline (p ≈ 3×10⁻⁷). MLP policy adversary mode actively harms — picks E13P on turn 3 in every game, triggering an AlphaQ counter line that loses. Run stopped early after 16 games once result was statistically decisive. |
+| 2026-05-18 | Phase 4 re-test — minimax + E7G (run 143) | 20 | 0 | 14 | 6 | **Minimax + E7G matches current alphaq_explorer baseline (70% draws).** Historical 96.2% figure is no longer reachable; recent alphaq_explorer runs show 48–70% with high variance, indicating AlphaQ has improved. Zero wins from minimax+E7G — confirms there is no exploit reachable from the current oracle + opening combination. |
+| 2026-05-18 | Phase 4 final verdict | — | — | — | — | **Phase 5 pivot to tensor networks (Investigation 5) confirmed.** Zero wins, minimax+E7G ≈ alphaq_explorer baseline, expected-value mode strictly worse. See `docs/INVESTIGATION_5_TENSOR_NETWORKS.md`. |
 
 ---
 

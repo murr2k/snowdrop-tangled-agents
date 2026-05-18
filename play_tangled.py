@@ -292,16 +292,15 @@ def verify_matlab_readiness() -> bool:
 
         print(f"  [OK] Connected to MATLAB")
 
-        # Clean up any stale parallel pools
+        # Clean up any stale parallel pools (non-fatal — pool may already be gone)
         print(f"  Cleaning up stale parallel pools...")
         try:
             bridge.engine.eval(
-                "pool = gcp('nocreate'); if ~isempty(pool), delete(pool); fprintf('  [OK] Deleted stale pool with %d workers\\n', pool.NumWorkers); else fprintf('  [OK] No stale pools found\\n'); end",
+                "try, pool = gcp('nocreate'); if ~isempty(pool), delete(pool); fprintf('  [OK] Deleted stale pool\\n'); else fprintf('  [OK] No stale pools found\\n'); end, catch e, fprintf('  [OK] Pool already gone: %s\\n', e.message); end",
                 nargout=0
             )
         except Exception as e:
-            print(f"  [FAIL] Pool cleanup failed: {e}")
-            return False
+            print(f"  [WARN] Pool cleanup error (continuing): {e}")
 
         # Verify MATLAB is responsive with a simple test
         print(f"  Verifying MATLAB responsiveness...")

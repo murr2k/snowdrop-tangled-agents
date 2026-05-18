@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-05-18
+
+### Decision
+
+- **Phase 4 verdict FINAL: PHASE 5 PIVOT to tensor networks.** Two-run
+  re-test with forced E7G opening (post site-automation fix) settles the
+  question:
+  - **Run 142** (`--solver-adversary expected --oracle-override 15 7 G`):
+    16 games, **0W / 1D / 15L (6.3% draws)**, mean score −0.778.
+    Expected-value mode actively breaks E7G — even worse than its
+    E0G-confounded predecessor (run 141).
+  - **Run 143** (`--solver-adversary minimax --oracle-override 15 7 G`):
+    20 games, **0W / 14D / 6L (70% draws)**, mean score −0.507. Matches
+    the current alphaq_explorer baseline (run 107: 70%, run 104: 48%).
+- **The historical 96.2% E7G baseline is no longer reachable.** Recent
+  alphaq_explorer runs (104, 107) show 48–70% draws, not 96%. AlphaQ Up
+  has improved since the cumulative 252/262 figure was established;
+  the realistic current baseline is ~50–70% draws with high variance.
+- Phase 4 decision gate verdict: zero wins, minimax+E7G matches baseline,
+  expected-value definitively ruled out → **Trigger Phase 5 pivot to
+  tensor networks.**
+
+### Added
+
+- `docs/INVESTIGATION_5_TENSOR_NETWORKS.md` — Phase 5 plan: MPS/DMRG
+  simulation of the transverse-field Ising adjudicator Hamiltonian at the
+  recovered (ε=0, anneal_time=1.85 ns) website parameters.
+
+### Changed
+
+- `docs/PHASE_4_RESULTS.md` — final verdict section added at the top
+  documenting both re-test runs and the formal pivot decision.
+
+### Fixed
+
+- `play_tangled.py:verify_matlab_readiness()` — wrap parpool cleanup in
+  MATLAB-side try/catch and treat Python-side failures as non-fatal. The
+  prior code dereferenced `pool.NumWorkers` after `delete(pool)`, which
+  threw `Invalid or deleted object` whenever the pool was already
+  shutdown (always the case after a killed run). This blocked launching
+  any new run without restarting MATLAB.
+
 ## [0.4.2] - 2026-05-17
 
 ### Changed (retraction)
