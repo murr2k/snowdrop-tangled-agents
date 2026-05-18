@@ -7,6 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-05-18
+
+### Decision
+
+- **Phase 5A complete: R²=0.56 is the inherent ceiling of the Schrödinger TFIM
+  model + Advantage2.1.3 schedule.** No parameter tuning closes the gap to
+  website scores. Phase 5B (alternative model) is required.
+
+### Added
+
+- `docs/PHASE_5A_RESULTS.md` — full Phase 5A writeup
+- `scripts/analyse_calib_residuals.py` — Phase 5A.1 residual analysis on
+  1452 calibration boards. Findings:
+  - R² varies 0.24 (G=4–6) → 0.84 (G=12–14) by Green count
+  - R² collapses 0.82 (4 frustrated 5-cycles) → −0.02 (12 frustrated)
+  - Bias −1.02 on website-negative boards (under-predicts P2 win magnitude)
+  - Linear rescale adds only +0.03 R²; the error is per-board, not global
+- `scripts/calib_eigsh_reference.py` — Phase 5A.3 exact-diagonalization
+  ground-state test at multiple s values. Findings:
+  - Website is NOT using ground-state evaluation
+  - Best ground-state R² across s∈[0.5, 0.999] = 0.16
+  - Calib's short-time dynamics fits significantly better than any
+    adiabatic ground state
+- `scripts/calib_parameter_sweep.py` + `snowdrop_tangled_agents/matlab/rl/parameter_sweep_schrodinger.m`
+  — Phase 5A.2 joint sweep over (anneal_time, s_max, sched_red). 200 combos
+  on 1452 boards, MATLAB parfor, 8.2 hr. Findings:
+  - Best combo = current calib parameters (sched_red=0.5, s_max=0.999, tf=1.85)
+  - R² = 0.5618; no improvement over baseline
+  - Optimum lies on the degenerate curve tf × sched_red ≈ const (expected
+    physics — dimensionless evolution scale)
+  - s_max irrelevant once ≥ 0.5 (wavefunction equilibrates early)
+
+### Outstanding
+
+- **Phase 5B** — try alternative physical models / schedules:
+  1. Different schedule file (Advantage System6, Pegasus, etc.)
+  2. Finite-temperature TFIM (thermal correlations instead of ground state)
+  3. Open-system dynamics (Lindblad with phenomenological dephasing)
+  4. QMC adjudicator
+  5. Different score formula derived from calibration data
+- The Phase 5A.1 residual structure (frustration-stratified R² collapse)
+  is the test bed: any candidate model that flattens it is a contender.
+
 ## [0.4.3] - 2026-05-18
 
 ### Decision
