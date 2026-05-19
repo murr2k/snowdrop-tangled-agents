@@ -121,6 +121,12 @@ class MatlabBridge:
                 self.engine = matlab.engine.start_matlab(option_str)
                 self._started_new = True
                 logger.info("New MATLAB instance started successfully")
+                # Share so subsequent Python processes connect here instead of spawning new instances
+                try:
+                    self.engine.eval("matlab.engine.shareEngine", nargout=0)
+                    logger.info("MATLAB session shared (other processes will reuse it)")
+                except Exception:
+                    pass
 
             # Add strategies directory to path
             if STRATEGIES_DIR and STRATEGIES_DIR.exists():
@@ -142,7 +148,8 @@ class MatlabBridge:
         """Disconnect from MATLAB Engine."""
         if self.engine:
             try:
-                self.engine.quit()
+                if self._started_new:
+                    self.engine.quit()
             except Exception:
                 pass
             self.engine = None
