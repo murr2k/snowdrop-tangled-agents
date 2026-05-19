@@ -542,6 +542,8 @@ class WebPlayer:
         self.headless = headless
         self.slow_mo = slow_mo
         self.strategy_type = strategy_type
+        if strategy_type == 'hybrid_solver' and solver_adversary not in ('minimax', ''):
+            self.strategy_type = f"hybrid_solver/{solver_adversary}"
         self.seat = seat
 
         # Store options for MATLAB strategy
