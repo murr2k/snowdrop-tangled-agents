@@ -24,8 +24,11 @@ A comprehensive framework for building intelligent agents that play [Tangled](ht
 
 ### Highlights
 
+- **Geometric Switchback Solver (May 2026, in flight)** — Pure structural play using Aut(Petersen)=S₅ symmetry. Bypasses the broken simulation oracle entirely. *Preliminary result: 10/10 perfect draws vs AlphaQ Up over the first 10 games, matching the oracle-guided baseline using only graph geometry.* See Section 16 below.
+- **Petersen Orbit Map** — Full Burnside/Polya enumeration of {G,P}¹⁵ under Stab(p1=5, p2=7): 16,640 distinct orbits, of which **only 7.5% have ever been observed on the live website** in 1,452 calibration games. The remaining 92.5% (15,395 orbits) are the candidate hidden-win territory. See `data/petersen_orbits.json`.
+- **D-Wave LUT Harvest** — Following Geordie Rose's revelation that tangled-game.com's adjudicator is a precomputed D-Wave QC hardware lookup table, a 10-session parallel harvest is underway to enumerate all 32,768 ground-truth scores. ETA ~6–10 days.
 - **Complete SA Oracle** — Retrograde DP over all 16 grey levels (0–15), guaranteeing game-theoretically optimal play under SA adjudication; 371 MB lookup table covers every P1 decision
-- **Win Investigation Complete** — 1,563+ games against AlphaQ prove draws are the achievable ceiling; AlphaQ steers to zero-energy boards under any classical strategy
+- **Win Investigation Complete** — 1,563+ games against AlphaQ prove draws are the achievable ceiling under classical-simulation strategies; AlphaQ steers to zero-energy boards
 - **Thompson Sampling Opening Selection** — Bayesian exploration-exploitation for opening selection in `AlphaQExplorerStrategy`
 - **MCTS Strategy Engine** — Monte Carlo Tree Search with parallel `parfor` rollouts (6 workers × 100 rollouts per iteration)
 - **MATLAB Integration** — High-compute hybrid solver: minimax + MCTS + oracle lookup
@@ -786,3 +789,101 @@ poetry run python play_tangled.py --strategy hybrid_solver \
   under optimal play — the game is fundamentally drawn.
 
 See [`quantum_tangled_proof.html`](quantum_tangled_proof.html) for the complete mathematical treatment.
+
+### 16. Geometric Switchback Approach — Symmetry-Based Escape from the Empirical Closure Basin (May 2026)
+
+After Phases 1–5A established that the calibrated Schrödinger oracle has an
+**inherent R²=0.56 ceiling against the website's adjudicator** (no parameter
+tuning closes the gap), and Geordie Rose revealed that
+**tangled-game.com adjudicates via a precomputed D-Wave QC hardware lookup
+table**, the project pivoted away from oracle improvement entirely.
+
+The new approach treats the problem as a structural / symmetry problem:
+
+> The Petersen graph's automorphism group is S₅ (order 120). The score
+> `inf[p1] − inf[p2]` is invariant under any automorphism that fixes the
+> ordered pair (p1=5, p2=7). The orbit space under this score-preserving
+> symmetry partitions the 32,768 terminal states into a smaller, finite,
+> enumerable set of equivalence classes.
+
+#### The user's "switchback escape" idea
+
+When direct gradient ascent fails because the slope exceeds traction
+(the calib oracle's "gradient" is unreliable on the very basins where wins
+might live — Phase 5A.1 found R²≈0 on highly frustrated boards), do not
+ascend straight up. Move *tangentially* along the constraint surface,
+preserving structural options. Applied to the Petersen graph:
+
+| Principle | Implementation |
+|-----------|----------------|
+| Map the contours | Enumerate orbits under Aut(Petersen) ∩ Stab(p1, p2) |
+| Tangential motion | Score moves by structural-freedom preservation, not score gradient |
+| Petal diversity | Maximize the number of distinct 5-cycle frustration classes still reachable |
+| Switchback distribution | Spread colored edges across the 9 edge-orbits of Stab(5,7), not concentrate in one |
+
+#### Concrete result: the Petersen orbit map
+
+`scripts/build_petersen_orbit_map.py` enumerates Aut(Petersen) via networkx
+isomorphism, filters to the subgroup fixing the player nodes (size = 2 only:
+identity plus one non-trivial swap), and partitions all 32,768 states into
+**16,640 orbits** via union-find on the edge action. Burnside check verifies
+the count.
+
+Mapping the 1,452 distinct boards we've observed across all opponents onto
+these orbits:
+
+| Metric | Value |
+|--------|------:|
+| Total orbits | 16,640 |
+| Orbits observed at least once | 1,245 (7.5%) |
+| **Orbits with ZERO observations** | **15,395 (92.5%)** |
+| Max website score reachable vs Melissa (across observed orbits) | +15.365 |
+| Max website score reachable vs AlphaQ (1,660 games, seat-adjusted) | +0.891 |
+| Wins vs AlphaQ across all 1,660 games | **0** |
+
+The 92.5% unexplored fraction is the candidate hidden-win territory. AlphaQ
+herds play into a small subset of orbits regardless of strategy; orbits we
+haven't reached are precisely the ones AlphaQ has never had to defend.
+
+#### Pure switchback solver
+
+`snowdrop_tangled_agents/matlab/rl/PetersenGeometry.m` provides the
+structural features (12 five-cycles, 9 edge orbits under Stab(5,7), four
+feature-extraction methods). `HybridTangledSolver.AdversaryMode='switchback'`
+bypasses the opening book, oracle, minimax, and MCTS entirely; move choice
+is pure greedy 1-step lookahead on a linear combination:
+
+```
++1.0 × (5-cycles locked-satisfied)
+-2.0 × (5-cycles locked-frustrated)
++0.3 × (5-cycles still undecided)
++1.0 × (orbit color balance under Stab(5,7))
+```
+
+Run:
+
+```bash
+poetry run python play_tangled.py --opponent alphaq --strategy hybrid_solver \
+  --lut-variant calib --solver-adversary switchback --games 50 --headless
+```
+
+**Preliminary result (10/50 games complete):** 0W / **10D** / 0L, mean
+final score −0.003. Pure structural play with no oracle whatsoever
+achieves the same draw stability as the oracle-guided minimax baseline
+(70% draws in run 143). This is itself a notable finding: structural
+features alone are sufficient for draw-level play against AlphaQ.
+
+#### Parallel LUT harvest
+
+`scripts/launch_investigation4.ps1` runs 10 parallel sessions on accounts
+murr1–10 against Melissa (whose policy admits diverse terminal coverage,
+unlike AlphaQ's narrow basin), targeting full enumeration of the
+32,768-state website lookup table. At ~5,300 games/day, full coverage
+in ~6–10 days. Once complete, `scripts/build_website_lut.py` will assemble
+`website_lut.mat` — the ground-truth oracle. The resulting LUT either
+contains an unexplored orbit with score ≥ +2 (an exploitable winning
+terminal against AlphaQ, $10K bounty target) or empirically confirms
+the closure result at 100% state-space coverage.
+
+See `plans/pure-splashing-castle.md` and `docs/INVESTIGATION_5_TENSOR_NETWORKS.md`
+for the full plan.

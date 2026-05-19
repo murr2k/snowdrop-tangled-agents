@@ -7,6 +7,90 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-05-18 — Geometric Switchback Approach
+
+### New direction (Geordie Rose revealed mechanism)
+
+Geordie Rose disclosed that **tangled-game.com adjudicates via a precomputed
+D-Wave QC hardware lookup table** (every terminal state was run on real
+quantum hardware; the results are cached). In-game "glowy" scoring is SA,
+known to be wrong with increasing frequency as graphs scale. Two implications:
+
+1. The Phase 5A R²=0.56 ceiling for our Schrödinger simulation is an
+   irreducible **simulation-vs-hardware gap**, not a parameter problem.
+   Better physics simulation will not close it (we'd have to model
+   D-Wave hardware noise/decoherence/control errors).
+2. The website's LUT is in principle scrapable: ~9 days of continuous
+   play on 10 parallel accounts covers all 32,768 states.
+
+### Track 1 — Petersen orbit map (DONE)
+
+`scripts/build_petersen_orbit_map.py` enumerates Aut(Petersen)=S₅ (order 120),
+filters to the score-preserving subgroup Stab(p1=5, p2=7) (order 2: identity
+plus one non-trivial swap), and partitions {G,P}¹⁵ into orbits via union-find.
+
+| Metric | Value |
+|--------|------:|
+| Total orbits | 16,640 (Burnside-verified) |
+| Distinct edge actions of Stab | 2 (6 swap-pair orbits + 3 fixed edges) |
+| Orbits observed in 1,452 website-scored boards | 1,245 (7.5%) |
+| **Orbits with zero observations** | **15,395 (92.5%)** |
+| Max website score in observed orbits | +15.365 (vs Melissa) |
+| Max website score in AlphaQ-reachable orbits | +0.891 (seat-adjusted) |
+| AlphaQ wins across 1,660 games | 0 |
+
+Output: `data/petersen_orbits.json` (6.2 MB, complete per-orbit metadata).
+
+### Track 2 — Pure switchback solver (RUNNING)
+
+`snowdrop_tangled_agents/matlab/rl/PetersenGeometry.m` — static utility
+class providing 12 five-cycles (verified via networkx), 9 Stab(5,7) edge
+orbits, and four structural feature methods.
+
+`HybridTangledSolver.AdversaryMode='switchback'` — bypasses opening book,
+oracle, minimax, MCTS entirely. Greedy 1-step lookahead on:
+```
++1.0 × #5-cycles locked-satisfied
+-2.0 × #5-cycles locked-frustrated
++0.3 × #5-cycles still undecided
++1.0 × orbit color balance under Stab(5,7)
+```
+
+`play_tangled.py --solver-adversary switchback` added.
+
+**Preliminary result (10/50 games complete):** 0W / **10D** / 0L, mean
+−0.003. Pure structural play matches the calib-oracle baseline (run 143
+= 70% draws) WITHOUT any oracle. Decision rule's "≥80% draws no wins"
+branch is materializing strongly.
+
+### Track 3 — Full website LUT harvest (RUNNING)
+
+Investigation 4 resumed at full scale: 10 parallel Windows processes
+(murr1–10 accounts) running `terminal_explorer` strategy vs Melissa,
+target = full 32,768-state coverage. Run 140 at 608/50000 games.
+
+Rate: ~5,300 games/day across 10 sessions.
+**ETA: 6–10 days for full coverage** (novelty drops as coverage rises;
+the tail is heavier than the head).
+
+Output (when complete): `website_lut.mat` becomes the ground-truth
+oracle. If even this perfect oracle can't find a winning terminal against
+AlphaQ, the empirical closure is essentially proven at 100% coverage.
+
+### Added
+
+- `plans/pure-splashing-castle.md` — Phase 5B plan (approved)
+- `scripts/build_petersen_orbit_map.py` — Track 1 generator
+- `data/petersen_orbits.json` — Track 1 output (16,640 orbits, full metadata)
+- `snowdrop_tangled_agents/matlab/rl/PetersenGeometry.m` — Track 2 utility class
+- README Section 16 — full writeup of the geometric switchback approach
+
+### Changed
+
+- `HybridTangledSolver.m` — `AdversaryMode='switchback'` dispatch + `solveSwitchback` method
+- `play_tangled.py` — `--solver-adversary` accepts `switchback`
+- `README.md` — Highlights section updated; new Section 16
+
 ## [0.5.0] - 2026-05-18
 
 ### Decision
