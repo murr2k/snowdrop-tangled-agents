@@ -2426,13 +2426,16 @@ def main():
                              "'schr' (Schrodinger, local params), or 'calib' (Schrodinger, "
                              "website-calibrated anneal_time=1.85ns). "
                              "Selects expanded_lut_{variant}.mat.")
-    parser.add_argument("--solver-adversary", choices=["minimax", "expected"], default="minimax",
+    parser.add_argument("--solver-adversary", choices=["minimax", "expected", "switchback"], default="minimax",
                         help="Adversary model used inside hybrid_solver. 'minimax' (default) is the "
                              "existing behaviour: opponent assumed to play LUT-optimal. 'expected' "
                              "is the Phase 4 mode: at each of our candidate moves, evaluate by "
                              "expected value under the predicted AlphaQ policy (see "
                              "scripts/train_alphaq_policy.py). Requires --opponent-policy-file "
-                             "or the default alphaq_policy_mlp.mat.")
+                             "or the default alphaq_policy_mlp.mat. 'switchback' (Phase 5B Track 2) "
+                             "bypasses oracle/minimax/MCTS entirely; move chosen by structural "
+                             "Petersen geometry features (5-cycle satisfiability, edge-orbit "
+                             "balance under Stab(5,7)). No LUT or policy needed.")
     parser.add_argument("--opponent-policy-file", type=str, default="",
                         help="Filename (under snowdrop_tangled_agents/matlab/rl/data/) of the .mat "
                              "policy model loaded when --solver-adversary expected. Defaults to "

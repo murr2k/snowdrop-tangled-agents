@@ -265,6 +265,19 @@ classdef HybridTangledSolver < handle
                 return;
             end
 
+            % Pure-switchback mode (Phase 5B Track 2): bypass oracle, opening
+            % book, minimax, and MCTS entirely. Move choice comes from
+            % structural / geometric features only. The whole purpose is to
+            % test whether symmetry-aware play reaches orbits AlphaQ's policy
+            % has never had to defend against.
+            if strcmp(this.AdversaryMode, 'switchback')
+                [edge, color, info] = this.solveSwitchback(state, startTime);
+                this.LastSearchTime = info.time;
+                this.LastMethod = info.strategy;
+                this.LastScore = info.score;
+                return;
+            end
+
             % Opening book: Secure our vertex edges (E9, E10, E11) Green.
             % Only use when an opponent-specific calibration curve exists
             % (e.g., Melissa). Skip for opponents using generic calibration
@@ -534,6 +547,56 @@ classdef HybridTangledSolver < handle
                 info = struct('strategy', 'early_prior', 'score', score, ...
                     'time', toc(startTime), 'tabuImproved', false);
             end
+        end
+
+        function [edge, color, info] = solveSwitchback(this, state, startTime)
+            %SOLVESWITCHBACK Pure structural move selection (Phase 5B Track 2).
+            %
+            %   Greedy 1-step lookahead under PetersenGeometry.switchbackScore.
+            %   No oracle, no minimax, no MCTS. Move chosen to maximize:
+            %     +1.0 * (#5-cycles locked-satisfied)
+            %     -2.0 * (#5-cycles locked-frustrated)
+            %     +0.3 * (#5-cycles still undecided)
+            %     +1.0 * (orbit color balance under Stab(5,7))
+            %
+            %   The point: avoid the calib oracle's broken gradient on
+            %   frustrated boards by following purely structural signals.
+            %   See plans/pure-splashing-castle.md Track 2.
+
+            greyEdges = find(state == '-');
+            numGrey = length(greyEdges);
+
+            % Equal handling for both players (no P1/P2 sign flip): the
+            % structural features are not player-perspective, they're
+            % about preserving structural options. Both players "win" by
+            % keeping more cycles satisfiable and more orbits balanced.
+
+            bestScore = -Inf;
+            bestEdge = greyEdges(1);
+            bestColor = 'G';
+            weights = [+1.0, -2.0, +0.3, +1.0];
+
+            for e = greyEdges
+                for c = 'GP'
+                    childState = state;
+                    childState(e) = c;
+                    childScore = PetersenGeometry.switchbackScore(childState, weights);
+                    if childScore > bestScore
+                        bestScore = childScore;
+                        bestEdge = e;
+                        bestColor = c;
+                    end
+                end
+            end
+
+            edge = bestEdge - 1;  % 0-indexed
+            color = bestColor;
+
+            info = struct();
+            info.strategy = 'switchback';
+            info.score = bestScore;
+            info.numGrey = numGrey;
+            info.time = toc(startTime);
         end
 
         function [edge, color, info] = solveOracle(this, state, startTime)
