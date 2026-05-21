@@ -9,7 +9,8 @@
     each playing 50 games with the pure switchback geometric solver.
 
     Strategy: hybrid_solver with --solver-adversary switchback
-    No oracle, no MCTS, no minimax. Pure structural move scoring only.
+    Opening: forced E7G (--oracle-override 15 7 G), matching MATLAB run 147 baseline.
+    All subsequent moves: pure structural switchback scoring. No MCTS, no minimax.
 
     Credentials: password is read from TANGLED_PASSWORD env var (or .env file).
     It is NEVER written to this script or any log file.
@@ -105,6 +106,7 @@ for ($i = 1; $i -le $Sessions; $i++) {
            "--run $Games " +
            "--strategy hybrid_solver " +
            "--solver-adversary switchback " +
+           "--oracle-override 15 7 G " +
            "--headless " +
            "--no-dashboard " +
            "--username `"$user`""

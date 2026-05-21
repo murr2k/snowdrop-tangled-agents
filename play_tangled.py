@@ -556,6 +556,7 @@ class WebPlayer:
         self._terminal_lut_file = terminal_lut_file
         self._solver_adversary = solver_adversary
         self._opponent_policy_file = opponent_policy_file
+        self._oracle_overrides = oracle_overrides or {}
 
         # Oracle route options
         self._oracle_route_mode = route_mode or 'fixed'
@@ -630,7 +631,10 @@ class WebPlayer:
                 )
         elif strategy_type == "hybrid_solver":
             if getattr(self, '_solver_adversary', 'minimax') == 'switchback':
-                self.strategy = SwitchbackStrategy(player=self.seat)
+                self.strategy = SwitchbackStrategy(
+                    player=self.seat,
+                    move_overrides=getattr(self, '_oracle_overrides', None),
+                )
             elif not MATLAB_AVAILABLE or HybridSolverStrategy is None:
                 self.logger.warning("Hybrid solver unavailable, falling back to python mcts")
                 self.strategy = MCTSStrategy(time_limit=float('inf'), max_iterations=mcts_iterations)

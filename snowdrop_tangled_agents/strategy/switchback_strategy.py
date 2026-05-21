@@ -155,8 +155,12 @@ class SwitchbackStrategy:
     play_tangled.py needs no special casing beyond construction.
     """
 
-    def __init__(self, player: int = 1):
+    def __init__(self, player: int = 1, move_overrides: Optional[dict] = None):
         self.player = player
+        # move_overrides: {grey_count: (edge_index, color)} — same format as
+        # HybridSolverStrategy's move_overrides / oracle_overrides.
+        # Used to force a specific opening (e.g. {15: (7, 'G')} for E7G).
+        self._move_overrides: dict = move_overrides or {}
         self.moves_calculated = 0
         self.total_time = 0.0
         self.last_score = 0.0
@@ -173,6 +177,20 @@ class SwitchbackStrategy:
     ) -> Optional[Tuple[int, str, dict]]:
         import time
         start = time.time()
+
+        grey_count = state.count('-')
+        if grey_count in self._move_overrides:
+            edge, color = self._move_overrides[grey_count]
+            elapsed = time.time() - start
+            self.moves_calculated += 1
+            self.total_time += elapsed
+            stats = {
+                'strategy': 'switchback/override',
+                'score': switchback_score(state),
+                'num_grey': grey_count,
+                'time': elapsed,
+            }
+            return edge, color, stats
 
         result = best_move(state)
         if result is None:
