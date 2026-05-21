@@ -148,6 +148,7 @@ from snowdrop_tangled_agents.strategy.petersen_strategy import PetersenStrategy
 from snowdrop_tangled_agents.strategy.mcts_strategy import MCTSStrategy, HybridStrategy, evaluate_terminal_state
 from snowdrop_tangled_agents.strategy.oracle_route_strategy import OracleRouteStrategy
 from snowdrop_tangled_agents.strategy.terminal_explorer_strategy import TerminalExplorerStrategy
+from snowdrop_tangled_agents.strategy.switchback_strategy import SwitchbackStrategy
 from snowdrop_tangled_agents.stats import get_collector, queries as stats_queries, GameMetricsTracker
 from snowdrop_tangled_agents.stats import get_publisher, StatsPublisher
 from snowdrop_tangled_agents.stats.session_stats import get_session_stats, get_run_stats
@@ -628,7 +629,9 @@ class WebPlayer:
                     fallback_to_python=True,
                 )
         elif strategy_type == "hybrid_solver":
-            if not MATLAB_AVAILABLE or HybridSolverStrategy is None:
+            if getattr(self, '_solver_adversary', 'minimax') == 'switchback':
+                self.strategy = SwitchbackStrategy(player=self.seat)
+            elif not MATLAB_AVAILABLE or HybridSolverStrategy is None:
                 self.logger.warning("Hybrid solver unavailable, falling back to python mcts")
                 self.strategy = MCTSStrategy(time_limit=float('inf'), max_iterations=mcts_iterations)
             else:
