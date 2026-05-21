@@ -5,11 +5,10 @@
 The Tangled game is played on the Petersen graph: two players take turns coloring
 edges green (ferromagnetic) or purple (antiferromagnetic). When all 15 edges are
 colored, a quantum adjudicator — a D-Wave quantum annealer — evaluates the result.
-The adjudicator rewards configurations that minimise frustration across the graph's
-12 five-cycles: a cycle is *satisfied* if it has an even number of purple edges, and
-*frustrated* if it has an odd number. Because frustrated cycles cannot be simultaneously
-satisfied in a classical Ising model, the quantum annealer finds the global ground
-state, which classical heuristics cannot reliably predict.
+The adjudicator finds the ground state of the Ising model defined by the edge coloring,
+rewarding configurations that minimise frustration across the graph's 12 five-cycles:
+a cycle is *satisfied* if it has an even number of purple edges, *frustrated* if it
+has an odd number.
 
 The standard approach — using a calibration oracle trained on past games — breaks
 down on heavily frustrated boards. On those boards the oracle's gradient collapses
@@ -17,21 +16,35 @@ down on heavily frustrated boards. On those boards the oracle's gradient collaps
 algorithm addresses this by abandoning the oracle entirely and selecting moves
 based purely on the graph's structural geometry.
 
-The working hypothesis is that the quantum score is invariant under the graph's
-automorphism group — that structurally equivalent board states receive the same score.
-The switchback algorithm exploits this by choosing moves that keep the board in a region
-of high symmetry — spreading coloring evenly across the nine symmetry-equivalent
-edge classes — while also avoiding locking five-cycles into frustrated states
-prematurely. (Section 9.6 describes an experiment that tests and ultimately refutes
-this invariance assumption for the specific D-Wave hardware used by AlphaQ.) Rather than climbing directly toward a score target (which fails when
-the gradient is broken), it moves *laterally* along the constraint surface, preserving
-future options. The name comes from the mountain-trail technique of traversing
-sideways across a steep slope to gain altitude safely rather than attempting a
-direct ascent.
+**The score function is anti-greedy in spirit.** Four structural features of the
+board state are combined into a single scalar: satisfied and frustrated cycle counts,
+the number of still-flexible undecided cycles, and a measure of how evenly coloring
+is spread across the graph's symmetry-equivalent edge classes. The undecided and
+orbit-balance terms explicitly reward *not committing* — keeping cycles open and
+the board structurally balanced — rather than capturing immediate value. The name
+"switchback" reflects this: the mountain-trail technique of traversing sideways
+across a steep slope rather than ascending directly, maintaining altitude while
+preserving the freedom to choose a better route later.
 
-The algorithm requires no search tree, no rollouts, and no oracle. Each move is
-chosen in a single greedy pass over the available edges: try every candidate move,
-score the resulting board state using four structural features, pick the best.
+**Move selection is a one-step deterministic policy.** Every candidate (edge, color)
+pair is scored by evaluating the resulting board state; the highest-scoring pair is
+taken. There is no search tree, no rollouts, and no oracle. The policy is fully
+deterministic. Combined with AlphaQ's equally deterministic fixed lookup-table
+responses, the game collapses from any given opening to a single fixed sequence of
+15 moves — the same game, replayed identically every session.
+
+**The opening is not chosen by the policy.** On an empty board every candidate move
+scores identically: the board is perfectly symmetric and no structural feature
+distinguishes any edge. Tie-breaking is therefore arbitrary, and the arbitrary choice
+(edge 0, green) loses heavily. The first move is instead hardcoded as a forced
+override. Empirically, opening E7G (edge 7, green) produces 100% draws against
+AlphaQ across hundreds of consecutive games. The structurally equivalent opening
+E3G — in the same orbit under the automorphism group of the Petersen graph that
+fixes both player nodes — produces approximately 98% losses (see Section 9.6). The
+D-Wave hardware does not respect the graph's mathematical symmetry: the quantum
+energy landscape is embedding-specific, not automorphism-invariant. E7G works
+against this particular opponent on this particular hardware; it is not a universal
+structural truth.
 
 ---
 
