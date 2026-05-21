@@ -862,42 +862,47 @@ class WebPlayer:
         self.page.wait_for_load_state("networkidle", timeout=180000)
         time.sleep(1)
 
-        # Select player seat
-        try:
-            if self.seat == 2:
-                self.page.locator("text=/Player 2.*Blue/i").first.click(timeout=3000)
-                self.logger.info("Selected Player 2 (Blue)")
-            else:
-                self.page.locator("text=/Player 1.*Red/i").first.click(timeout=3000)
-                self.logger.info("Selected Player 1 (Red)")
-            time.sleep(0.5)
-        except:
-            pass
-
-        # Select Petersen graph
+        # Select Petersen graph via the <select> dropdown
         try:
             select = self.page.locator("select").first
             options = self.page.locator("select option").all()
             for i, opt in enumerate(options):
                 if "petersen" in opt.inner_text().lower():
                     select.select_option(index=i)
-                    self.logger.info(f"Selected Petersen graph")
+                    self.logger.info("Selected Petersen graph")
                     break
             time.sleep(0.5)
         except Exception as e:
             self.logger.warning(f"Graph selection: {e}")
 
-        # Select opponent
+        # Select player seat — Player 1/2 buttons are class='' at y~438;
+        # challenge button is class='challenge-button' at y=187, different text.
         try:
-            self.page.locator(f"text=/{opponent_name}/i").first.click(timeout=3000)
+            if self.seat == 2:
+                self.page.locator("button:has-text('Player 2 (Blue)')").first.click(timeout=3000)
+                self.logger.info("Selected Player 2 (Blue)")
+            else:
+                self.page.locator("button:has-text('Player 1 (Red)')").first.click(timeout=3000)
+                self.logger.info("Selected Player 1 (Red)")
+            time.sleep(0.5)
+        except Exception as e:
+            self.logger.warning(f"Seat selection: {e}")
+
+        # Select opponent — exclude class='challenge-button' which also contains
+        # opponent name text (e.g. "VS ALPHAQ UP") and appears first in the DOM.
+        try:
+            self.page.locator(
+                f"button:not(.challenge-button):has-text('{opponent_name}')"
+            ).first.click(timeout=3000)
             self.logger.info(f"Selected opponent: {opponent_name}")
             time.sleep(0.5)
         except Exception as e:
             self.logger.warning(f"Opponent selection: {e}")
 
-        # Click Start Game
+        # Click Start Game — only one button with this text (DOM index 27);
+        # it becomes enabled after all 3 selections are made.
         try:
-            self.page.locator("text=/start game/i").first.click(timeout=3000)
+            self.page.locator("button:has-text('Start Game')").first.click(timeout=5000)
             self.logger.info("Clicked Start Game")
             time.sleep(2)
         except Exception as e:
