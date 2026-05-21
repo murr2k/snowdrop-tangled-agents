@@ -17,12 +17,13 @@ down on heavily frustrated boards. On those boards the oracle's gradient collaps
 algorithm addresses this by abandoning the oracle entirely and selecting moves
 based purely on the graph's structural geometry.
 
-The key insight is that the quantum score is invariant under the graph's automorphism
-group. This means structurally equivalent board states receive the same score. The
-switchback algorithm exploits this by choosing moves that keep the board in a region
+The working hypothesis is that the quantum score is invariant under the graph's
+automorphism group — that structurally equivalent board states receive the same score.
+The switchback algorithm exploits this by choosing moves that keep the board in a region
 of high symmetry — spreading coloring evenly across the nine symmetry-equivalent
 edge classes — while also avoiding locking five-cycles into frustrated states
-prematurely. Rather than climbing directly toward a score target (which fails when
+prematurely. (Section 9.6 describes an experiment that tests and ultimately refutes
+this invariance assumption for the specific D-Wave hardware used by AlphaQ.) Rather than climbing directly toward a score target (which fails when
 the gradient is broken), it moves *laterally* along the constraint surface, preserving
 future options. The name comes from the mountain-trail technique of traversing
 sideways across a steep slope to gain altitude safely rather than attempting a
@@ -342,10 +343,18 @@ instantaneous on any modern processor.
 ### 9.1 Observed Behavior
 
 Running the switchback algorithm with the forced E7G opening against AlphaQ
-(D-Wave hardware lookup table adjudicator) yields approximately **96% draws**
-across 500 games. No wins have been observed. This replicates the result from
-earlier MATLAB-based switchback runs and confirms that the draw-seeking
-behavior is structural rather than implementation-specific.
+(D-Wave hardware lookup table adjudicator) yields **100% draws** across 311
+consecutive games (run 150, games 22–52 and beyond). No wins have been
+observed. This replicates the result from earlier MATLAB-based switchback runs
+and confirms that the draw-seeking behavior is consistent across implementations.
+
+**Full determinism.** Both agents are deterministic: AlphaQ reads a fixed
+D-Wave lookup table; switchback runs a deterministic greedy algorithm. From
+any given opening, both sides make identical moves in every game. Five
+simultaneous sessions running the same opening play the same 15-move sequence
+to the same terminal state and receive the same quantum score every time. The
+apparent sample size of hundreds of games is, in game-tree terms, a single
+path replayed many times.
 
 The opening choice is decisive. Removing the E7G override and allowing
 tie-breaking to select E0G drops the draw rate to approximately 8% (92%
@@ -449,36 +458,133 @@ negative for P1 — not because of anything AlphaQ-specific, but because the
 cycle-frustration structure of that position gives P2 an inherent advantage
 under quantum adjudication.
 
-**A testable prediction:** E7 and E3 are structurally identical under
-$\text{Stab}(p_1, p_2)$ — they are in the same orbit. If the Nash hypothesis
-is correct, opening $E_3 G$ should yield the same 96% draw rate as $E_7 G$.
-This can be tested by changing `MOVE_OVERRIDES` to $\{15 \mapsto (3, G)\}$.
+**The E3G control experiment.** E7 and E3 are structurally identical under
+$\text{Stab}(p_1, p_2)$ — they are in the same orbit (see Section 9.6 for
+the proof). The Nash hypothesis predicts that opening $E_3 G$ should yield
+the same draw rate as $E_7 G$. Running this experiment (5 sessions, 65 games,
+`MOVE_OVERRIDES` $= \{15 \mapsto (3, G)\}$) produced 64 losses and 1 draw,
+with an average final score of $-3.70$ — compared to E7G's average of
+$-0.09$. The prediction fails catastrophically. Section 9.6 develops the
+consequences.
 
 ### 9.5 What This May Mean
 
-If the minimum-energy equilibrium conjecture is correct, the project has found
-something stronger than a draw strategy for one opponent:
+The E3G experiment (Section 9.6) substantially revises the picture. The
+minimum-energy equilibrium conjecture may still hold, but the equilibrium is
+specific to a hardware-asymmetric energy landscape rather than a universal
+mathematical structure.
 
-- A **structural characterisation** of the Nash equilibrium for
-  quantum-adjudicated edge-coloring games on the Petersen graph. The
-  equilibrium is not an artifact of AlphaQ's implementation — it is a
-  consequence of the graph's geometry and the physics of quantum annealing.
+The project has nonetheless found something practically significant:
 
-- Evidence that **cycle-frustration minimization** is the natural
-  game-theoretic objective for this class of problem. The quantum annealer
-  computes the minimum-energy configuration; the Nash equilibrium is where
-  both players' frustration-minimization objectives meet in a symmetric draw.
-  The two problems are, in this sense, the same problem.
+- A **draw strategy against AlphaQ** that runs in ~1,800 arithmetic operations
+  per move, requires no training data, no search tree, and no oracle. It was
+  derived from graph symmetry and delivers 100% draws on 311+ consecutive games.
 
-- A **practical algorithm** (switchback) that approximates Nash equilibrium
-  play without minimax search, by directly targeting the structural properties
-  that characterise it. The algorithm runs in ~1,800 arithmetic operations per
-  move and requires no training data, no search tree, and no oracle.
+- Evidence that **AlphaQ's D-Wave LUT is hardware-asymmetric**: mathematically
+  equivalent positions (related by a graph automorphism that fixes both player
+  nodes) produce wildly different quantum scores. The D-Wave's physical qubit
+  embedding breaks the Petersen graph's automorphic symmetry.
+
+- A demonstration that **game outcomes on quantum hardware depend on the
+  hardware embedding**, not just the abstract game structure. This has
+  implications for any quantum-adjudicated game design.
 
 The open question is whether $V^* = 0$ (draw) is the correct Nash value, or
 whether the game tree admits P1 wins that no strategy has yet reached. The
 Track 3 full LUT harvest (all 32,768 terminal states scored on D-Wave
-hardware) will answer this definitively: if any terminal state scores
-$\geq +2$ along a reachable game path, P1 wins are achievable. If not, the
-closure result is confirmed and the Nash value is draw — and the switchback
-algorithm, derived from symmetry alone, has found the equilibrium.
+hardware) will answer this definitively.
+
+---
+
+### 9.6 The E3G Experiment: Hardware Breaks Graph Symmetry
+
+#### Setup
+
+Section 9.4 predicted that $E_3 G$ and $E_7 G$ should produce the same game
+outcomes, since $E_3$ and $E_7$ are in the same orbit under
+$\text{Stab}(p_1, p_2)$.
+
+**Proof that $E_3$ and $E_7$ are in the same orbit.** The stabilizer
+$\text{Stab}(p_1{=}5,\, p_2{=}7) \leq \text{Aut}(\text{Petersen})$ has order
+2. The non-identity element is the involution:
+
+$$\sigma:\; (V_1 \leftrightarrow V_8)(V_2 \leftrightarrow V_3)(V_4 \leftrightarrow V_9), \quad \text{fixing } V_0, V_5, V_6, V_7$$
+
+One can verify $\sigma$ is a graph automorphism (it preserves all 15
+adjacencies) and fixes both player nodes $p_1 = V_5$ and $p_2 = V_7$.
+Applying $\sigma$ to $E_3 = V_1\text{–}V_3$ gives $V_8\text{–}V_2 = E_7$. So
+$E_3 \overset{\sigma}{\mapsto} E_7$: they are the unique non-trivial pair in
+orbit 2 of the 9-orbit partition.
+
+The 9 orbits under $\sigma$ are therefore:
+
+| Orbit | Edges | Type |
+|---|---|---|
+| 0 | $\{E_0, E_1\}$ | inner–inner swap |
+| 1 | $\{E_2\}$ | fixed (inner–outer, through $V_6$) |
+| 2 | $\{E_3, E_7\}$ | **the tested pair** |
+| 3 | $\{E_4, E_{14}\}$ | swap |
+| 4 | $\{E_5, E_{13}\}$ | swap (incident to $p_2$) |
+| 5 | $\{E_6, E_8\}$ | swap |
+| 6 | $\{E_9, E_{11}\}$ | swap (incident to $p_1$) |
+| 7 | $\{E_{10}\}$ | fixed (between $p_1$–$p_2$ common neighbour $V_6$ and $p_1$) |
+| 8 | $\{E_{12}\}$ | fixed (between $p_2$ and $V_6$) |
+
+#### Result
+
+Five sessions (run 152+153) played 65 games opening $E_3 G$:
+
+| Metric | E7G (run 150, games 22+) | E3G (runs 152+153) |
+|---|---|---|
+| Games | 311 | 65 |
+| Draws | 311 (100%) | 1 (1.5%) |
+| Losses | 0 | 64 (98.5%) |
+| Avg final score | $-0.093$ | $-3.695$ |
+| Min final score | $-0.134$ | $-3.729$ |
+
+The intermediate switchback scores are also diagnostic. By move 6 into an E3G
+game the switchback objective has fallen to $-4.86$; the equivalent move in an
+E7G game scores near $0$. The game paths diverge immediately after the first
+move.
+
+#### Interpretation
+
+If $\sigma$ were a symmetry of the *full game* — not just the underlying graph
+but also the payoff function — then $E_3 G$ and $E_7 G$ would be
+game-theoretically identical: AlphaQ's optimal response to $E_3 G$, when
+transformed by $\sigma$, would equal its optimal response to $E_7 G$, and the
+resulting terminal states would receive the same quantum score. The results
+show this is not the case by a margin of $3.6$ score units.
+
+The only consistent explanation is that **AlphaQ's D-Wave lookup table is not
+invariant under $\sigma$**: the physical embedding of the Petersen graph onto
+the D-Wave qubit topology is asymmetric. Qubits and couplers are not
+interchangeable physical objects; two configurations related by a graph
+automorphism occupy different positions on the chip and may experience
+different annealing dynamics, effective temperatures, or coupler calibration
+errors. The LUT records what the hardware actually returned for each labeled
+terminal state — it captures the hardware's asymmetry faithfully and
+permanently.
+
+As a consequence:
+
+1. **$\sigma$ is not a game symmetry**, even though it is a graph automorphism
+   fixing both player nodes. The quantum payoff function breaks the symmetry.
+
+2. **E7G is AlphaQ-specific**, not a universal structural truth. The draw
+   basin it accesses exists because of how this particular D-Wave device
+   evaluates this particular edge labeling — not because of a mathematical
+   invariant of the Petersen graph.
+
+3. **The orbit-based analysis of the switchback score does not extend to the
+   payoff function.** Orbit balance ($f_4$) is a valid move-quality heuristic
+   for our own moves, but the final score is determined by hardware physics
+   that does not respect the graph's symmetry group.
+
+4. **Implications for the closure result.** The empirical closure paper
+   (which used the symmetry reduction to bound unexplored state space) should
+   acknowledge that the payoff function is hardware-asymmetric: the
+   $\sim 200$-orbit reduction is a mathematical convenience, not a physical
+   one. Each of the 32,768 labeled terminal states is potentially distinct
+   under the D-Wave adjudicator. Track 3 (full LUT harvest) remains the only
+   path to a complete empirical answer.
