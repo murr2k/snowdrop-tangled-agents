@@ -853,14 +853,22 @@ class WebPlayer:
         return True
 
     def start_game(self, opponent: str = "melissa"):
-        """Start a new game. Navigate fresh to avoid stale state."""
+        """Start a new game, reusing the browser session where possible."""
         opponent_name = self.OPPONENTS.get(opponent.lower(), opponent)
         self.logger.info(f"Starting game against {opponent_name}")
 
-        # Always navigate to /play fresh to clear any previous game state
-        self.page.goto(f"{self.BASE_URL}/play")
-        self.page.wait_for_load_state("networkidle", timeout=180000)
-        time.sleep(1)
+        if getattr(self, '_game_played_once', False):
+            # Subsequent games: click "Play Again" from the result modal.
+            self.page.locator("button:has-text('Play Again')").first.click(timeout=10000)
+            self.page.wait_for_load_state("networkidle", timeout=30000)
+            time.sleep(1)
+            self.logger.info("Clicked Play Again — reusing session")
+        else:
+            # First game: navigate to /play and log in.
+            self.page.goto(f"{self.BASE_URL}/play")
+            self.page.wait_for_load_state("networkidle", timeout=180000)
+            time.sleep(1)
+            self._game_played_once = True
 
         # Select Petersen graph via the <select> dropdown
         try:
@@ -2431,6 +2439,11 @@ def main():
                         metavar=("GREY", "EDGE", "COLOR"),
                         help="Override oracle move at a specific grey count: GREY EDGE COLOR. "
                              "E.g. '--oracle-override 11 10 G' forces E10G at grey=11. Repeatable.")
+    parser.add_argument("--oracle-sequence-file", type=str, default=None,
+                        metavar="FILE",
+                        help="Text file with one 'GREY EDGE COLOR' override per line, applied "
+                             "in sequence across games. Lets a sweep run in a single browser "
+                             "session (one login, Play Again between games).")
     parser.add_argument("--username", type=str, default=None,
                         help="Override TANGLED_USERNAME env var for this session")
     parser.add_argument("--no-dashboard", action="store_true",
@@ -2622,6 +2635,18 @@ def main():
             oracle_overrides[int(grey_str)] = (int(edge_str), color.upper())
         print(f"Oracle overrides active: {oracle_overrides}")
 
+    # Parse per-game sequence file: one "GREY EDGE COLOR" line per game
+    oracle_sequence: list[dict] = []
+    if getattr(args, 'oracle_sequence_file', None):
+        seq_path = Path(args.oracle_sequence_file)
+        for line in seq_path.read_text().splitlines():
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+            grey_str, edge_str, color = line.split()
+            oracle_sequence.append({int(grey_str): (int(edge_str), color.upper())})
+        print(f"Oracle sequence loaded: {len(oracle_sequence)} games from {seq_path.name}")
+
     # Resolve LUT filenames from --lut-variant
     lut_variant = getattr(args, 'lut_variant', 'sa')
     if lut_variant == 'schr':
@@ -2774,6 +2799,15 @@ def main():
                             game_number=display_num,
                             games_completed=games_completed_so_far,
                         )
+
+                    # Apply per-game sequence override if provided
+                    game_idx = (display_num - 1)
+                    if oracle_sequence:
+                        seq_override = oracle_sequence[game_idx] if game_idx < len(oracle_sequence) else {}
+                        player._oracle_overrides = seq_override
+                        if seq_override:
+                            grey, (edge, color) = next(iter(seq_override.items()))
+                            print(f"  [seq] Game {display_num}: override E{edge}{color} at grey={grey}")
 
                     result = player.play_game(args.opponent)
                     results.append(result)
