@@ -148,9 +148,11 @@ class TernaryMinimaxStrategy:
     def __init__(self, player: int = 1, move_overrides: Optional[dict] = None,
                  beta: Optional[float] = tm.DEFAULT_BETA, max_live_free: int = 14,
                  opening_book: Path = OPENING_BOOK_PATH, reply_book: Path = REPLY_BOOK_PATH,
-                 plan_lines: bool = False, fixed_lines: Optional[list] = None, probe_endgame: bool = False):
+                 plan_lines: bool = False, fixed_lines: Optional[list] = None, probe_endgame: bool = False,
+                 probe_deep: bool = False):
         self.player = player
-        self.probe_endgame = probe_endgame  # line_planner.EndgameProber (P1)
+        self.probe_endgame = probe_endgame  # line_planner.EndgameProber (P1) / P2EndgameProber
+        self.probe_deep = probe_deep        # line_planner.DeepProber (P1, AlphaQ's move 10)
         self.fixed_lines = list(fixed_lines or [])   # one line of our moves per game, played before --plan-lines
         self.plan_lines = plan_lines        # line_planner: replay known lines, branch into new territory
         self._oracle = None
@@ -176,6 +178,11 @@ class TernaryMinimaxStrategy:
             self._plan = lp.plan_from_line(lp.parse_line(line), self.player,
                                            ac.reply_table(ac.load_games(), self.player))
             logger.info(f"ternary plan: {line!r}: {self._plan['note']}")
+        elif self.probe_deep:
+            from snowdrop_tangled_agents.strategy import line_planner as lp
+            from snowdrop_tangled_agents.tools import alphaq_captures as ac
+            self._plan = lp.DeepProber(self.beta, ac.load_games()).plan()
+            logger.info(f"ternary plan: {self._plan['note']}")
         elif self.probe_endgame:
             from snowdrop_tangled_agents.strategy import line_planner as lp
             from snowdrop_tangled_agents.tools import alphaq_captures as ac
@@ -232,6 +239,13 @@ class TernaryMinimaxStrategy:
             edge, color = self._plan["prober"].final_choice(state)
             stats.update(strategy="ternary/probe-final")
             logger.info(f"ternary: E{edge}{color} final probe")
+            return self._done(edge, color, stats, start)
+
+        prober = self._plan.get("prober")
+        if free == 3 and prober is not None and hasattr(prober, "move13_choice") and state not in self._plan["moves"]:
+            edge, color = prober.move13_choice(state)
+            stats.update(strategy="ternary/probe-move13")
+            logger.info(f"ternary: E{edge}{color} move-13 probe at a new position")
             return self._done(edge, color, stats, start)
 
         planned = self._plan["moves"].get(state)

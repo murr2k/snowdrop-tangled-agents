@@ -547,6 +547,7 @@ class WebPlayer:
         plan_lines: bool = False,
         fixed_lines: Optional[list] = None,
         probe_endgame: bool = False,
+        probe_deep: bool = False,
         base_url: Optional[str] = None,
     ):
         if base_url:
@@ -656,6 +657,7 @@ class WebPlayer:
                 plan_lines=plan_lines,
                 fixed_lines=fixed_lines,
                 probe_endgame=probe_endgame,
+                probe_deep=probe_deep,
             )
         elif strategy_type == "hybrid_solver":
             if getattr(self, '_solver_adversary', 'minimax') == 'switchback':
@@ -2787,6 +2789,8 @@ def main():
     parser.add_argument("--probe-endgame", action="store_true",
                         help="ternary P1: replay known lines and probe move 13 / final moves for a forced win "
                              "(strategy/line_planner.EndgameProber)")
+    parser.add_argument("--probe-deep", action="store_true",
+                        help="ternary P1: test AlphaQ's move 10 (line_planner.DeepProber)")
     parser.add_argument("--challenge", action="store_true",
                         help="play the Best-of-5 CHALLENGE vs AlphaQ Up (gold button): P1 in games 1/3/5, P2 in 2/4; "
                              "--line is replayed in P1 games, --line-p2 in P2 games")
@@ -3136,6 +3140,7 @@ def main():
                 plan_lines=args.plan_lines,
                 fixed_lines=args.line,
                 probe_endgame=args.probe_endgame,
+                probe_deep=args.probe_deep,
             ) as player:
                 player.login()
 

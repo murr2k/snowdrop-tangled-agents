@@ -434,6 +434,85 @@ class EndgameProber:
                 "note": f"{mode}: move 13 E{mv[0]}{mv[1]} at anchor {a}, P(forced win) {min(p, 1.0):.3f}"}
 
 
+class DeepProber(EndgameProber):
+    """Test AlphaQ's move 10: one level above EndgameProber.
+
+    AlphaQ looked exact at moves 12 and 14 in every probed position. A win
+    from a position after AlphaQ's move 10 needs one of our move-11 options
+    after which every AlphaQ move 12 leaves a forced move-13 win. Working one
+    move-10 position at a time: first reveal AlphaQ's move 12 against each of
+    our model-safe move-11 options (each such game also probes move 13 at the
+    new position, chosen by move13_choice()), then refute the resulting move-12
+    positions depth-first. When all are refuted, AlphaQ's move 10 was exact there.
+    """
+
+    def __init__(self, beta, games: list, **kw):
+        super().__init__(beta, games, **kw)
+        from snowdrop_tangled_agents.tools import alphaq_captures as ac
+        self.oracle = ValueOracle(beta, 1)
+        self.anchors10 = {}                     # position after AlphaQ's move 10 -> our prefix
+        for g in games:
+            if g["seat"] != 1:
+                continue
+            prefix = {}
+            for i, (s, mv) in enumerate(zip(ac.states_of(g["moves"]), g["moves"])):
+                if i == 10:
+                    self.anchors10.setdefault(s, dict(prefix))
+                    break
+                if ac.mover(i) == 1:
+                    prefix[s] = mv
+
+    def safe_moves(self, state: str) -> list:
+        """Our moves whose model minimax value is not a loss, best tiebreak first."""
+        out = []
+        for e in range(tm.NUM_EDGES):
+            if state[e] != '-':
+                continue
+            for c in 'ZGP':
+                v, w = self.oracle.value(play(state, e, c))
+                if v >= -tm.DRAW_EPSILON:
+                    out.append((w, (e, c)))
+        return [mv for _, mv in sorted(out, reverse=True)]
+
+    def move13_choice(self, state: str):
+        """Move 13 at a position not yet anchored: the safe option most likely to be a forced win."""
+        best = max(self.safe_moves(state) or [(state.index('-'), 'Z')],
+                   key=lambda mv: self.p_forced(play(state, *mv)))
+        return best
+
+    def _under(self, anchor: str, root: str) -> bool:
+        return all(anchor[e] == c for e, c in enumerate(root) if c != '-')
+
+    def plan(self, min_p: float = 0.003) -> dict:
+        # A known win anywhere: replay it.
+        base = EndgameProber.plan(self, min_p)
+        if base["mode"] == "confirm":
+            return base
+        # Focus: the move-10 position with the most move-11 options already answered.
+        def answered(a):
+            return sum(1 for mv in self.safe_moves(a) if play(a, *mv) in self.replies)
+        for a10 in sorted(self.anchors10, key=lambda a: -answered(a)):
+            prefix = self.anchors10[a10]
+            for mv in self.safe_moves(a10):
+                if play(a10, *mv) not in self.replies:
+                    moves = dict(prefix)
+                    moves[a10] = mv
+                    return {"mode": "reveal", "moves": moves, "value": 0.0, "depth": len(moves), "prober": self,
+                            "note": f"reveal: move 11 E{mv[0]}{mv[1]} at move-10 position {a10} "
+                                    f"({answered(a10)} of {len(self.safe_moves(a10))} answered)"}
+            # All move-11 replies known: refute the move-12 positions under this one.
+            saved = self.anchors
+            self.anchors = {a: p for a, p in saved.items() if self._under(a, a10)}
+            sub = EndgameProber.plan(self, min_p)
+            self.anchors = saved
+            if sub["mode"] != "exhausted":
+                sub["note"] = f"under move-10 position {a10}: " + sub["note"]
+                return sub
+            # every move-12 position under a10 refuted: AlphaQ's move 10 was exact there; next a10
+        return {"mode": "exhausted", "moves": {}, "value": 0.0, "depth": 0,
+                "note": "every move-10 position refuted"}
+
+
 class P2EndgameProber(EndgameProber):
     """P2 version: our move 14, then AlphaQ picks the final (exactly, as observed).
 
