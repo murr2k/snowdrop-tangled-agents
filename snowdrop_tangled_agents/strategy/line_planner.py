@@ -326,6 +326,17 @@ class EndgameProber:
                 if ac.mover(i) == 1:
                     prefix[s] = mv
 
+    @property
+    def learned(self):
+        """(P(P1 win), P(P2 win)) tables from tools/learned_table.py, or None."""
+        if not hasattr(self, '_learned'):
+            try:
+                self._learned = (np.load(tm.LUT_DIR / "ternary_learned_p1win.npy"),
+                                 np.load(tm.LUT_DIR / "ternary_learned_p2win.npy"))
+            except OSError:
+                self._learned = None
+        return self._learned
+
     def tie_win_chance(self, terminal: str, sign: int) -> float:
         """Chance that a near-tie terminal breaks in favour of `sign` (+1 P1, -1 P2).
 
@@ -339,8 +350,10 @@ class EndgameProber:
         low = E < E.min() + 2 + 1e-6
         if not np.any(np.abs(tm._WEIGHTS[low]) > 0):
             return 0.01
-        # The qb52 residue sign agreed with only 45% of decisive table residues over
-        # 117 observed ties (2026-09-25), so it no longer leans the prior.
+        # The learned classifier (tools/learned_table.py, grouped CV 0.83 on observed
+        # ties) gives the chance directly; without it, a flat prior.
+        if self.learned is not None:
+            return float(self.learned[0 if sign > 0 else 1][tm.terminal_index(terminal)])
         return self.tie_prior
 
     @property
