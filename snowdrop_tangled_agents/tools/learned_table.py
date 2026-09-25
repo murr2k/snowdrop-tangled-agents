@@ -80,6 +80,38 @@ def training_set(luts: dict):
     return T, idx, y
 
 
+def censored_not_p1(luts: dict) -> list:
+    """Ties that cannot be P1 wins, from AlphaQ's own last move as P1.
+
+    AlphaQ's move 15 chooses among three finals (its search is trivially exact
+    there). When it settles for a draw, neither declined final can be a P1 win.
+    (The analogous inference from its move 14 in our P1 games would assume it was
+    never in zugzwang, which is what the probes look for, so it is not used.)
+    """
+    games = ac.load_games()
+    known = ac.known_terminals(games)
+    out = set()
+    for g in games:
+        if g["seat"] != 2 or g["winner"] != "draw":
+            continue
+        pen = ac.states_of(g["moves"])[-1]
+        e = pen.index('-')
+        for c in 'ZGP':
+            t = pen[:e] + c + pen[e + 1:]
+            if t != g["terminal"] and t not in known and abs(luts['q40'][tm.terminal_index(t)]) < TIE_BAND:
+                out.add(t)
+    return sorted(out)
+
+
+def fit_p1_classifier(luts: dict, T: list, idx: np.ndarray, y: np.ndarray):
+    """Binary P1-win classifier: observed ties plus the censored 'not a P1 win' ties."""
+    extra = censored_not_p1(luts)
+    eidx = np.array([tm.terminal_index(t) for t in extra], dtype=np.int64)
+    X = features_from_index(np.concatenate([idx, eidx]), luts)
+    yb = np.concatenate([(y == 1).astype(int), np.zeros(len(extra), dtype=int)])
+    return make_classifier().fit(X, yb)
+
+
 def make_classifier():
     from sklearn.ensemble import GradientBoostingClassifier
     return GradientBoostingClassifier(n_estimators=200, max_depth=3, learning_rate=0.05, random_state=0)
@@ -90,6 +122,7 @@ def build(chunk: int = 100_000) -> tuple:
     luts = load_luts()
     T, idx, y = training_set(luts)
     clf = make_classifier().fit(features_from_index(idx, luts), y)
+    clf1 = fit_p1_classifier(luts, T, idx, y)
     classes = list(clf.classes_)
     q40 = luts['q40']
     lut = q40.astype(np.float32).copy()
@@ -99,8 +132,9 @@ def build(chunk: int = 100_000) -> tuple:
     ties = np.flatnonzero(np.abs(q40) < TIE_BAND)
     for s in range(0, len(ties), chunk):
         part = ties[s:s + chunk]
-        pr = clf.predict_proba(features_from_index(part, luts))
-        p1 = pr[:, classes.index(1)] if 1 in classes else 0.0
+        F = features_from_index(part, luts)
+        pr = clf.predict_proba(F)
+        p1 = clf1.predict_proba(F)[:, 1]
         p2 = pr[:, classes.index(-1)] if -1 in classes else 0.0
         lut[part] = TIE_SCALE * (p1 - p2)
         win1[part] = p1
@@ -128,6 +162,21 @@ def main():
         groups = np.array([hash(fam.get(t, t)) % 100000 for t in T])
         pred = cross_val_predict(make_classifier(), features_from_index(idx, luts), y, cv=GroupKFold(5), groups=groups)
         print(f"grouped CV accuracy {np.mean(pred == y):.3f} (always-draw {np.mean(y == 0):.3f})")
+        # P1-win ranking on held-out real labels, without and with the censored negatives
+        from sklearn.metrics import roc_auc_score
+        X = features_from_index(idx, luts)
+        extra = censored_not_p1(luts)
+        eX = features_from_index(np.array([tm.terminal_index(t) for t in extra], dtype=np.int64), luts)
+        for use_extra in (False, True):
+            p1 = np.zeros(len(T))
+            for tr, te in GroupKFold(5).split(X, y, groups):
+                Xt, yt = X[tr], (y[tr] == 1).astype(int)
+                if use_extra:
+                    Xt, yt = np.vstack([Xt, eX]), np.concatenate([yt, np.zeros(len(eX), dtype=int)])
+                p1[te] = make_classifier().fit(Xt, yt).predict_proba(X[te])[:, 1]
+            top = np.argsort(-p1)[:20]
+            print(f"P1-win classifier {'with' if use_extra else 'without'} {len(extra)} censored negatives: "
+                  f"AUC {roc_auc_score(y == 1, p1):.3f}, real P1 wins in top 20: {int(np.sum(y[top] == 1))}")
         return
     t0 = time.time()
     lut, win1, win2 = build()
