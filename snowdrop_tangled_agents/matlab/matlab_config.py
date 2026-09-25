@@ -37,14 +37,16 @@ def find_matlab_installation() -> Optional[Path]:
     if os.name == 'nt':
         program_files = Path(r"C:\Program Files\MATLAB")
         if program_files.exists():
-            # Look for version folders, prefer newer versions
-            versions = [
-                'R2026a', 'R2025b', 'R2025a', 'R2024b', 'R2024a',
-                'R2023b', 'R2023a', 'R2022b', 'R2022a'
-            ]
-            for version in versions:
-                candidate = program_files / version
-                if candidate.exists() and (candidate / 'bin').exists():
+            # Look for version folders (e.g. R2026b, R2026b_Prerelease), newest
+            # release first. Require bin/matlab.exe: an uninstalled release can
+            # leave a bin/ folder behind that holds no MATLAB.
+            versions = sorted(
+                [d for d in program_files.iterdir() if d.is_dir() and d.name.startswith('R')],
+                key=lambda d: d.name[:6],
+                reverse=True
+            )
+            for candidate in versions:
+                if (candidate / 'bin' / 'matlab.exe').exists():
                     logger.info(f"Found MATLAB installation: {candidate}")
                     return candidate
 

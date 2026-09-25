@@ -901,12 +901,14 @@ class StatsCollector:
             run_id: Run ID
         """
         with connect_db(self.db_path) as conn:
-            # Only count actual game outcomes — abandoned games do not count
-            # so a 50k run with occasional abandoned games still reaches 50k real results
+            # Only count finished games — abandoned games do not count
+            # so a 50k run with occasional abandoned games still reaches 50k real results.
+            # 'unknown' is a finished game whose result could not be read; it must count,
+            # or the run loop never reaches planned_games.
             conn.execute("""
                 UPDATE runs SET completed_games = (
                     SELECT COUNT(*) FROM games
-                    WHERE run_id = ? AND result IN ('win', 'loss', 'draw')
+                    WHERE run_id = ? AND result IN ('win', 'loss', 'draw', 'unknown')
                 )
                 WHERE id = ?
             """, (run_id, run_id))

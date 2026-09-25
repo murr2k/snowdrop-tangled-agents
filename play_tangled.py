@@ -32,6 +32,7 @@ import atexit
 import json
 import logging
 import os
+import re
 import signal
 import sys
 import threading
@@ -149,6 +150,8 @@ from snowdrop_tangled_agents.strategy.mcts_strategy import MCTSStrategy, HybridS
 from snowdrop_tangled_agents.strategy.oracle_route_strategy import OracleRouteStrategy
 from snowdrop_tangled_agents.strategy.terminal_explorer_strategy import TerminalExplorerStrategy
 from snowdrop_tangled_agents.strategy.switchback_strategy import SwitchbackStrategy
+from snowdrop_tangled_agents.strategy.ternary_strategy import TernaryMinimaxStrategy
+from snowdrop_tangled_agents.strategy import ternary_model
 from snowdrop_tangled_agents.stats import get_collector, queries as stats_queries, GameMetricsTracker
 from snowdrop_tangled_agents.stats import get_publisher, StatsPublisher
 from snowdrop_tangled_agents.stats.session_stats import get_session_stats, get_run_stats
@@ -498,6 +501,9 @@ EDGES = [
     (5, 6), (5, 9), (6, 7), (7, 8), (8, 9),
 ]
 
+# Board symbols: '-' uncolored, 'Z' grey (zero coupling), 'G' green, 'P' purple
+COLOR_NAMES = {'G': 'Green', 'P': 'Purple', 'Z': 'Grey'}
+
 
 class WebPlayer:
     """
@@ -537,6 +543,7 @@ class WebPlayer:
         username: Optional[str] = None,
         solver_adversary: str = 'minimax',
         opponent_policy_file: str = '',
+        ternary_beta: Optional[float] = ternary_model.DEFAULT_BETA,
     ):
         self.username = username or os.getenv("TANGLED_USERNAME")
         self.password = os.getenv("TANGLED_PASSWORD")
@@ -571,6 +578,11 @@ class WebPlayer:
         self.browser = None
         self.context = None
         self.page = None
+
+        # Game-end capture: network traffic recorded only while a game is in
+        # progress (never during login), dumped with the result diagnostics.
+        self._net_capture = False
+        self._net_events = []
 
         # Strategy initialization based on type
         params_path = Path.home() / ".tangled" / "petersen_params.json"
@@ -629,6 +641,12 @@ class WebPlayer:
                     params_path=str(mcts_params_path),
                     fallback_to_python=True,
                 )
+        elif strategy_type == "ternary":
+            self.strategy = TernaryMinimaxStrategy(
+                player=self.seat,
+                move_overrides=self._oracle_overrides,
+                beta=ternary_beta,
+            )
         elif strategy_type == "hybrid_solver":
             if getattr(self, '_solver_adversary', 'minimax') == 'switchback':
                 self.strategy = SwitchbackStrategy(
@@ -781,6 +799,8 @@ class WebPlayer:
         self.context = self.browser.new_context()
         self.page = self.context.new_page()
         self.page.set_default_timeout(15000)  # 15s default for all Playwright operations
+        self.page.on("response", self._on_net_response)
+        self.page.on("websocket", self._on_websocket)
         _active_player = self  # Register for cleanup on signals
         self.logger.info("Browser started")
 
@@ -1101,6 +1121,208 @@ class WebPlayer:
             pass
         return "draw"
 
+    # --- Game-end capture (result-label diagnostics) ---
+    # The 15/15 edge counter fires game-over before the site has adjudicated,
+    # so a fixed sleep can read the outcome before the result modal exists and
+    # get_outcome() then falls through to a default 'draw'. The authoritative
+    # result is the backend's /api/adjudicate response (lookup-table score and
+    # red/blue/draw winner); the displayed "Current Score" is only the
+    # /api/interim_adjudicate estimate. _capture_game_end() reads the result
+    # from the network, keeps the modal text as a cross-check, and records
+    # everything for later analysis.
+
+    _SENSITIVE_KEY = r"token|password|secret|authorization|cookie|session|api[_-]?key|apikey"
+    _CAPTURE_DIR = Path(__file__).resolve().parent / "logs" / "game_end_capture"
+
+    def _on_net_response(self, response):
+        if not self._net_capture:
+            return
+        try:
+            if response.request.resource_type in ("xhr", "fetch"):
+                self._net_events.append({"t": time.time(), "kind": "http", "response": response})
+        except Exception:
+            pass
+
+    def _on_websocket(self, ws):
+        url = ws.url
+
+        def on_frame(payload, direction):
+            if self._net_capture:
+                self._net_events.append({"t": time.time(), "kind": f"ws_{direction}",
+                                         "url": url, "payload": payload})
+
+        ws.on("framereceived", lambda payload: on_frame(payload, "recv"))
+        ws.on("framesent", lambda payload: on_frame(payload, "sent"))
+
+    def _redact(self, text: str) -> str:
+        """Strip credentials from captured URLs and bodies before they touch disk."""
+        text = re.sub(r'("[^"]*(?:' + self._SENSITIVE_KEY + r')[^"]*"\s*:\s*)"[^"]*"',
+                      r'\1"<redacted>"', text, flags=re.I)
+        text = re.sub(r"((?:" + self._SENSITIVE_KEY + r"|key|auth)[^=&?]*=)[^&\s\"]+",
+                      r"\1<redacted>", text, flags=re.I)
+        return re.sub(r"eyJ[\w-]+\.[\w-]+\.[\w-]+", "<jwt>", text)
+
+    def _serialize_net_events(self, t0: float) -> list:
+        out = []
+        for ev in self._net_events:
+            rec = {"dt": round(ev["t"] - t0, 3), "kind": ev["kind"]}
+            if ev["kind"] == "http":
+                r = ev["response"]
+                rec.update(url=self._redact(r.url), status=r.status, method=r.request.method)
+                if re.search(r"oauth|/auth|login|token", r.url, re.I):
+                    rec["body"] = "<redacted: auth endpoint>"
+                else:
+                    try:
+                        ctype = r.headers.get("content-type", "")
+                        if "json" in ctype or "text" in ctype:
+                            rec["body"] = self._redact(r.text()[:20000])
+                    except Exception as e:
+                        rec["body_error"] = str(e)[:200]
+            else:
+                rec["url"] = self._redact(ev["url"])
+                p = ev["payload"]
+                rec["payload"] = self._redact(p[:20000]) if isinstance(p, str) else f"<{len(p)} bytes binary>"
+            out.append(rec)
+        return out
+
+    def _net_json(self, url_suffix: str):
+        """Parsed JSON body of the latest captured response whose URL ends with url_suffix."""
+        for ev in reversed(self._net_events):
+            if ev["kind"] == "http" and ev["response"].url.split("?")[0].endswith(url_suffix):
+                try:
+                    return ev["response"].json()
+                except Exception:
+                    return None
+        return None
+
+    def _modal_outcome(self, snippet: str) -> Optional[str]:
+        """Outcome from the result modal text, from our seat's perspective."""
+        if "YOU WON" in snippet:
+            return "win"
+        if "YOU LOST" in snippet:
+            return "loss"
+        if "YOU DREW" in snippet or "Draw" in snippet:
+            return "draw"
+        if f"Player {self.seat}" in snippet:
+            return "win"
+        if f"Player {3 - self.seat}" in snippet:
+            return "loss"
+        return None
+
+    def _capture_game_end(self, timeout: float = 45.0, settle: float = 1.0) -> tuple:
+        """Read the authoritative result from the network and record how it arrives.
+
+        Returns (final_score, result). The result is the backend adjudicator's
+        red/blue/draw winner mapped to our seat, falling back to the modal text,
+        then 'unknown'; never a guessed 'draw'. final_score stays the displayed
+        (interim) score, as recorded historically; the lookup-table score and
+        the server's own terminal state go to the JSON record, together with
+        the modal text, what the legacy 2s read would have returned, the
+        displayed-score trajectory, and the network traffic
+        (logs/game_end_capture/).
+        """
+        t0 = time.time()
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self._CAPTURE_DIR.mkdir(parents=True, exist_ok=True)
+        base = self._CAPTURE_DIR / f"{stamp}_game{self.current_game_id}"
+
+        trajectory = []  # (dt, score) each time the displayed score changes
+        last_score = None
+        legacy = None    # what the old sleep(2) + read_score/get_outcome returned
+        modal = None     # (dt, text around "Game Over" / result marker)
+        adjudication = complete = None
+        done_at = None   # time the backend result was in hand
+        while time.time() < t0 + timeout:
+            dt = time.time() - t0
+            try:
+                text = self.page.inner_text("body")
+            except Exception:
+                text = ""
+            m = re.search(r"Score:\s*(-?\d+(?:\.\d+)?)", text)
+            if m and float(m.group(1)) != last_score:
+                last_score = float(m.group(1))
+                trajectory.append((round(dt, 3), last_score))
+            if legacy is None and dt >= 2.0:
+                legacy = {"result": self.get_outcome(), "score": self.read_score()}
+            if modal is None:
+                i = max(text.find("Game Over"), text.find("YOU "))
+                if i >= 0:
+                    modal = (round(dt, 3), text[i:i + 200])
+                    try:
+                        self.page.screenshot(path=f"{base}.png")
+                    except Exception:
+                        pass
+            if adjudication is None:
+                adjudication = self._net_json("/api/adjudicate")
+            if complete is None:
+                complete = self._net_json("/api/games/complete")
+            if done_at is None and adjudication is not None and complete is not None:
+                done_at = dt
+            if done_at is not None and legacy is not None and modal is not None and dt - done_at >= settle:
+                break
+            time.sleep(0.25)
+
+        if modal is None:
+            try:
+                self.page.screenshot(path=f"{base}_nomodal.png")
+            except Exception:
+                pass
+        ours = {1: "red", 2: "blue"}[self.seat]
+        winner = (adjudication or {}).get("winner")
+        net_result = ("draw" if winner == "draw" else "win" if winner == ours
+                      else "loss" if winner in ("red", "blue") else None)
+        modal_result = self._modal_outcome(modal[1]) if modal else None
+        result = net_result or modal_result or "unknown"
+        if complete and complete.get("result") not in (None, result):
+            self.logger.warning(f"Result mismatch: adjudicate={net_result}, games/complete={complete.get('result')}")
+        if modal_result and modal_result != result:
+            self.logger.warning(f"Result mismatch: network={result}, modal={modal_result}")
+        final_score = last_score if last_score is not None else 0.0
+        self._net_capture = False
+
+        symbols = {0: '-', 1: 'Z', 2: 'G', 3: 'P'}  # server edge labels; 1 = zero coupling (grey)
+        server_edges = ((adjudication or {}).get("game_state") or {}).get("edges") or []
+        record = {
+            "game_id": self.current_game_id,
+            "run_id": getattr(self, '_run_id', None),
+            "game_number": getattr(self, '_current_game_number', None),
+            "seat": self.seat,
+            "opponent": getattr(self, 'opponent', None),
+            "terminal": self.read_board(),
+            "server_terminal": ''.join(symbols.get(e[2], '?') for e in server_edges) or None,
+            "result": result,
+            "result_source": "network" if net_result else "modal" if modal_result else "none",
+            "lut_score": (adjudication or {}).get("score"),
+            "adjudicator": (adjudication or {}).get("adjudicator"),
+            "site_result": (complete or {}).get("result"),
+            "final_score": final_score,
+            "modal_dt": modal[0] if modal else None,
+            "modal_text": modal[1] if modal else None,
+            "legacy_2s": legacy,
+            "score_trajectory": trajectory,
+            "net": self._serialize_net_events(t0),
+        }
+        try:
+            with open(f"{base}.json", "w", encoding="utf-8") as f:
+                json.dump(record, f, indent=1, default=str)
+        except Exception as e:
+            self.logger.warning(f"Game-end capture write failed: {e}")
+        lut = record["lut_score"]
+        self.logger.info(
+            f"Game-end capture: result={result} [{record['result_source']}], "
+            f"lut={lut if lut is None else f'{lut:+.6f}'}, shown={final_score:+.3f}, "
+            f"server_terminal={record['server_terminal']}, legacy_2s={legacy} -> {base.name}.json")
+        return final_score, result
+
+    def _strategy_view(self, state: str) -> str:
+        """Board as the current strategy expects it.
+
+        Two-color strategies predate grey support and always saw grey (zero
+        coupling) edges as purple, so they keep that view; strategies with
+        supports_grey get the true board.
+        """
+        return state if getattr(self.strategy, 'supports_grey', False) else state.replace('Z', 'P')
+
     def read_board(self) -> str:
         """Read board state by extracting vertex coordinates dynamically from SVG."""
         # Dynamically discover vertices from line endpoints, then match to edge list
@@ -1192,10 +1414,11 @@ class WebPlayer:
                 const stroke = l.getAttribute('stroke') || '';
                 if (/green|#10b981|16,\\s*185/i.test(stroke)) state[e] = 'G';
                 else if (/purple|#a855f7|168,\\s*85/i.test(stroke)) state[e] = 'P';
-                // Only treat as grey (available) if it matches known grey patterns
-                // #9ca3af and other non-standard colors mean edge is not available
+                // Grey is a real color choice (zero coupling, stroke #9ca3af), not
+                // "unavailable"; uncolored edges are the pale #e5e7eb.
+                else if (/#9ca3af|156,\\s*163/i.test(stroke)) state[e] = 'Z';
                 else if (/grey|gray|#e5e7eb|229,\\s*231/i.test(stroke)) state[e] = '-';
-                else state[e] = 'P';  // Unknown color = treat as colored (unavailable)
+                else state[e] = 'Z';  // Unknown color = colored (unavailable); grey is likeliest
             });
             return state.join('');
         }
@@ -1543,7 +1766,6 @@ class WebPlayer:
 
     def execute_move(self, edge: int, color: str) -> bool:
         """Execute a move using dynamic vertex discovery and MouseEvent dispatch."""
-        color_name = "Green" if color == 'G' else "Purple"
         v1, v2 = EDGES[edge]
 
         # JavaScript that dynamically discovers vertices then clicks the edge
@@ -1668,7 +1890,11 @@ class WebPlayer:
 
         # Click color button with retry (dialog may take time to appear)
         # Try multiple text patterns for the color button
-        color_patterns = ['Green', 'green', 'FM', 'Ferromagnetic'] if color == 'G' else ['Purple', 'purple', 'AFM', 'Antiferromagnetic']
+        color_patterns = {
+            'G': ['Green', 'green', 'FM', 'Ferromagnetic'],
+            'P': ['Purple', 'purple', 'AFM', 'Antiferromagnetic'],
+            'Z': ['Grey', 'grey', 'Gray', 'gray'],
+        }[color]
 
         js_color = f"""
         () => {{
@@ -1831,7 +2057,10 @@ class WebPlayer:
             game_number=game_number
         )
 
+        self._net_events = []
+        self._net_capture = True
         if not self.start_game(opponent):
+            self._net_capture = False
             return {"result": None, "error": "Could not start game"}
 
         # Debug: show line coordinates
@@ -1975,7 +2204,7 @@ class WebPlayer:
             if need_new_move:
                 # Calculate move (track our thinking time)
                 our_start_time = time.time()
-                result = self.strategy.calculate_move(state, score, self.score_history)
+                result = self.strategy.calculate_move(self._strategy_view(state), score, self.score_history)
                 our_think_time = time.time() - our_start_time
 
                 if result is None:
@@ -2000,7 +2229,7 @@ class WebPlayer:
                         fresh_state = self.read_board()
                         fresh_available = [i for i, c in enumerate(fresh_state) if c == '-']
                         self.logger.info(f"Fresh state: {sum(1 for c in fresh_state if c == '-')} grey edges")
-                        recalc_result = self.strategy.calculate_move(fresh_state, score, self.score_history)
+                        recalc_result = self.strategy.calculate_move(self._strategy_view(fresh_state), score, self.score_history)
                         if recalc_result is not None:
                             if len(recalc_result) == 3:
                                 edge, color, solver_stats = recalc_result
@@ -2017,7 +2246,7 @@ class WebPlayer:
                         self.logger.warning("No available edges after rechecking")
                         break
 
-            self.logger.info(f"Move: E{edge} {'Green' if color == 'G' else 'Purple'}")
+            self.logger.info(f"Move: E{edge} {COLOR_NAMES.get(color, color)}")
 
             # Try to execute with retries (retry same edge, don't re-ask strategy)
             success = False
@@ -2225,7 +2454,7 @@ class WebPlayer:
                         self.logger.info(f"DEBUG opp vertex fills: {[(f.get('cx','?'), f.get('cy','?'), f.get('fill','?')) for f in fills[:12]]}")
 
                         vertex_colors = self.read_vertex_colors()
-                        edges_colored = sum(1 for c in state_after_opponent if c in 'GP')
+                        edges_colored = sum(1 for c in state_after_opponent if c != '-')
                         self.logger.info(f"DEBUG opp publishing: edges={edges_colored}, board={state_after_opponent}, vertices={vertex_colors}")
 
                         # Get all dashboard stats
@@ -2259,10 +2488,8 @@ class WebPlayer:
                 # No change detected - might be game over or timing issue
                 self.logger.debug(f"No opponent move detected (grey count unchanged: {our_grey_count})")
 
-        # Game over - wait for result to display
-        time.sleep(2)
-        final_score = self.read_score()
-        result = self.get_outcome()
+        # Game over - wait for the site's result modal (not a fixed sleep)
+        final_score, result = self._capture_game_end()
         terminal_state = self.read_board()
 
         # Extract opening info from strategy if available
@@ -2294,10 +2521,13 @@ class WebPlayer:
         # Online learning: update opponent model and re-export
         self._update_opponent_model()
 
-        # Calibration: compare our terminal evaluation to website score
+        # Calibration: compare our terminal evaluation to website score.
+        # The two-color SA evaluator scores grey edges as purple, so the ternary
+        # model (default beta) is used; website_score is still the displayed
+        # interim score, the lookup-table score is in the game-end capture.
         if terminal_state.count('-') == 0:  # All edges colored
             try:
-                predicted_score = evaluate_terminal_state(terminal_state)
+                predicted_score = ternary_model.score_state(terminal_state)
                 self.stats_collector.record_calibration(
                     game_id=self.current_game_id,
                     terminal_state=terminal_state,
@@ -2322,7 +2552,7 @@ class WebPlayer:
         self.logger.info(f"Total Moves: {len(self.full_move_history)} ({move_count} ours)")
         self.logger.info(f"Move History:")
         for i, (player, edge, color, score) in enumerate(self.full_move_history):
-            color_name = "Green" if color == 'G' else "Purple"
+            color_name = COLOR_NAMES.get(color, color)
             tag = "US " if player == "us" else "OPP"
             self.logger.info(f"  {i+1:2d}. [{tag}] E{edge} {color_name} -> {score:.4f}")
         self.logger.info(f"=" * 40)
@@ -2378,8 +2608,8 @@ def main():
     parser.add_argument("--debug", action="store_true")
     parser.add_argument("--keep-open", "-k", type=int, default=5,
                         help="Seconds to keep browser open after last game (0 to close immediately)")
-    parser.add_argument("--strategy", "-s", choices=["heuristic", "mcts", "hybrid", "matlab", "rl", "ensemble", "matlab_mcts", "hybrid_solver", "amara_explorer", "amara_killer", "melissa_killer", "alphaq_explorer", "oracle_route", "terminal_explorer"], default="hybrid_solver",
-                        help="Strategy to use: hybrid_solver (DEFAULT: D-Wave inspired minimax+MCTS+learning), alphaq_explorer (explore/exploit vs AlphaQ Up with closed learning loop), amara_killer (uses E14P against Amara), melissa_killer (cycles E12P/E13P against Melissa - 40%% win rate), amara_explorer (cycles all 30 openings), hybrid (MCTS with opening), mcts (Monte Carlo, 30s/move), heuristic (fast), matlab (MATLAB-enhanced), rl (trained PPO), ensemble (RL + MC rollouts), matlab_mcts (MATLAB MCTS)")
+    parser.add_argument("--strategy", "-s", choices=["heuristic", "mcts", "hybrid", "matlab", "rl", "ensemble", "matlab_mcts", "hybrid_solver", "amara_explorer", "amara_killer", "melissa_killer", "alphaq_explorer", "oracle_route", "terminal_explorer", "ternary"], default="hybrid_solver",
+                        help="Strategy to use: ternary (three-color exact minimax: plays grey/green/purple under the ternary model), hybrid_solver (DEFAULT: D-Wave inspired minimax+MCTS+learning),alphaq_explorer (explore/exploit vs AlphaQ Up with closed learning loop), amara_killer (uses E14P against Amara), melissa_killer (cycles E12P/E13P against Melissa - 40%% win rate), amara_explorer (cycles all 30 openings), hybrid (MCTS with opening), mcts (Monte Carlo, 30s/move), heuristic (fast), matlab (MATLAB-enhanced), rl (trained PPO), ensemble (RL + MC rollouts), matlab_mcts (MATLAB MCTS)")
     parser.add_argument("--mcts-time", type=float, default=30.0,
                         help="MCTS time limit per move in seconds (default 30; use 'inf' for unlimited)")
     parser.add_argument("--mcts-iterations", type=int, default=500000,
@@ -2453,6 +2683,10 @@ def main():
                              "'schr' (Schrodinger, local params), or 'calib' (Schrodinger, "
                              "website-calibrated anneal_time=1.85ns). "
                              "Selects expanded_lut_{variant}.mat.")
+    parser.add_argument("--ternary-beta", type=lambda s: None if s.lower() == "inf" else float(s),
+                        default=ternary_model.DEFAULT_BETA,
+                        help="Boltzmann beta of the ternary terminal model (default %(default)s); "
+                             "'inf' = uniform ground-state average")
     parser.add_argument("--solver-adversary", choices=["minimax", "expected", "switchback"], default="minimax",
                         help="Adversary model used inside hybrid_solver. 'minimax' (default) is the "
                              "existing behaviour: opponent assumed to play LUT-optimal. 'expected' "
@@ -2768,6 +3002,7 @@ def main():
                 solver_adversary=args.solver_adversary,
                 opponent_policy_file=(args.opponent_policy_file or
                                      ('alphaq_policy_mlp.mat' if args.solver_adversary == 'expected' else '')),
+                ternary_beta=args.ternary_beta,
             ) as player:
                 player.login()
 
@@ -2805,6 +3040,11 @@ def main():
                     if oracle_sequence:
                         seq_override = oracle_sequence[game_idx] if game_idx < len(oracle_sequence) else {}
                         player._oracle_overrides = seq_override
+                        # SwitchbackStrategy captures its overrides at construction, so the
+                        # WebPlayer-level assignment above never reaches it. Sync the live
+                        # strategy's own copy so --oracle-sequence-file actually takes effect.
+                        if hasattr(player.strategy, '_move_overrides'):
+                            player.strategy._move_overrides = seq_override
                         if seq_override:
                             grey, (edge, color) = next(iter(seq_override.items()))
                             print(f"  [seq] Game {display_num}: override E{edge}{color} at grey={grey}")

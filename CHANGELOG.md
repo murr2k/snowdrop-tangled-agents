@@ -7,6 +7,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-24 - Three-Color Game
+
+### Three-color game (grey = zero coupling)
+
+tangled-game.com offers three edge colors, not two: grey (zero coupling,
+label 1, stroke `#9ca3af`), green (FM, 2) and purple (AFM, 3). AlphaQ plays
+grey heavily (6 of 7 moves on the E7G line). `read_board()` mapped grey to
+`P`, so every stored board, terminal and opponent move with a grey edge was
+recorded as purple, and every LUT, oracle and model built on {G,P}^15 modelled
+a different game. The real terminal space is 3^15 = 14,348,907.
+
+The site's result comes from `/api/adjudicate` (`"adjudicator":
+"lookup_table"`, ε = 0.0005); the displayed "Current Score" is
+`/api/interim_adjudicate`, a separate SA estimate.
+
+- **Board I/O**: `read_board()` reads grey as `Z`; `execute_move()` plays `Z`
+  via the Grey button. Two-color strategies keep their old view (Z shown as P).
+- **Game-end capture**: result taken from `/api/adjudicate` (modal text as
+  cross-check, `unknown` instead of a default `draw`); per-game JSON with the
+  server's terminal, lookup-table score and network trace in
+  `logs/game_end_capture/`. `unknown` counts toward run completion.
+- **`ternary_model`**: exact 2^10 spin enumeration of the adjudicator's
+  influence score. Ground-state averaging (beta=inf) declares 41% of terminals
+  exact draws vs the site's ~14%; Boltzmann beta=4 (default) gives 12.7% and
+  keeps every decisive ground-state outcome. 3^15 table cached in `~/.tangled/`.
+- **`--strategy ternary`**: exact minimax over the remaining game under the
+  model; among moves within 1e-4 of the best value (above float32 noise,
+  below the 5e-4 draw band), the one with the best expected score against a
+  random opponent. First P1 move from the opening book; later moves solve in
+  ~20 s once, then lookups. `--ternary-beta` selects the model.
+- **`tools/solve_ternary_game.py`**: solves all 4^15 positions in one
+  retrograde pass (~1-2 min, 4 GB peak, 6 threads) and writes the opening
+  book. Positions are grouped by colored-edge set so each update is a
+  contiguous slice of the child layer. Progress telemetry in
+  `~/.tangled/ternary_solver/` (`progress.jsonl`, `status.json`, `--status`).
+  Under beta=4 the game value is 0: every opening is a model draw or worse.
+
+### Live results vs AlphaQ Up (seat 1, server-verified)
+
+| Run | Strategy | Games | Result | Server terminal | LUT score |
+|-----|----------|-------|--------|-----------------|-----------|
+| 239 | switchback, forced E7G | 10 | 10 draws | `ZZGZGZPGZPPPPZG` | -0.000241 |
+| 240 | ternary, book opening E12P | 5 | 5 draws | `ZZZPGGPPGGPGPPP` | +0.000080 |
+
+Both lines are deterministic (every game identical).
+
+### Fixes
+
+- `--oracle-sequence-file` now reaches `SwitchbackStrategy`'s own override
+  copy; without it the May probe protocol (run 238) replayed E7G every game.
+- MATLAB detection scans for installs with `bin/matlab.exe`, newest release
+  first, instead of a fixed list that ended at R2026a and picked up the
+  leftover R2026a folder after the R2026b install.
+
 ## [0.6.0] - 2026-05-18 — Geometric Switchback Approach
 
 ### New direction (Geordie Rose revealed mechanism)

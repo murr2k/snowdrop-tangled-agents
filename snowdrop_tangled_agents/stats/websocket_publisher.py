@@ -407,12 +407,12 @@ class StatsPublisher:
         # Default board state
         board = board_state if board_state else "-" * 15
         vertices = vertex_state if vertex_state else "-----R-B--"
-        edges_colored = sum(1 for c in board if c in 'GP')
+        edges_colored = sum(1 for c in board if c != '-')
 
         # Build move info
         move = None
         if move_edge is not None or move_color is not None:
-            color_name = "Green" if move_color == 'G' else ("Purple" if move_color == 'P' else "")
+            color_name = {'G': "Green", 'P': "Purple", 'Z': "Grey"}.get(move_color, "")
             move = {
                 "number": edges_colored,
                 "edge": move_edge if move_edge is not None else 0,
