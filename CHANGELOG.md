@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **P2 reply book**: `solve_ternary_game --player 2` solves the game from
+  P2's perspective (~40 s) and writes `~/.tangled/ternary_reply_book.json`,
+  every reply to each of the 45 P1 openings ranked by value then tiebreak.
+  `--strategy ternary --seat 2` answers the opening from it, then solves once
+  (~6 s at 12 free edges) and looks up the rest. P2 values mirror the P1 book
+  exactly; under beta=4, P2 has a model win only against E10P and E12G.
+
 ## [0.7.0] - 2026-09-24 - Three-Color Game
 
 ### Three-color game (grey = zero coupling)

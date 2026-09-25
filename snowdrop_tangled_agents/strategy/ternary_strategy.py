@@ -17,9 +17,10 @@ tiebreak  expected model score when the opponent picks uniformly at random
           exact minimax.
 
 A solve covers the whole subgame below the position it was run from, so
-later positions in the same game are answered by lookup. Our first move as
-P1 (m = 15, 4^15 positions) is too large to solve live; it comes from
-move_overrides or the opening book built by tools/solve_ternary_game.py.
+later positions in the same game are answered by lookup. Our first move is too
+large to solve inside a turn (4^15 positions as P1, 4^14 as P2), so it comes
+from move_overrides or a book built by tools/solve_ternary_game.py: the opening
+book for P1, the reply book (best reply to each P1 opening) for P2.
 """
 
 import json
@@ -37,6 +38,7 @@ logger = logging.getLogger(__name__)
 SYMBOLS = '-ZGP'   # base-4 digit per free edge: 0 uncolored, 1 grey, 2 green, 3 purple
 TOL = 1e-4
 OPENING_BOOK_PATH = Path.home() / ".tangled" / "ternary_opening_book.json"
+REPLY_BOOK_PATH = Path.home() / ".tangled" / "ternary_reply_book.json"
 
 
 class Solution:
@@ -145,12 +147,13 @@ class TernaryMinimaxStrategy:
 
     def __init__(self, player: int = 1, move_overrides: Optional[dict] = None,
                  beta: Optional[float] = tm.DEFAULT_BETA, max_live_free: int = 14,
-                 opening_book: Path = OPENING_BOOK_PATH):
+                 opening_book: Path = OPENING_BOOK_PATH, reply_book: Path = REPLY_BOOK_PATH):
         self.player = player
         self._move_overrides: dict = move_overrides or {}
         self.beta = beta
         self.max_live_free = max_live_free
         self.opening_book_path = opening_book
+        self.reply_book_path = reply_book
         self._solution: Optional[Solution] = None
         self.moves_calculated = 0
         self.total_time = 0.0
@@ -161,14 +164,27 @@ class TernaryMinimaxStrategy:
         self._solution = None   # new game
         return True
 
-    def _opening_book(self) -> dict:
+    def _book_moves(self, state: str) -> dict:
+        """Book entry for this position: P1's first move, or P2's reply to the opening."""
+        free = state.count('-')
+        if self.player == 1 and free == tm.NUM_EDGES:
+            path = self.opening_book_path
+        elif self.player == 2 and free == tm.NUM_EDGES - 1:
+            path = self.reply_book_path
+        else:
+            return {}
         try:
-            book = json.loads(Path(self.opening_book_path).read_text())
+            book = json.loads(Path(path).read_text())
         except (OSError, ValueError):
             return {}
         if book.get('beta') != self.beta or book.get('player') != self.player:
             return {}
-        return {(m['edge'], m['color']): (m['value'], m['tiebreak']) for m in book['moves']}
+        if self.player == 1:
+            moves = book['moves']
+        else:
+            opening = next(f"E{e}{c}" for e, c in enumerate(state) if c != '-')
+            moves = book['replies'].get(opening, {}).get('replies', [])
+        return {(m['edge'], m['color']): (m['value'], m['tiebreak']) for m in moves}
 
     def calculate_move(self, state: str, score: float = 0.0,
                        score_history: list = None) -> Optional[Tuple[int, str, dict]]:
@@ -184,12 +200,13 @@ class TernaryMinimaxStrategy:
             return self._done(edge, color, stats, start)
 
         if self._solution is None or not self._solution.covers(state):
+            book = self._book_moves(state)
+            if book:
+                (edge, color), v, w = best_of(book)
+                stats.update(strategy='ternary/book', value=v, tiebreak=w)
+                logger.info(f"ternary: E{edge}{color} from book, value={v:+.4f} tiebreak={w:+.4f}")
+                return self._done(edge, color, stats, start)
             if free > self.max_live_free:
-                book = self._opening_book() if free == tm.NUM_EDGES else {}
-                if book:
-                    (edge, color), v, w = best_of(book)
-                    stats.update(strategy='ternary/book', value=v, tiebreak=w)
-                    return self._done(edge, color, stats, start)
                 edge, color = 7, 'G'
                 logger.warning(f"{free} free edges exceeds the live solve limit and there is no "
                                f"opening book; falling back to E{edge}{color} "

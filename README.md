@@ -144,7 +144,7 @@ poetry run python test_matlab_detection.py
 
 | Strategy | Engine | Best for |
 |----------|--------|----------|
-| `ternary` | Python exact minimax, 3-color model | Plays grey/green/purple. Build the opening book first (~2 min, full-game solve): `python -m snowdrop_tangled_agents.tools.solve_ternary_game`. |
+| `ternary` | Python exact minimax, 3-color model | Plays grey/green/purple from either seat. Build the books first (~1-2 min each, full-game solve): `python -m snowdrop_tangled_agents.tools.solve_ternary_game --player 1` (opening book) and `--player 2` (reply book, for `--seat 2`). |
 | `hybrid_solver` | MATLAB Minimax + MCTS + Tabu | Default. Strong general play. |
 | `alphaq_explorer` | MATLAB MCTS + Thompson Sampling | Competing against AlphaQ Up. |
 | `matlab_mcts` | MATLAB MCTS only | Pure MCTS experiments. |

@@ -10,16 +10,18 @@ slice along e's axis of the child array, so every update is a contiguous,
 bandwidth-bound numpy operation. Groups within a layer are independent and run on
 a thread pool; only two adjacent layers are resident (peak ~4 GB, at k = 12/11).
 
-Values follow TernaryMinimaxStrategy (P1 perspective): value is the minimax model
-score, tiebreak the expected score against a uniformly random P2. The output is
-the P1 opening book in the format TernaryMinimaxStrategy reads.
+Values follow TernaryMinimaxStrategy, from the perspective of the seat being
+solved (`--player`): value is the minimax model score, tiebreak the expected
+score against a uniformly random opponent. For P1 the output is the opening book
+(all 45 first moves ranked); for P2 it is the reply book (for each of the 45 P1
+openings, all 42 replies ranked), both in the formats TernaryMinimaxStrategy reads.
 
 Progress telemetry goes to <telemetry-dir>/progress.jsonl (one event per line)
 and <telemetry-dir>/status.json (latest state, replaced atomically), plus
 throttled console lines. `--status` prints the latest status from any shell.
 
 Usage:
-    python -m snowdrop_tangled_agents.tools.solve_ternary_game [--beta 4.0] [--threads 6]
+    python -m snowdrop_tangled_agents.tools.solve_ternary_game [--player 1|2] [--beta 4.0] [--threads 6]
     python -m snowdrop_tangled_agents.tools.solve_ternary_game --status
 """
 
@@ -39,7 +41,8 @@ from pathlib import Path
 import numpy as np
 
 from snowdrop_tangled_agents.strategy import ternary_model as tm
-from snowdrop_tangled_agents.strategy.ternary_strategy import OPENING_BOOK_PATH, TOL, rank_moves
+from snowdrop_tangled_agents.strategy.ternary_strategy import (
+    OPENING_BOOK_PATH, REPLY_BOOK_PATH, TOL, rank_moves)
 
 N = tm.NUM_EDGES
 FULL = (1 << N) - 1
@@ -143,20 +146,26 @@ def solve_group(mask: int, k: int, child: dict, our_turn: bool) -> tuple:
     return bv, bw
 
 
-def solve(beta, threads: int, telemetry: Telemetry, keep_layers=()) -> tuple:
-    """Run the full pass for P1. Returns (layer-1 values, root value, kept layers)."""
+def solve(beta, threads: int, telemetry: Telemetry, us: int = 1, keep_layers=()) -> tuple:
+    """Run the full pass from seat `us`'s perspective.
+
+    Returns (root (value, tiebreak), kept layers). Layers 1 and 2 (openings and
+    opening + reply) are always kept; they are tiny.
+    """
     total_work = sum(layer_work(k) for k in range(N))
     done_work = 0
     t0 = time.time()
 
     lut = tm.load_lut(beta)
-    layer = {FULL: (lut, lut)}                        # k = 15: terminals, value = tiebreak
+    terminal = lut if us == 1 else -lut               # values from our seat's perspective
+    layer = {FULL: (terminal, terminal)}              # k = 15: terminals, value = tiebreak
     kept = {}
-    telemetry.emit("start", console=True, total_work=total_work, positions=4 ** N)
+    keep_layers = set(keep_layers) | {1, 2}
+    telemetry.emit("start", console=True, total_work=total_work, positions=4 ** N, player=us)
 
     with ThreadPoolExecutor(max_workers=threads) as pool:
         for k in range(N - 1, -1, -1):
-            our_turn = k % 2 == 0                     # P1 moves when an even number is colored
+            our_turn = (k % 2 == 0) == (us == 1)      # P1 moves when an even number is colored
             masks = [sum(1 << e for e in c) for c in itertools.combinations(range(N), k)]
             group_work = (N - k) * 3 ** (k + 1)
             new_layer = {}
@@ -179,19 +188,24 @@ def solve(beta, threads: int, telemetry: Telemetry, keep_layers=()) -> tuple:
             telemetry.emit("layer_done", console=True, layer=k, layer_groups_done=len(masks),
                            layer_groups=len(masks), work_pct=round(100 * done_work / total_work, 2),
                            positions=comb(N, k) * 3 ** k)
-            if k == 1:
-                first_moves = layer
     root_v, root_w = layer[0]
-    return first_moves, (float(root_v[0]), float(root_w[0])), kept
+    return (float(root_v[0]), float(root_w[0])), kept
 
 
-def verify(kept: dict, beta, samples: int, telemetry: Telemetry) -> float:
+def index_of(colored_digits: dict) -> int:
+    """Array index of a position within its colored-edge group: {edge: digit} -> base-3 index."""
+    return sum(d * 3 ** i for i, (_, d) in enumerate(sorted(colored_digits.items())))
+
+
+def verify(kept: dict, beta, samples: int, telemetry: Telemetry, us: int = 1) -> float:
     """Compare kept-layer values with the brute-force-verified Solution class."""
     from snowdrop_tangled_agents.strategy.ternary_strategy import Solution
     lut = tm.load_lut(beta)
     rng = np.random.default_rng(0)
     worst = 0.0
     for k, layer in kept.items():
+        if k < 6:                                     # Solution below 9 free edges only; small layers checked elsewhere
+            continue
         for _ in range(samples):
             mask = int(rng.choice(list(layer)))
             colored = [e for e in range(N) if mask >> e & 1]
@@ -200,12 +214,40 @@ def verify(kept: dict, beta, samples: int, telemetry: Telemetry) -> float:
             for e, d in zip(colored, digits):
                 state[e] = tm.COLORS[d]
             state = ''.join(state)
-            ref = Solution(state, lut, us=1)
+            ref = Solution(state, lut, us=us)
             v, w = layer[mask]
-            idx = int(sum(int(d) * 3 ** i for i, d in enumerate(digits)))
+            idx = index_of(dict(zip(colored, (int(d) for d in digits))))
             worst = max(worst, abs(float(v[idx]) - float(ref.V[0])), abs(float(w[idx]) - float(ref.W[0])))
-    telemetry.emit("verified", console=True, samples=samples * len(kept), max_abs_diff=worst)
+    telemetry.emit("verified", console=True, samples=samples, max_abs_diff=worst)
     return worst
+
+
+def opening_book(kept: dict) -> list:
+    """P1: all 45 first moves ranked."""
+    values = {(mask.bit_length() - 1, tm.COLORS[d]): (float(v[d]), float(w[d]))
+              for mask, (v, w) in kept[1].items() for d in range(3)}
+    return [{"edge": e, "color": c, "value": v, "tiebreak": w} for (e, c), (v, w) in rank_moves(values)]
+
+
+def reply_book(kept: dict) -> dict:
+    """P2: for each P1 opening, all 42 replies ranked (values from P2's perspective)."""
+    book = {}
+    for e1 in range(N):
+        v1, w1 = kept[1][1 << e1]
+        for d1 in range(3):
+            replies = {}
+            for e2 in range(N):
+                if e2 == e1:
+                    continue
+                v2, w2 = kept[2][(1 << e1) | (1 << e2)]
+                for d2 in range(3):
+                    i = index_of({e1: d1, e2: d2})
+                    replies[(e2, tm.COLORS[d2])] = (float(v2[i]), float(w2[i]))
+            book[f"E{e1}{tm.COLORS[d1]}"] = {
+                "value": float(v1[d1]), "tiebreak": float(w1[d1]),
+                "replies": [{"edge": e, "color": c, "value": v, "tiebreak": w}
+                            for (e, c), (v, w) in rank_moves(replies)]}
+    return book
 
 
 def print_status(directory: Path) -> None:
@@ -222,7 +264,10 @@ def main():
                         default=tm.DEFAULT_BETA, help="terminal model beta (default %(default)s; 'inf' = ground states)")
     parser.add_argument("--threads", type=int, default=6,
                         help="worker threads (default %(default)s: memory bandwidth saturates around the 6 P-cores)")
-    parser.add_argument("--out", type=Path, default=OPENING_BOOK_PATH, help="opening book path (default %(default)s)")
+    parser.add_argument("--player", type=int, choices=(1, 2), default=1,
+                        help="seat to solve for: 1 writes the opening book, 2 the reply book (default %(default)s)")
+    parser.add_argument("--out", type=Path, default=None,
+                        help=f"book path (default {OPENING_BOOK_PATH} for P1, {REPLY_BOOK_PATH} for P2)")
     parser.add_argument("--telemetry-dir", type=Path, default=TELEMETRY_DIR,
                         help="where progress.jsonl and status.json go (default %(default)s)")
     parser.add_argument("--verify", type=int, default=0, metavar="N",
@@ -234,24 +279,29 @@ def main():
         print_status(args.telemetry_dir)
         return
 
-    telemetry = Telemetry(args.telemetry_dir, {"pid": os.getpid(), "beta": args.beta, "threads": args.threads})
+    out = args.out or (OPENING_BOOK_PATH if args.player == 1 else REPLY_BOOK_PATH)
+    telemetry = Telemetry(args.telemetry_dir, {"pid": os.getpid(), "beta": args.beta, "threads": args.threads,
+                                               "player": args.player})
     try:
-        first_moves, (root_v, root_w), kept = solve(args.beta, args.threads, telemetry,
-                                                    keep_layers=(6,) if args.verify else ())
+        (root_v, root_w), kept = solve(args.beta, args.threads, telemetry, us=args.player,
+                                       keep_layers=(6,) if args.verify else ())
         if args.verify:
-            verify(kept, args.beta, args.verify, telemetry)
-            del kept
-        values = {(mask.bit_length() - 1, tm.COLORS[d]): (float(v[d]), float(w[d]))
-                  for mask, (v, w) in first_moves.items() for d in range(3)}
-        moves = [{"edge": e, "color": c, "value": v, "tiebreak": w}
-                 for (e, c), (v, w) in rank_moves(values)]
-        book = {"beta": args.beta, "player": 1, "solver": "solve_ternary_game (full pass)",
+            verify(kept, args.beta, args.verify, telemetry, us=args.player)
+        book = {"beta": args.beta, "player": args.player, "solver": "solve_ternary_game (full pass)",
                 "generated": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-                "root_value": root_v, "root_tiebreak": root_w, "moves": moves}
-        args.out.parent.mkdir(parents=True, exist_ok=True)
-        args.out.write_text(json.dumps(book, indent=1))
-        telemetry.emit("done", console=True, work_pct=100.0, out=str(args.out), root_value=root_v,
-                       root_tiebreak=root_w, best=[f"E{m['edge']}{m['color']}" for m in moves[:3]])
+                "root_value": root_v, "root_tiebreak": root_w}
+        if args.player == 1:
+            book["moves"] = opening_book(kept)
+            best = [f"E{m['edge']}{m['color']}" for m in book["moves"][:3]]
+        else:
+            book["replies"] = reply_book(kept)
+            best = {o: f"E{r['replies'][0]['edge']}{r['replies'][0]['color']}"
+                    for o, r in list(book["replies"].items())[:3]}
+        del kept
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(json.dumps(book, indent=1))
+        telemetry.emit("done", console=True, work_pct=100.0, out=str(out), root_value=root_v,
+                       root_tiebreak=root_w, best=best)
     except BaseException as exc:
         telemetry.emit("error", console=True, error=f"{type(exc).__name__}: {exc}")
         raise
