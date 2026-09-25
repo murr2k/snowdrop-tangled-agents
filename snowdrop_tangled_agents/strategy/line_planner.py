@@ -248,3 +248,212 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+def parse_line(text: str) -> list:
+    """'E7G E2G e0z ...' -> our moves [(7, 'G'), (2, 'G'), ...]; lower-case (opponent) tokens are ignored."""
+    out = []
+    for tok in text.replace(',', ' ').split():
+        if tok[0] == 'E':
+            out.append((int(tok[1:-1]), tok[-1].upper()))
+    return out
+
+
+def plan_from_line(our_moves: list, seat: int, replies: dict) -> dict:
+    """Plan that plays our_moves in order along AlphaQ's known replies.
+
+    The plan stops where AlphaQ's reply is not yet known; from there (or if
+    AlphaQ deviates) the strategy plays minimax.
+    """
+    state, moves, i = '-' * tm.NUM_EDGES, {}, 0
+    while '-' in state and i < len(our_moves):
+        if to_move(state) == seat:
+            e, c = our_moves[i]
+            if state[e] != '-':
+                raise ValueError(f"E{e}{c} is not legal at {state}")
+            moves[state] = (e, c)
+            state = play(state, e, c)
+            i += 1
+        elif state in replies:
+            state = play(state, *replies[state])
+        else:
+            break
+    return {"mode": "line", "moves": moves, "value": float('nan'), "depth": len(moves),
+            "note": f"fixed line, {len(moves)} of {len(our_moves)} moves reachable along known replies"}
+
+
+class EndgameProber:
+    """Find a P1 win in the last three plies by replaying known lines.
+
+    AlphaQ appears exact at its last move (move 14): from the position it
+    chooses, every one of our final moves is at best a draw. A win therefore
+    needs a position after our move 13 where all six of AlphaQ's replies leave
+    us a winning final. Anchors are positions after AlphaQ's move 12 on known
+    P1 lines (replayable, AlphaQ is deterministic). For each of our 9 move-13
+    options the prober tracks what is known: AlphaQ's reply and the true value
+    of each final. Near-tie terminals are decided by table noise, so their prior
+    win chance is tie_prior; decisive ones follow the model.
+
+    Each plan is one game: the known prefix, our move 13, and at the last move
+    the untested final with the best prior (the strategy asks final_choice()).
+    A known winning final on a reachable line is replayed at once.
+    """
+
+    def __init__(self, beta, games: list, tie_prior: float = 0.25, tie_band: float = 0.01):
+        from snowdrop_tangled_agents.tools import alphaq_captures as ac
+        self.lut = tm.load_lut(beta)
+        self.replies = ac.reply_table(games, 1)
+        self.known = ac.known_terminals(games)
+        self.tie_prior = tie_prior
+        self.tie_band = tie_band
+        self.anchors = {}                       # position after AlphaQ's move 12 -> our prefix {state: move}
+        for g in games:
+            if g["seat"] != 1:
+                continue
+            prefix = {}
+            for i, (s, mv) in enumerate(zip(ac.states_of(g["moves"]), g["moves"])):
+                if i == 12:
+                    self.anchors.setdefault(s, dict(prefix))
+                    break
+                if ac.mover(i) == 1:
+                    prefix[s] = mv
+
+    def prior(self, terminal: str) -> float:
+        """Chance that this terminal is a real P1 win."""
+        if terminal in self.known:
+            return 1.0 if self.known[terminal] > tm.DRAW_EPSILON else 0.0
+        v = float(self.lut[tm.terminal_index(terminal)])
+        if v > self.tie_band:
+            return 0.97
+        if v < -self.tie_band:
+            return 0.02
+        return self.tie_prior
+
+    def finals(self, p14: str) -> list:
+        e = p14.index('-')
+        return [play(p14, e, c) for c in 'ZGP']
+
+    def final_choice(self, p14: str):
+        """Our last move: a known win, else the untested final most likely to win, else the best known."""
+        e = p14.index('-')
+        opts = []
+        for c in 'ZGP':
+            t = play(p14, e, c)
+            known = t in self.known
+            win = known and self.known[t] > tm.DRAW_EPSILON
+            value = self.known[t] if known else float(self.lut[tm.terminal_index(t)])
+            opts.append((win, not known, self.prior(t), value, c))
+        return e, max(opts)[4]
+
+    def p_escape(self, p14: str) -> float:
+        """Chance that AlphaQ's move 14 to p14 leaves us no winning final."""
+        out = 1.0
+        for t in self.finals(p14):
+            out *= 1 - self.prior(t)
+        return out
+
+    def p_forced(self, s13: str) -> float:
+        """Chance that s13 (after our move 13) is a forced win, given what is known."""
+        if s13 in self.replies:
+            return 1 - self.p_escape(play(s13, *self.replies[s13]))
+        out = 1.0
+        for e in range(tm.NUM_EDGES):
+            if s13[e] == '-':
+                for c in 'ZGP':
+                    out *= 1 - self.p_escape(play(s13, e, c))
+        return out
+
+    def plan(self) -> dict:
+        best = None
+        for a, prefix in self.anchors.items():
+            for e in range(tm.NUM_EDGES):
+                if a[e] != '-':
+                    continue
+                for c in 'ZGP':
+                    s13 = play(a, e, c)
+                    p = self.p_forced(s13)
+                    if s13 in self.replies:
+                        fin = self.finals(play(s13, *self.replies[s13]))
+                        if any(self.known.get(t, 0.0) > tm.DRAW_EPSILON for t in fin):
+                            p = 2.0                   # known win: replay it
+                        elif all(t in self.known for t in fin):
+                            continue                  # refuted
+                    if best is None or p > best[0]:
+                        best = (p, a, prefix, (e, c))
+        if best is None:
+            return {"mode": "exhausted", "moves": {}, "value": 0.0, "depth": 0,
+                    "note": "every move 13 at every anchor refuted"}
+        p, a, prefix, mv = best
+        moves = dict(prefix)
+        moves[a] = mv
+        mode = "confirm" if p >= 2.0 else "probe"
+        return {"mode": mode, "moves": moves, "value": p, "depth": len(moves), "prober": self,
+                "note": f"{mode}: move 13 E{mv[0]}{mv[1]} at anchor {a}, P(forced win) {min(p, 1.0):.3f}"}
+
+
+class P2EndgameProber(EndgameProber):
+    """P2 version: our move 14, then AlphaQ picks the final (exactly, as observed).
+
+    One game per option gives that option's exact value: AlphaQ's final is
+    its best of three, so the option wins for us only if all three finals are
+    P2 wins. Anchors are positions after AlphaQ's move 13 on known P2 lines.
+    """
+
+    def __init__(self, beta, games: list, tie_prior: float = 0.25, tie_band: float = 0.01):
+        from snowdrop_tangled_agents.tools import alphaq_captures as ac
+        self.lut = tm.load_lut(beta)
+        self.replies = ac.reply_table(games, 2)
+        self.known = ac.known_terminals(games)
+        self.tie_prior = tie_prior
+        self.tie_band = tie_band
+        self.anchors = {}
+        for g in games:
+            if g["seat"] != 2:
+                continue
+            prefix = {}
+            for i, (s, mv) in enumerate(zip(ac.states_of(g["moves"]), g["moves"])):
+                if i == 13:
+                    self.anchors.setdefault(s, dict(prefix))
+                    break
+                if ac.mover(i) == 2:
+                    prefix[s] = mv
+
+    def p2_win(self, terminal: str) -> float:
+        """Chance that this terminal is a real P2 win."""
+        if terminal in self.known:
+            return 1.0 if self.known[terminal] < -tm.DRAW_EPSILON else 0.0
+        v = float(self.lut[tm.terminal_index(terminal)])
+        if v < -self.tie_band:
+            return 0.97
+        if v > self.tie_band:
+            return 0.02
+        return self.tie_prior
+
+    def plan(self) -> dict:
+        best = None
+        for a, prefix in self.anchors.items():
+            for e in range(tm.NUM_EDGES):
+                if a[e] != '-':
+                    continue
+                for c in 'ZGP':
+                    s14 = play(a, e, c)
+                    fin = self.finals(s14)
+                    if s14 in self.replies:
+                        t = play(s14, *self.replies[s14])
+                        if t in self.known and self.known[t] < -tm.DRAW_EPSILON:
+                            p = 2.0                   # known win: replay it
+                        else:
+                            continue                  # AlphaQ's best final is known and not a loss for it
+                    else:
+                        p = float(np.prod([self.p2_win(t) for t in fin]))
+                    if best is None or p > best[0]:
+                        best = (p, a, prefix, (e, c))
+        if best is None:
+            return {"mode": "exhausted", "moves": {}, "value": 0.0, "depth": 0,
+                    "note": "every move 14 at every P2 anchor played"}
+        p, a, prefix, mv = best
+        moves = dict(prefix)
+        moves[a] = mv
+        mode = "confirm" if p >= 2.0 else "probe"
+        return {"mode": mode, "moves": moves, "value": p, "depth": len(moves),
+                "note": f"{mode}: move 14 E{mv[0]}{mv[1]} at anchor {a}, P(win) {min(p, 1.0):.3f}"}

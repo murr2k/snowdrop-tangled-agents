@@ -148,8 +148,10 @@ class TernaryMinimaxStrategy:
     def __init__(self, player: int = 1, move_overrides: Optional[dict] = None,
                  beta: Optional[float] = tm.DEFAULT_BETA, max_live_free: int = 14,
                  opening_book: Path = OPENING_BOOK_PATH, reply_book: Path = REPLY_BOOK_PATH,
-                 plan_lines: bool = False):
+                 plan_lines: bool = False, fixed_lines: Optional[list] = None, probe_endgame: bool = False):
         self.player = player
+        self.probe_endgame = probe_endgame  # line_planner.EndgameProber (P1)
+        self.fixed_lines = list(fixed_lines or [])   # one line of our moves per game, played before --plan-lines
         self.plan_lines = plan_lines        # line_planner: replay known lines, branch into new territory
         self._oracle = None
         self._plan: dict = {"moves": {}}
@@ -166,7 +168,21 @@ class TernaryMinimaxStrategy:
     def initialize(self, opponent: str = '') -> bool:
         tm.load_lut(self.beta)
         self._solution = None   # new game
-        if self.plan_lines:
+        self._plan = {"moves": {}}
+        if self.fixed_lines:
+            from snowdrop_tangled_agents.strategy import line_planner as lp
+            from snowdrop_tangled_agents.tools import alphaq_captures as ac
+            line = self.fixed_lines.pop(0)
+            self._plan = lp.plan_from_line(lp.parse_line(line), self.player,
+                                           ac.reply_table(ac.load_games(), self.player))
+            logger.info(f"ternary plan: {line!r}: {self._plan['note']}")
+        elif self.probe_endgame:
+            from snowdrop_tangled_agents.strategy import line_planner as lp
+            from snowdrop_tangled_agents.tools import alphaq_captures as ac
+            prober = lp.EndgameProber if self.player == 1 else lp.P2EndgameProber
+            self._plan = prober(self.beta, ac.load_games()).plan()
+            logger.info(f"ternary plan: {self._plan['note']}")
+        elif self.plan_lines:
             from snowdrop_tangled_agents.strategy import line_planner as lp
             if self._oracle is None:
                 self._oracle = lp.ValueOracle(self.beta, self.player)
@@ -209,6 +225,12 @@ class TernaryMinimaxStrategy:
         if free in self._move_overrides:
             edge, color = self._move_overrides[free]
             stats['strategy'] = 'ternary/override'
+            return self._done(edge, color, stats, start)
+
+        if free == 1 and self._plan.get("prober") is not None:
+            edge, color = self._plan["prober"].final_choice(state)
+            stats.update(strategy="ternary/probe-final")
+            logger.info(f"ternary: E{edge}{color} final probe")
             return self._done(edge, color, stats, start)
 
         planned = self._plan["moves"].get(state)

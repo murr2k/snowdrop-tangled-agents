@@ -545,7 +545,13 @@ class WebPlayer:
         opponent_policy_file: str = '',
         ternary_beta: Optional[float] = ternary_model.DEFAULT_BETA,
         plan_lines: bool = False,
+        fixed_lines: Optional[list] = None,
+        probe_endgame: bool = False,
+        base_url: Optional[str] = None,
     ):
+        if base_url:
+            self.BASE_URL = base_url.rstrip('/')
+            self._CAPTURE_DIR = Path(__file__).resolve().parent / "logs" / "mock_capture"
         self.username = username or os.getenv("TANGLED_USERNAME")
         self.password = os.getenv("TANGLED_PASSWORD")
         self.headless = headless
@@ -648,6 +654,8 @@ class WebPlayer:
                 move_overrides=self._oracle_overrides,
                 beta=ternary_beta,
                 plan_lines=plan_lines,
+                fixed_lines=fixed_lines,
+                probe_endgame=probe_endgame,
             )
         elif strategy_type == "hybrid_solver":
             if getattr(self, '_solver_adversary', 'minimax') == 'switchback':
@@ -1203,7 +1211,7 @@ class WebPlayer:
             return "win"
         if "YOU LOST" in snippet:
             return "loss"
-        if "YOU DREW" in snippet or "Draw" in snippet:
+        if "YOU DREW" in snippet or "Draw" in snippet or "DRAW" in snippet:
             return "draw"
         if f"Player {self.seat}" in snippet:
             return "win"
@@ -1247,7 +1255,7 @@ class WebPlayer:
             if legacy is None and dt >= 2.0:
                 legacy = {"result": self.get_outcome(), "score": self.read_score()}
             if modal is None:
-                i = max(text.find("Game Over"), text.find("YOU "))
+                i = max(text.find("Game Over"), text.find("YOU "), text.find(" RESULT"))
                 if i >= 0:
                     modal = (round(dt, 3), text[i:i + 200])
                     try:
@@ -1280,7 +1288,8 @@ class WebPlayer:
         if modal_result and modal_result != result:
             self.logger.warning(f"Result mismatch: network={result}, modal={modal_result}")
         final_score = last_score if last_score is not None else 0.0
-        self._net_capture = False
+        in_challenge = getattr(self, '_challenge_game', None) is not None
+        self._net_capture = in_challenge
         self.last_elo_after = (complete or {}).get("player_elo_after")
 
         symbols = {0: '-', 1: 'Z', 2: 'G', 3: 'P'}  # server edge labels; 1 = zero coupling (grey)
@@ -1288,6 +1297,7 @@ class WebPlayer:
         record = {
             "game_id": self.current_game_id,
             "run_id": getattr(self, '_run_id', None),
+            "challenge": getattr(self, '_challenge_game', None),
             "game_number": getattr(self, '_current_game_number', None),
             "seat": self.seat,
             "opponent": getattr(self, 'opponent', None),
@@ -1310,6 +1320,10 @@ class WebPlayer:
                 json.dump(record, f, indent=1, default=str)
         except Exception as e:
             self.logger.warning(f"Game-end capture write failed: {e}")
+        if in_challenge:
+            done = [i for i, ev in enumerate(self._net_events) if ev["kind"] == "http"
+                    and ev["response"].url.split("?")[0].endswith("/api/games/complete")]
+            self._net_events = self._net_events[done[-1] + 1:] if done else []
         lut = record["lut_score"]
         self.logger.info(
             f"Game-end capture: result={result} [{record['result_source']}], "
@@ -2030,8 +2044,72 @@ class WebPlayer:
             'avg_pred_accuracy': stats.avg_prediction_accuracy if stats else None,
         }
 
-    def play_game(self, opponent: str = "melissa") -> dict:
-        """Play one complete game."""
+    def _wait_text(self, predicate, timeout: float, what: str) -> Optional[str]:
+        t0 = time.time()
+        while time.time() - t0 < timeout:
+            try:
+                text = self.page.inner_text("body")
+            except Exception:
+                text = ""
+            if predicate(text):
+                return text
+            time.sleep(0.25)
+        self.logger.warning(f"Timed out after {timeout:.0f}s waiting for {what}")
+        return None
+
+    def play_challenge(self, opponent: str = "alphaq", lines: Optional[dict] = None) -> dict:
+        """Play the Best-of-5 CHALLENGE from the gold button to the final modal.
+
+        Game n is played as P1 (Red) when n is odd, P2 (Blue) when even; the
+        page starts each next game itself ~3.2 s after a result. lines maps a
+        seat to one line of our moves (--line / --line-p2), replayed along
+        AlphaQ's known replies with minimax after any deviation. The page
+        records every unplayed game as a loss if it is left mid-series, so a
+        crash inside one game is logged and the series continues.
+        """
+        lines = lines or {}
+        self.page.goto(f"{self.BASE_URL}/play")
+        self.page.wait_for_load_state("networkidle", timeout=180000)
+        time.sleep(1)
+        self._net_events = []
+        self._net_capture = True
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.page.locator(".challenge-button").first.click(timeout=10000)
+        self.logger.info("CHALLENGE started")
+        results = []
+        for n in range(1, 6):
+            self._wait_text(lambda t: f"Game {n} of 5" in t and " RESULT" not in t, 120, f"challenge game {n}")
+            self.seat = 1 if n % 2 else 2
+            self._challenge_game = n
+            if hasattr(self.strategy, 'player'):
+                self.strategy.player = self.seat
+            if hasattr(self.strategy, 'fixed_lines'):
+                self.strategy.fixed_lines = [lines[self.seat]] if lines.get(self.seat) else []
+            self.logger.info(f"CHALLENGE game {n} of 5 as P{self.seat}")
+            try:
+                result = self.play_game(opponent, challenge_game=n)
+            except Exception as e:
+                self.logger.error(f"CHALLENGE game {n} crashed ({e}); continuing the series")
+                result = {"result": "error", "error": str(e)}
+            results.append(result.get("result"))
+            self.logger.info(f"CHALLENGE game {n}: {result.get('result')}")
+        self._challenge_game = None
+        final = self._wait_text(lambda t: any(k in t for k in ("WIN THE CHALLENGE", "ALPHAQ UP WINS", "SERIES DRAWN")),
+                                120, "challenge result")
+        base = self._CAPTURE_DIR / f"{stamp}_challenge"
+        try:
+            self.page.screenshot(path=f"{base}.png")
+        except Exception:
+            pass
+        i = max(final.find("CHALLENGE"), 0) if final else 0
+        summary = {"results": results, "final_text": final[i:i + 400] if final else None}
+        with open(f"{base}.json", "w", encoding="utf-8") as f:
+            json.dump(summary, f, indent=1)
+        self.logger.info(f"CHALLENGE finished: {results}; page: {summary['final_text']!r} -> {base.name}.json")
+        return summary
+
+    def play_game(self, opponent: str = "melissa", challenge_game: Optional[int] = None) -> dict:
+        """Play one complete game (challenge_game: game n of a running CHALLENGE series)."""
         self.score_history = []
         self.full_move_history = []  # All moves in order: (player, edge, color, score)
         self.opponent = opponent  # Store for dashboard display
@@ -2060,9 +2138,19 @@ class WebPlayer:
             game_number=game_number
         )
 
-        self._net_events = []
-        self._net_capture = True
-        if not self.start_game(opponent):
+        if challenge_game is None:
+            self._net_events = []
+            self._net_capture = True
+            ready = self.start_game(opponent)
+        else:
+            # The series page starts each game itself; capture has been running since
+            # the previous game's result so the opponent's first move is not missed.
+            try:
+                self.page.wait_for_selector("svg line", timeout=60000)
+                ready = True
+            except Exception:
+                ready = False
+        if not ready:
             self._net_capture = False
             return {"result": None, "error": "Could not start game"}
 
@@ -2693,6 +2781,19 @@ def main():
     parser.add_argument("--plan-lines", action="store_true",
                         help="ternary: plan each game from the captured games vs this opponent "
                              "(replay known lines, branch into new territory; strategy/line_planner.py)")
+    parser.add_argument("--line", action="append", default=None,
+                        help="ternary: our moves for one game, e.g. 'E7G E2G E4G ...' (repeat per game); "
+                             "played along AlphaQ's known replies, minimax after")
+    parser.add_argument("--probe-endgame", action="store_true",
+                        help="ternary P1: replay known lines and probe move 13 / final moves for a forced win "
+                             "(strategy/line_planner.EndgameProber)")
+    parser.add_argument("--challenge", action="store_true",
+                        help="play the Best-of-5 CHALLENGE vs AlphaQ Up (gold button): P1 in games 1/3/5, P2 in 2/4; "
+                             "--line is replayed in P1 games, --line-p2 in P2 games")
+    parser.add_argument("--line-p2", type=str, default=None, help="--challenge: our moves for the P2 games")
+    parser.add_argument("--base-url", type=str, default=None,
+                        help="site URL (default https://tangled-game.com; the mock is http://127.0.0.1:8778)")
+    parser.add_argument("--no-login", action="store_true", help="skip the Auth0 login (mock site)")
     parser.add_argument("--min-elo", type=int, default=0,
                         help="stop the session once the account ELO after a game is below this")
     parser.add_argument("--max-losses", type=int, default=0,
@@ -2870,7 +2971,9 @@ def main():
 
     # Initialize stats collector outside context manager for run tracking
     from snowdrop_tangled_agents.stats import get_collector
-    stats_collector = get_collector()
+    # A non-default --base-url (the local mock) keeps its games out of the real stats DB and captures.
+    stats_collector = get_collector(Path(__file__).resolve().parent / "logs" / "mock_stats.db"
+                                    if args.base_url else None)
 
     # Parse oracle overrides: --oracle-override GREY EDGE COLOR -> {grey: (edge, color)}
     oracle_overrides = {}
@@ -2909,6 +3012,22 @@ def main():
     random_turns_str = None
     if args.random_turns:
         random_turns_str = ','.join(str(x) for x in sorted(int(x.strip()) for x in args.random_turns.split(',')))
+
+    if args.challenge:
+        if args.strategy != 'ternary':
+            print("--challenge needs --strategy ternary")
+            return
+        with WebPlayer(headless=args.headless, slow_mo=args.slow_mo, strategy_type=args.strategy,
+                       seat=1, username=args.username, ternary_beta=args.ternary_beta,
+                       base_url=args.base_url) as player:
+            if not args.no_login:
+                player.login()
+            summary = player.play_challenge(args.opponent, lines={1: (args.line or [None])[0], 2: args.line_p2})
+        print("\n" + "=" * 50)
+        print(f"CHALLENGE: {summary['results']}")
+        print(f"Page: {(summary['final_text'] or '').encode('ascii', 'replace').decode()}")
+        print("=" * 50)
+        return
 
     # Determine run info - always create a run for tracking
     planned_games = args.run if args.run else args.games
@@ -3015,6 +3134,8 @@ def main():
                                      ('alphaq_policy_mlp.mat' if args.solver_adversary == 'expected' else '')),
                 ternary_beta=args.ternary_beta,
                 plan_lines=args.plan_lines,
+                fixed_lines=args.line,
+                probe_endgame=args.probe_endgame,
             ) as player:
                 player.login()
 

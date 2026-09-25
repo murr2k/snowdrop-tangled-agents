@@ -94,6 +94,8 @@ def load_games(capture_dir: Path = CAPTURE_DIR, opponent: str = "alphaq", comple
     """Game records in time order (complete traces only by default)."""
     games = []
     for p in sorted(capture_dir.glob("*.json")):
+        if p.name.endswith("_challenge.json"):      # series summary, not a game
+            continue
         try:
             g = parse_capture(p)
         except (OSError, ValueError, KeyError):
