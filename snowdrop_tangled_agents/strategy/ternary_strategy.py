@@ -201,8 +201,9 @@ class TernaryMinimaxStrategy:
             path = self.reply_book_path
         else:
             return {}
+        per_model = Path(path).parent / f"ternary_{tm.model_name(self.beta)}_book_p{self.player}.json"
         try:
-            book = json.loads(Path(path).read_text())
+            book = json.loads((per_model if per_model.exists() else Path(path)).read_text())
         except (OSError, ValueError):
             return {}
         if book.get('beta') != self.beta or book.get('player') != self.player:

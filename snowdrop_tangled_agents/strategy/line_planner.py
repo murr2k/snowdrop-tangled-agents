@@ -139,10 +139,18 @@ class LinePlanner:
                 moves[(e, c)] = (self.value(child) if self._on_tree(child) else self.o.value(child)[0], w)
         return [(mv, v, w) for mv, (v, w) in rank_moves(moves)]
 
+    def _class(self, v: float) -> int:
+        return 1 if v > self.win_margin else -1 if v < -self.win_margin else 0
+
     def _candidates(self, state: str) -> list:
+        """Moves in the best win/draw/loss class, highest tiebreak first.
+
+        Comparing raw values would let a known real draw of +0.0004 crowd out
+        every model tie at exactly 0; within the draw band they are the same result.
+        """
         ranked = self.ranked(state)
-        best = ranked[0][1]
-        return [(mv, v, w) for mv, v, w in ranked if v >= best - self.tol]
+        best = max(self._class(v) for _, v, _ in ranked)
+        return sorted([(mv, v, w) for mv, v, w in ranked if self._class(v) == best], key=lambda r: -r[2])
 
     def plan(self) -> dict:
         """Next line: {'mode', 'moves': {state: (edge, color)}, 'depth', 'value', 'note'}."""
@@ -318,6 +326,32 @@ class EndgameProber:
                 if ac.mover(i) == 1:
                     prefix[s] = mv
 
+    def tie_win_chance(self, terminal: str, sign: int) -> float:
+        """Chance that a near-tie terminal breaks in favour of `sign` (+1 P1, -1 P2).
+
+        Ties whose ground and first excited states all carry zero score weight
+        come out as exact draws in the table (hardware samples cancel), so they
+        get almost no chance; otherwise the quantum Boltzmann residue (qb52)
+        leans the prior toward its sign, which matched most observed residues.
+        """
+        c = tm.couplings_of(terminal)
+        E = tm._PRODUCTS @ c
+        low = E < E.min() + 2 + 1e-6
+        if not np.any(np.abs(tm._WEIGHTS[low]) > 0):
+            return 0.01
+        # The qb52 residue sign agreed with only 45% of decisive table residues over
+        # 117 observed ties (2026-09-25), so it no longer leans the prior.
+        return self.tie_prior
+
+    @property
+    def qb(self):
+        if not hasattr(self, '_qb'):
+            try:
+                self._qb = tm.load_lut('qb52')
+            except FileNotFoundError:
+                self._qb = None
+        return self._qb
+
     def prior(self, terminal: str) -> float:
         """Chance that this terminal is a real P1 win."""
         if terminal in self.known:
@@ -327,7 +361,7 @@ class EndgameProber:
             return 0.97
         if v < -self.tie_band:
             return 0.02
-        return self.tie_prior
+        return self.tie_win_chance(terminal, +1)
 
     def finals(self, p14: str) -> list:
         e = p14.index('-')
@@ -363,8 +397,11 @@ class EndgameProber:
                     out *= 1 - self.p_escape(play(s13, e, c))
         return out
 
-    def plan(self) -> dict:
-        best = None
+    def plan(self, min_p: float = 0.003) -> dict:
+        """Depth-first: keep probing the anchor with the most move-13 options already
+        answered by AlphaQ until every option there is refuted (or has P below min_p),
+        so each anchor ends with a definite verdict on AlphaQ's move 12."""
+        cands = []
         for a, prefix in self.anchors.items():
             for e in range(tm.NUM_EDGES):
                 if a[e] != '-':
@@ -376,10 +413,16 @@ class EndgameProber:
                         fin = self.finals(play(s13, *self.replies[s13]))
                         if any(self.known.get(t, 0.0) > tm.DRAW_EPSILON for t in fin):
                             p = 2.0                   # known win: replay it
-                        elif all(t in self.known for t in fin):
-                            continue                  # refuted
-                    if best is None or p > best[0]:
-                        best = (p, a, prefix, (e, c))
+                        elif all(t in self.known or self.prior(t) <= 0.01 for t in fin):
+                            continue                  # refuted (untested finals are flat ties)
+                    if p >= min_p:
+                        cands.append((p, a, prefix, (e, c)))
+        best = None
+        if cands:
+            answered = {a: sum(1 for e in range(tm.NUM_EDGES) if a[e] == '-' for c in 'ZGP'
+                               if play(a, e, c) in self.replies) for a in self.anchors}
+            top = max(cands, key=lambda r: (r[0] >= 2.0, answered[r[1]], r[0]))
+            best = top
         if best is None:
             return {"mode": "exhausted", "moves": {}, "value": 0.0, "depth": 0,
                     "note": "every move 13 at every anchor refuted"}
@@ -427,7 +470,7 @@ class P2EndgameProber(EndgameProber):
             return 0.97
         if v > self.tie_band:
             return 0.02
-        return self.tie_prior
+        return self.tie_win_chance(terminal, -1)
 
     def plan(self) -> dict:
         best = None
