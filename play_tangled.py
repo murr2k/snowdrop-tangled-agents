@@ -544,6 +544,7 @@ class WebPlayer:
         solver_adversary: str = 'minimax',
         opponent_policy_file: str = '',
         ternary_beta: Optional[float] = ternary_model.DEFAULT_BETA,
+        plan_lines: bool = False,
     ):
         self.username = username or os.getenv("TANGLED_USERNAME")
         self.password = os.getenv("TANGLED_PASSWORD")
@@ -646,6 +647,7 @@ class WebPlayer:
                 player=self.seat,
                 move_overrides=self._oracle_overrides,
                 beta=ternary_beta,
+                plan_lines=plan_lines,
             )
         elif strategy_type == "hybrid_solver":
             if getattr(self, '_solver_adversary', 'minimax') == 'switchback':
@@ -1279,6 +1281,7 @@ class WebPlayer:
             self.logger.warning(f"Result mismatch: network={result}, modal={modal_result}")
         final_score = last_score if last_score is not None else 0.0
         self._net_capture = False
+        self.last_elo_after = (complete or {}).get("player_elo_after")
 
         symbols = {0: '-', 1: 'Z', 2: 'G', 3: 'P'}  # server edge labels; 1 = zero coupling (grey)
         server_edges = ((adjudication or {}).get("game_state") or {}).get("edges") or []
@@ -2683,10 +2686,17 @@ def main():
                              "'schr' (Schrodinger, local params), or 'calib' (Schrodinger, "
                              "website-calibrated anneal_time=1.85ns). "
                              "Selects expanded_lut_{variant}.mat.")
-    parser.add_argument("--ternary-beta", type=lambda s: None if s.lower() == "inf" else float(s),
+    parser.add_argument("--ternary-beta", type=ternary_model.parse_model,
                         default=ternary_model.DEFAULT_BETA,
-                        help="Boltzmann beta of the ternary terminal model (default %(default)s); "
-                             "'inf' = uniform ground-state average")
+                        help="Ternary terminal model: Boltzmann beta (default %(default)s), "
+                             "'inf' = uniform ground-state average, or a fitted table's name")
+    parser.add_argument("--plan-lines", action="store_true",
+                        help="ternary: plan each game from the captured games vs this opponent "
+                             "(replay known lines, branch into new territory; strategy/line_planner.py)")
+    parser.add_argument("--min-elo", type=int, default=0,
+                        help="stop the session once the account ELO after a game is below this")
+    parser.add_argument("--max-losses", type=int, default=0,
+                        help="stop the session after this many losses")
     parser.add_argument("--solver-adversary", choices=["minimax", "expected", "switchback"], default="minimax",
                         help="Adversary model used inside hybrid_solver. 'minimax' (default) is the "
                              "existing behaviour: opponent assumed to play LUT-optimal. 'expected' "
@@ -2951,6 +2961,7 @@ def main():
     results = []
     current_game_number = start_game_number
     restart_needed = False
+    stop_session = False
 
     # Main game loop with browser restart support
     while True:
@@ -3003,6 +3014,7 @@ def main():
                 opponent_policy_file=(args.opponent_policy_file or
                                      ('alphaq_policy_mlp.mat' if args.solver_adversary == 'expected' else '')),
                 ternary_beta=args.ternary_beta,
+                plan_lines=args.plan_lines,
             ) as player:
                 player.login()
 
@@ -3052,6 +3064,17 @@ def main():
                     result = player.play_game(args.opponent)
                     results.append(result)
 
+                    elo = getattr(player, 'last_elo_after', None)
+                    session_losses = sum(1 for r in results if r.get("result") == "loss")
+                    if args.min_elo and elo is not None and elo < args.min_elo:
+                        print(f"\n*** STOP: account ELO {elo} is below --min-elo {args.min_elo} ***")
+                        stop_session = True
+                        break
+                    if args.max_losses and session_losses >= args.max_losses:
+                        print(f"\n*** STOP: {session_losses} losses this session (--max-losses {args.max_losses}) ***")
+                        stop_session = True
+                        break
+
                     # Note: Dashboard publish happens immediately at game end in play_game()
                     # No need for duplicate publish here
 
@@ -3077,7 +3100,7 @@ def main():
 
         # In run mode (--run N), always loop back so the DB decides when we're done.
         # In simple --games N mode, exit when the session ends cleanly.
-        if not restart_needed and args.run is None:
+        if stop_session or (not restart_needed and args.run is None):
             break
 
         if restart_needed:

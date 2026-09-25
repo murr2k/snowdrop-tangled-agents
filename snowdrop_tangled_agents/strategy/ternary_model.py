@@ -88,8 +88,10 @@ def couplings_of(state: str) -> np.ndarray:
     return np.array([COUPLING.get(c, 0.0) for c in state], dtype=np.float32)
 
 
-def score_state(state: str, beta: Optional[float] = DEFAULT_BETA) -> float:
+def score_state(state: str, beta=DEFAULT_BETA) -> float:
     """Model score of one board (uncolored edges treated as grey)."""
+    if isinstance(beta, str):
+        return float(load_lut(beta)[terminal_index(state.replace('-', 'Z'))])
     return float(score_couplings(couplings_of(state)[None, :], beta)[0])
 
 
@@ -109,19 +111,42 @@ def build_lut(beta: Optional[float] = DEFAULT_BETA, chunk: int = 250_000) -> np.
     return lut
 
 
-def lut_path(beta: Optional[float] = DEFAULT_BETA) -> Path:
-    return LUT_DIR / ("ternary_gs_lut.npy" if beta is None else f"ternary_b{beta:g}_lut.npy")
+def model_name(beta) -> str:
+    """Short model tag: 'gs' (ground states), 'b4' (Boltzmann beta=4), or a fitted table's name."""
+    if beta is None:
+        return "gs"
+    return beta if isinstance(beta, str) else f"b{beta:g}"
+
+
+def parse_model(text: str):
+    """CLI model spec: 'inf' -> None (ground states), a number -> beta, anything else -> fitted table name."""
+    if text.lower() == "inf":
+        return None
+    try:
+        return float(text)
+    except ValueError:
+        return text
+
+
+def lut_path(beta=DEFAULT_BETA) -> Path:
+    return LUT_DIR / f"ternary_{model_name(beta)}_lut.npy"
 
 
 _LUTS: dict = {}
 
 
-def load_lut(beta: Optional[float] = DEFAULT_BETA) -> np.ndarray:
-    """Terminal table for this beta, built and cached on first use."""
+def load_lut(beta=DEFAULT_BETA) -> np.ndarray:
+    """Terminal table for this model, built and cached on first use.
+
+    beta may also name a fitted table (tools/refit_ternary_model.py), which
+    must already exist as ~/.tangled/ternary_<name>_lut.npy.
+    """
     if beta not in _LUTS:
         path = lut_path(beta)
         if path.exists():
             _LUTS[beta] = np.load(path)
+        elif isinstance(beta, str):
+            raise FileNotFoundError(f"No fitted terminal table {path}")
         else:
             logger.info(f"Building ternary terminal table (beta={beta}, one-time, <1 min)...")
             _LUTS[beta] = build_lut(beta)

@@ -147,8 +147,12 @@ class TernaryMinimaxStrategy:
 
     def __init__(self, player: int = 1, move_overrides: Optional[dict] = None,
                  beta: Optional[float] = tm.DEFAULT_BETA, max_live_free: int = 14,
-                 opening_book: Path = OPENING_BOOK_PATH, reply_book: Path = REPLY_BOOK_PATH):
+                 opening_book: Path = OPENING_BOOK_PATH, reply_book: Path = REPLY_BOOK_PATH,
+                 plan_lines: bool = False):
         self.player = player
+        self.plan_lines = plan_lines        # line_planner: replay known lines, branch into new territory
+        self._oracle = None
+        self._plan: dict = {"moves": {}}
         self._move_overrides: dict = move_overrides or {}
         self.beta = beta
         self.max_live_free = max_live_free
@@ -162,6 +166,14 @@ class TernaryMinimaxStrategy:
     def initialize(self, opponent: str = '') -> bool:
         tm.load_lut(self.beta)
         self._solution = None   # new game
+        if self.plan_lines:
+            from snowdrop_tangled_agents.strategy import line_planner as lp
+            if self._oracle is None:
+                self._oracle = lp.ValueOracle(self.beta, self.player)
+            planner = lp.build_planner(self.beta, self.player, oracle=self._oracle)
+            self._plan = planner.plan()
+            logger.info(f"ternary plan: {self._plan['mode']}, {self._plan['depth']} planned moves, "
+                        f"tree value {self._plan['value']:+.6f}: {self._plan['note']}")
         return True
 
     def _book_moves(self, state: str) -> dict:
@@ -197,6 +209,13 @@ class TernaryMinimaxStrategy:
         if free in self._move_overrides:
             edge, color = self._move_overrides[free]
             stats['strategy'] = 'ternary/override'
+            return self._done(edge, color, stats, start)
+
+        planned = self._plan["moves"].get(state)
+        if planned:
+            edge, color = planned
+            stats.update(strategy=f"ternary/plan-{self._plan['mode']}")
+            logger.info(f"ternary: E{edge}{color} from plan ({self._plan['mode']})")
             return self._done(edge, color, stats, start)
 
         if self._solution is None or not self._solution.covers(state):

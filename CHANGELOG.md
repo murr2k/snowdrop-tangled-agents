@@ -9,6 +9,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Line planning vs AlphaQ** (`--plan-lines`, `strategy/line_planner.py`): values the
+  tree of captured games with AlphaQ's known (deterministic) replies and true
+  lookup-table scores substituted, model minimax elsewhere; exploits lines whose value
+  clears the draw band, otherwise branches at the shallowest decision point with an
+  unplayed move within tolerance. `python -m snowdrop_tangled_agents.strategy.line_planner`
+  prints the next plan and AlphaQ's replies ranked by model regret.
+- `tools/alphaq_captures.py`: games, AlphaQ reply table and the goal ledger from the
+  game-end captures. `tools/refit_ternary_model.py`: beta/scale fit to captured pairs.
+- `solve_ternary_game` stores layers 0-6 (`~/.tangled/ternary_solver/layers_<model>_p<seat>.npz`)
+  for the planner; ~43 s per pass. `--beta` also takes a fitted table's name.
+- Runner guards `--min-elo` and `--max-losses` end the session.
+- `tests/test_ternary_solver.py`: Solution vs brute-force minimax, layer store vs Solution.
+
+### Found
+
+- The beta=4 model is wrong in sign on degenerate-ground-state terminals: the loss
+  terminal `ZGPGPGGGGGZGGPP` (7 ground states, influence weights +8, -4, 0 x5) models at
+  +0.572 but the lookup table scores it -1.2275. The hardware suppresses some ground
+  states (quantum-annealing unfair sampling), so a model "mistake" by AlphaQ can be a
+  model error.
+
 - **P2 reply book**: `solve_ternary_game --player 2` solves the game from
   P2's perspective (~40 s) and writes `~/.tangled/ternary_reply_book.json`,
   every reply to each of the 45 P1 openings ranked by value then tiebreak.

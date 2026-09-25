@@ -47,6 +47,7 @@ from snowdrop_tangled_agents.strategy.ternary_strategy import (
 N = tm.NUM_EDGES
 FULL = (1 << N) - 1
 TELEMETRY_DIR = Path.home() / ".tangled" / "ternary_solver"
+STORE_LAYERS = 6                                      # layers 0..6 (4.5M positions, ~36 MB) kept for the planner
 
 
 def _memory_gb() -> tuple:
@@ -250,6 +251,28 @@ def reply_book(kept: dict) -> dict:
     return book
 
 
+def layer_store_path(beta, us: int) -> Path:
+    return TELEMETRY_DIR / f"layers_{tm.model_name(beta)}_p{us}.npz"
+
+
+def save_layers(kept: dict, beta, us: int) -> Path:
+    """Write layers 0..STORE_LAYERS for the line planner.
+
+    Layer k is stored as masks_k (ascending colored-edge masks) and v_k / w_k,
+    shape (len(masks_k), 3^k), rows in mask order, columns indexed as index_of().
+    """
+    arrays = {}
+    for k in range(STORE_LAYERS + 1):
+        masks = sorted(kept[k])
+        arrays[f"masks_{k}"] = np.array(masks, dtype=np.int32)
+        arrays[f"v_{k}"] = np.stack([kept[k][m][0] for m in masks])
+        arrays[f"w_{k}"] = np.stack([kept[k][m][1] for m in masks])
+    path = layer_store_path(beta, us)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    np.savez(path, **arrays)
+    return path
+
+
 def print_status(directory: Path) -> None:
     path = directory / "status.json"
     if not path.exists():
@@ -260,8 +283,9 @@ def print_status(directory: Path) -> None:
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("--beta", type=lambda s: None if s.lower() == "inf" else float(s),
-                        default=tm.DEFAULT_BETA, help="terminal model beta (default %(default)s; 'inf' = ground states)")
+    parser.add_argument("--beta", type=tm.parse_model, default=tm.DEFAULT_BETA,
+                        help="terminal model: beta (default %(default)s), 'inf' = ground states, "
+                             "or the name of a fitted table (tools/refit_ternary_model.py)")
     parser.add_argument("--threads", type=int, default=6,
                         help="worker threads (default %(default)s: memory bandwidth saturates around the 6 P-cores)")
     parser.add_argument("--player", type=int, choices=(1, 2), default=1,
@@ -284,9 +308,11 @@ def main():
                                                "player": args.player})
     try:
         (root_v, root_w), kept = solve(args.beta, args.threads, telemetry, us=args.player,
-                                       keep_layers=(6,) if args.verify else ())
+                                       keep_layers=range(STORE_LAYERS + 1))
         if args.verify:
             verify(kept, args.beta, args.verify, telemetry, us=args.player)
+        store = save_layers(kept, args.beta, args.player)
+        telemetry.emit("stored", console=True, out=str(store))
         book = {"beta": args.beta, "player": args.player, "solver": "solve_ternary_game (full pass)",
                 "generated": datetime.now(timezone.utc).isoformat(timespec="seconds"),
                 "root_value": root_v, "root_tiebreak": root_w}
