@@ -548,6 +548,7 @@ class WebPlayer:
         fixed_lines: Optional[list] = None,
         probe_endgame: bool = False,
         probe_deep: bool = False,
+        ood_steer: bool = False,
         base_url: Optional[str] = None,
     ):
         if base_url:
@@ -658,6 +659,7 @@ class WebPlayer:
                 fixed_lines=fixed_lines,
                 probe_endgame=probe_endgame,
                 probe_deep=probe_deep,
+                ood_steer=ood_steer,
             )
         elif strategy_type == "hybrid_solver":
             if getattr(self, '_solver_adversary', 'minimax') == 'switchback':
@@ -2791,6 +2793,9 @@ def main():
                              "(strategy/line_planner.EndgameProber)")
     parser.add_argument("--probe-deep", action="store_true",
                         help="ternary P1: test AlphaQ's move 10 (line_planner.DeepProber)")
+    parser.add_argument("--ood-steer", action="store_true",
+                        help="ternary: early moves steer to positions AlphaQ's behaviour clone finds unfamiliar "
+                             "(tools/alphaq_clone.py), learned-table safe; minimax after")
     parser.add_argument("--challenge", action="store_true",
                         help="play the Best-of-5 CHALLENGE vs AlphaQ Up (gold button): P1 in games 1/3/5, P2 in 2/4; "
                              "--line is replayed in P1 games, --line-p2 in P2 games")
@@ -3141,6 +3146,7 @@ def main():
                 fixed_lines=args.line,
                 probe_endgame=args.probe_endgame,
                 probe_deep=args.probe_deep,
+                ood_steer=args.ood_steer,
             ) as player:
                 player.login()
 

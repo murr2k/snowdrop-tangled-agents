@@ -149,10 +149,12 @@ class TernaryMinimaxStrategy:
                  beta: Optional[float] = tm.DEFAULT_BETA, max_live_free: int = 14,
                  opening_book: Path = OPENING_BOOK_PATH, reply_book: Path = REPLY_BOOK_PATH,
                  plan_lines: bool = False, fixed_lines: Optional[list] = None, probe_endgame: bool = False,
-                 probe_deep: bool = False):
+                 probe_deep: bool = False, ood_steer: bool = False):
         self.player = player
         self.probe_endgame = probe_endgame  # line_planner.EndgameProber (P1) / P2EndgameProber
         self.probe_deep = probe_deep        # line_planner.DeepProber (P1, AlphaQ's move 10)
+        self.ood_steer = ood_steer          # early moves steer to positions AlphaQ's clone finds unfamiliar
+        self._clone = None
         self.fixed_lines = list(fixed_lines or [])   # one line of our moves per game, played before --plan-lines
         self.plan_lines = plan_lines        # line_planner: replay known lines, branch into new territory
         self._oracle = None
@@ -241,6 +243,14 @@ class TernaryMinimaxStrategy:
             logger.info(f"ternary: E{edge}{color} final probe")
             return self._done(edge, color, stats, start)
 
+        if self.ood_steer and free >= 8 and state not in self._plan["moves"]:
+            mv = self._ood_move(state)
+            if mv is not None:
+                edge, color, note = mv
+                stats.update(strategy="ternary/ood")
+                logger.info(f"ternary: E{edge}{color} steering to an unfamiliar position ({note})")
+                return self._done(edge, color, stats, start)
+
         prober = self._plan.get("prober")
         if free == 3 and prober is not None and hasattr(prober, "move13_choice") and state not in self._plan["moves"]:
             edge, color = prober.move13_choice(state)
@@ -280,6 +290,31 @@ class TernaryMinimaxStrategy:
                      top3=[f"E{e}{c}:{val:+.4f}/{tb:+.4f}" for (e, c), (val, tb) in top])
         logger.info(f"ternary: E{edge}{color} value={v:+.4f} tiebreak={w:+.4f} top3={stats['top3']}")
         return self._done(edge, color, stats, start)
+
+    def _ood_move(self, state: str):
+        """Among moves the learned table rates a draw or better for us, the one after which
+        AlphaQ's behaviour clone is least sure of its reply; unvisited positions first."""
+        from snowdrop_tangled_agents.strategy import line_planner as lp
+        from snowdrop_tangled_agents.tools import alphaq_captures as ac
+        from snowdrop_tangled_agents.tools.alphaq_clone import ClonePolicy
+        if self._clone is None or self._clone.seat != self.player:
+            self._clone = ClonePolicy(self.player)
+            self._visited = set(ac.reply_table(ac.load_games(), self.player))
+        best = None
+        for e in range(tm.NUM_EDGES):
+            if state[e] != '-':
+                continue
+            for c in 'ZGP':
+                child = lp.play(state, e, c)
+                if self._clone.oracle.value(child)[0] < -tm.DRAW_EPSILON:
+                    continue
+                key = (child not in self._visited, self._clone.unfamiliarity(child))
+                if best is None or key > best[0]:
+                    best = (key, e, c)
+        if best is None:
+            return None
+        (new, unf), e, c = best
+        return e, c, f"clone top-1 {1 - unf:.2f}, {'new' if new else 'seen'} position"
 
     def _done(self, edge: int, color: str, stats: dict, start: float):
         elapsed = time.time() - start

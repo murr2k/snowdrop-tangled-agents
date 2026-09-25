@@ -8,7 +8,7 @@ to be a one-off.
 
 Usage:
     python -m snowdrop_tangled_agents.tools.alphaq_campaign ROUNDS kind:games [kind:games ...]
-    kinds: p1explore p2explore p1probe p2probe p1deep p1learn p2learn, and refit:0 (retrain the
+    kinds: p1explore p2explore p1probe p2probe p1deep p1learn p2learn p1ood p2ood, and refit:0 (retrain the
     learned table and re-solve both seats; see tools/learned_table.py)
 e.g. `... alphaq_campaign 10 p1deep:15` plays 150 DeepProber games.
 """
@@ -31,8 +31,11 @@ KINDS = {
     "p1deep": ["--seat", "1", "--probe-deep"],
     "p1learn": ["--seat", "1", "--plan-lines", "--ternary-beta", "learned"],
     "p2learn": ["--seat", "2", "--plan-lines", "--ternary-beta", "learned"],
+    "p1ood": ["--seat", "1", "--ood-steer", "--ternary-beta", "learned"],
+    "p2ood": ["--seat", "2", "--ood-steer", "--ternary-beta", "learned"],
 }
-REFIT = [[sys.executable, "-m", "snowdrop_tangled_agents.tools.learned_table"]] + [
+REFIT = [[sys.executable, "-m", "snowdrop_tangled_agents.tools.learned_table"],
+         [sys.executable, "-m", "snowdrop_tangled_agents.tools.alphaq_clone"]] + [
     [sys.executable, "-m", "snowdrop_tangled_agents.tools.solve_ternary_game", "--player", str(p), "--beta", "learned",
      "--out", str(Path.home() / ".tangled" / f"ternary_learned_book_p{p}.json")] for p in (1, 2)]
 
