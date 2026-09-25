@@ -501,10 +501,15 @@ class DeepProber(EndgameProber):
         base = EndgameProber.plan(self, min_p)
         if base["mode"] == "confirm":
             return base
-        # Focus: the move-10 position with the most move-11 options already answered.
+        # Focus: the move-10 position with the most move-11 options already answered
+        # (finish what was started), then the one the learned table rates best for us.
         def answered(a):
             return sum(1 for mv in self.safe_moves(a) if play(a, *mv) in self.replies)
-        for a10 in sorted(self.anchors10, key=lambda a: -answered(a)):
+        try:
+            rate = ValueOracle("learned", 1).value
+        except (OSError, FileNotFoundError, KeyError):
+            rate = self.oracle.value
+        for a10 in sorted(self.anchors10, key=lambda a: (-answered(a), -rate(a)[0], -rate(a)[1])):
             prefix = self.anchors10[a10]
             for mv in self.safe_moves(a10):
                 if play(a10, *mv) not in self.replies:
