@@ -1,6 +1,38 @@
 # AlphaQ Replica Plan
 
-Status: stage 1 in progress (2026-09-26). Owner notes live in `logs/goal_ledger.md`.
+Status: **stopped at stage 1** (2026-09-26): both variants failed the gate.
+Owner notes live in `logs/goal_ledger.md`.
+
+Stage 1 result (win/draw/loss leaf values, 1000 simulations, 962 held-out
+middlegame decisions):
+
+| Measure | Clone | Replica |
+|---|---|---|
+| Top-1 agreement | 0.63 | 0.55 |
+| Top-3 agreement | 0.83 | 0.81 |
+| Result-class agreement | | 0.99 |
+| False alarms | | 0 of 1331 |
+
+The gate failed. Flat values inside the draw class let the search drift away from
+AlphaQ's choices, most at move 2 (clone 0.80, replica 0.42).
+
+Variant 1b (leaf value = expected result, i.e. the learned value divided by
+TIE_SCALE and clipped to [-1, 1]) also failed:
+
+| Measure | Clone | Replica 1b |
+|---|---|---|
+| Top-1 agreement | 0.63 | 0.56 |
+| Top-3 agreement | 0.83 | 0.82 |
+
+Its class-agreement and false-alarm figures from that run were a metric bug:
+soft mode compared floats instead of result classes. The bug is fixed.
+
+**Conclusion.** Search over our best priors and values does not predict AlphaQ
+better than the surface-feature clone, at any move number. Per the gate, stage 2
+is not worth the compute.
+
+**What remains.** Snowdrop's own information: whether AlphaQ was audited against
+exact table minimax, and its weights and search settings.
 
 ## Why
 

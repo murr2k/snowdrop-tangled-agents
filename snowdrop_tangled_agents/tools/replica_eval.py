@@ -83,8 +83,11 @@ def _evaluate(d):
     clone_rank = sorted(prior, key=lambda m: -prior[m])
     visits, pred = rep.choose(s)
     rep_rank = sorted(visits, key=lambda m: (-visits[m], -prior.get(m, 0)))
+    # Result classes under the learned table, whatever the search's leaf values ("soft" would compare floats)
+    mode, rep.value_mode = rep.value_mode, "class"
     aq = rep._class_for(play(s, *mv), 3 - seat)              # AlphaQ's class after its actual move
     rp = rep._class_for(play(s, *pred), 3 - seat)
+    rep.value_mode = mode
     return {"seat": seat, "mvno": mvno, "clone1": clone_rank[0] == mv, "clone3": mv in clone_rank[:3],
             "rep1": pred == mv, "rep3": mv in rep_rank[:3], "class_same": aq == rp, "false_alarm": rp < aq}
 
