@@ -57,8 +57,9 @@ class ValueOracle:
     solved on demand with Solution, which covers the whole subgame below.
     """
 
-    def __init__(self, beta, us: int):
+    def __init__(self, beta, us: int, max_solutions: int = 64):
         self.us = us
+        self.max_solutions = max_solutions     # cached subgame solves (a few MB each)
         self.lut = tm.load_lut(beta)
         store = np.load(layer_store_path(beta, us))
         self.rows = {k: {int(m): i for i, m in enumerate(store[f"masks_{k}"])} for k in range(STORE_LAYERS + 1)}
@@ -72,7 +73,7 @@ class ValueOracle:
                 return s
         s = Solution(state, self.lut, self.us)
         self._solutions.append(s)
-        if len(self._solutions) > 64:
+        if len(self._solutions) > self.max_solutions:
             self._solutions.pop(0)
         return s
 

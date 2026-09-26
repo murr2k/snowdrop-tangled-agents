@@ -42,13 +42,13 @@ class SearchReplica:
     """AlphaQ stand-in for positions from games where we hold `our_seat`."""
 
     def __init__(self, our_seat: int, prior_fn: Callable, sims: int = 1000, c_puct: float = 1.5,
-                 model: str = "learned", known: Optional[dict] = None):
+                 model: str = "learned", known: Optional[dict] = None, oracle: Optional[ValueOracle] = None):
         """prior_fn(state, mover_is_us) -> {move: probability} over the mover's legal moves."""
         self.our_seat = our_seat
         self.prior_fn = prior_fn
         self.sims = sims
         self.c_puct = c_puct
-        self.oracle = ValueOracle(model, our_seat)
+        self.oracle = oracle or ValueOracle(model, our_seat)
         self.known = known or {}
 
     def _class_for(self, state: str, player: int) -> int:

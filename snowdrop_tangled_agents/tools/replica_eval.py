@@ -10,7 +10,7 @@ agreement; plus the false-alarm rate on AlphaQ decisions we verified exact
 than the move it actually played).
 
 Usage:
-    python -m snowdrop_tangled_agents.tools.replica_eval [--sims 1000] [--cpuct 1.5] [--limit N] [--workers 16]
+    python -m snowdrop_tangled_agents.tools.replica_eval [--sims 1000] [--cpuct 1.5] [--limit N] [--workers 6]
 """
 
 import argparse
@@ -61,7 +61,7 @@ _W = {}
 def _init(clone_bytes, sims, cpuct):
     from snowdrop_tangled_agents.strategy.alphaq_replica import SearchReplica
     _W["clf"] = pickle.loads(clone_bytes)
-    _W["oracles"] = {1: ValueOracle(MODEL, 1), 2: ValueOracle(MODEL, 2)}
+    _W["oracles"] = {1: ValueOracle(MODEL, 1, max_solutions=8), 2: ValueOracle(MODEL, 2, max_solutions=8)}
     known = ac.known_terminals(ac.load_games())
 
     def prior_fn_for(seat):
@@ -72,8 +72,8 @@ def _init(clone_bytes, sims, cpuct):
             return dict(zip(opts, p))
         return prior_fn
 
-    _W["replicas"] = {seat: SearchReplica(seat, prior_fn_for(seat), sims=sims, c_puct=cpuct, known=known)
-                      for seat in (1, 2)}
+    _W["replicas"] = {seat: SearchReplica(seat, prior_fn_for(seat), sims=sims, c_puct=cpuct, known=known,
+                                          oracle=_W["oracles"][seat]) for seat in (1, 2)}
 
 
 def _evaluate(d):
@@ -101,7 +101,7 @@ def main():
     ap.add_argument("--cpuct", type=float, default=1.5)
     ap.add_argument("--folds", type=int, default=5)
     ap.add_argument("--limit", type=int, default=0, help="held-out decisions per fold (0 = all)")
-    ap.add_argument("--workers", type=int, default=16)
+    ap.add_argument("--workers", type=int, default=6)
     args = ap.parse_args()
     from sklearn.model_selection import GroupKFold
     D = decisions()
