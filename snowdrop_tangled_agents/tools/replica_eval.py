@@ -58,7 +58,7 @@ def fit_clone(train: list):
 _W = {}
 
 
-def _init(clone_bytes, sims, cpuct):
+def _init(clone_bytes, sims, cpuct, value_mode="class"):
     from snowdrop_tangled_agents.strategy.alphaq_replica import SearchReplica
     _W["clf"] = pickle.loads(clone_bytes)
     _W["oracles"] = {1: ValueOracle(MODEL, 1, max_solutions=8), 2: ValueOracle(MODEL, 2, max_solutions=8)}
@@ -73,7 +73,7 @@ def _init(clone_bytes, sims, cpuct):
         return prior_fn
 
     _W["replicas"] = {seat: SearchReplica(seat, prior_fn_for(seat), sims=sims, c_puct=cpuct, known=known,
-                                          oracle=_W["oracles"][seat]) for seat in (1, 2)}
+                                          oracle=_W["oracles"][seat], value_mode=value_mode) for seat in (1, 2)}
 
 
 def _evaluate(d):
@@ -89,9 +89,10 @@ def _evaluate(d):
             "rep1": pred == mv, "rep3": mv in rep_rank[:3], "class_same": aq == rp, "false_alarm": rp < aq}
 
 
-def run_fold(train, test, sims, cpuct, workers):
+def run_fold(train, test, sims, cpuct, workers, value_mode="class"):
     clf = fit_clone(train)
-    with ProcessPoolExecutor(workers, initializer=_init, initargs=(pickle.dumps(clf), sims, cpuct)) as pool:
+    with ProcessPoolExecutor(workers, initializer=_init,
+                             initargs=(pickle.dumps(clf), sims, cpuct, value_mode)) as pool:
         return list(pool.map(_evaluate, test, chunksize=2))
 
 
@@ -102,6 +103,8 @@ def main():
     ap.add_argument("--folds", type=int, default=5)
     ap.add_argument("--limit", type=int, default=0, help="held-out decisions per fold (0 = all)")
     ap.add_argument("--workers", type=int, default=6)
+    ap.add_argument("--value", choices=("class", "soft"), default="class",
+                    help="leaf values: win/draw/loss class, or expected result (plan variant 1b)")
     args = ap.parse_args()
     from sklearn.model_selection import GroupKFold
     D = decisions()
@@ -116,7 +119,7 @@ def main():
         random.Random(k).shuffle(safe)
         if args.limit:
             test, safe = test[:args.limit], safe[:max(args.limit // 2, 1)]
-        res = run_fold(train, test + safe, args.sims, args.cpuct, args.workers)
+        res = run_fold(train, test + safe, args.sims, args.cpuct, args.workers, args.value)
         rows += res[:len(test)]
         alarms += res[len(test):]
         print(f"fold {k}: {len(test)} middlegame + {len(safe)} verified decisions, {time.time() - t0:.0f} s", flush=True)

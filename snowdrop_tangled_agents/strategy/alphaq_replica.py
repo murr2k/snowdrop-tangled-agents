@@ -42,7 +42,8 @@ class SearchReplica:
     """AlphaQ stand-in for positions from games where we hold `our_seat`."""
 
     def __init__(self, our_seat: int, prior_fn: Callable, sims: int = 1000, c_puct: float = 1.5,
-                 model: str = "learned", known: Optional[dict] = None, oracle: Optional[ValueOracle] = None):
+                 model: str = "learned", known: Optional[dict] = None, oracle: Optional[ValueOracle] = None,
+                 value_mode: str = "class"):
         """prior_fn(state, mover_is_us) -> {move: probability} over the mover's legal moves."""
         self.our_seat = our_seat
         self.prior_fn = prior_fn
@@ -50,6 +51,10 @@ class SearchReplica:
         self.c_puct = c_puct
         self.oracle = oracle or ValueOracle(model, our_seat)
         self.known = known or {}
+        # "class": win/draw/loss of the learned minimax value; "soft" (plan variant 1b): expected
+        # result, the learned value / TIE_SCALE clipped to [-1, 1], which on model ties is the
+        # classifier's P(win) - P(loss); a stand-in for a value network's continuous output.
+        self.value_mode = value_mode
 
     def _class_for(self, state: str, player: int) -> int:
         """Result class of `state` for `player` (+1 win, 0 draw, -1 loss) under the learned model."""
@@ -57,7 +62,12 @@ class SearchReplica:
             p1 = self.known.get(state)
             p1 = float(self.oracle.lut[tm.terminal_index(state)]) if p1 is None else p1
             return result_class(p1 if player == 1 else -p1)
-        ours = result_class(self.oracle.value(state)[0])
+        v = self.oracle.value(state)[0]
+        if self.value_mode == "soft":
+            from snowdrop_tangled_agents.tools.learned_table import TIE_SCALE
+            ours = max(-1.0, min(1.0, v / TIE_SCALE))
+        else:
+            ours = result_class(v)
         return ours if player == self.our_seat else -ours
 
     def _select(self, node: Node):
