@@ -30,11 +30,19 @@ MODEL_PATH = tm.LUT_DIR / "alphaq_clone.pkl"
 MODEL = "learned"
 
 
-def option_features(state: str, seat: int, oracle) -> tuple:
-    """(AlphaQ's options [(edge, colour)], feature matrix) at `state`; oracle is ValueOracle(MODEL, seat)."""
+def option_features(state: str, seat: int, oracle, mover_is_us: bool = False) -> tuple:
+    """(options [(edge, colour)], feature matrix) at `state`; oracle is ValueOracle(MODEL, seat).
+
+    The first feature is how much worse each option is than the mover's best, from the
+    mover's point of view: AlphaQ minimises the oracle value, we (mover_is_us) maximise it.
+    """
     from snowdrop_tangled_agents.strategy.line_planner import play
     opts = [(e, c) for e in range(tm.NUM_EDGES) if state[e] == '-' for c in 'ZGP']
+    if 6 <= tm.NUM_EDGES - state.count('-') and state.count('-') <= 9:
+        oracle._solution_for(state)          # one subgame solve covers every child lookup below
     vals = [oracle.value(play(state, e, c)) for e, c in opts]
+    if mover_is_us:                          # negate so that lower is better for the mover in both cases
+        vals = [(-v, w) for v, w in vals]
     best = min(v for v, _ in vals)
     free = state.count('-')
     nz, ng, np_ = state.count('Z'), state.count('G'), state.count('P')
